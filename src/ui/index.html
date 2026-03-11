@@ -12339,7 +12339,7 @@
           const transEl = $("#detailTransitions");
           transEl.innerHTML = "";
           if (item.transitions && item.transitions.length) {
-            item.transitions.forEach((t) => {
+            [...item.transitions].reverse().forEach((t) => {
               const fromLabel = t.from_state
                 ? STATE_LABELS[t.from_state] || t.from_state
                 : "Created";
