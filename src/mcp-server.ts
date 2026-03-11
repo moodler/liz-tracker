@@ -472,8 +472,14 @@ function createMcpServer(): McpServer {
     async (args) => {
       const item = resolveItem(args.item_id);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      const comment = createComment({ work_item_id: item.id, author: args.author || "Coder", body: args.body });
-      return { content: [{ type: "text", text: JSON.stringify(comment, null, 2) }] };
+      try {
+        const comment = createComment({ work_item_id: item.id, author: args.author || "Coder", body: args.body });
+        return { content: [{ type: "text", text: JSON.stringify(comment, null, 2) }] };
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("Comment blocked")) return { content: [{ type: "text", text: `Error: ${msg}` }] };
+        throw e;
+      }
     },
   );
 

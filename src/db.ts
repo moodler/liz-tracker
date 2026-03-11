@@ -1685,11 +1685,27 @@ export function clearStaleLocks(
 
 // ── Comments CRUD ──
 
+/**
+ * Noise phrases that should never be posted as comments.
+ * Matched case-insensitively against the trimmed comment body.
+ * Added to block Harmony session restart notices from polluting work items.
+ */
+const BLOCKED_COMMENT_PHRASES: string[] = [
+  "session restarted.",
+  "session restarted",
+];
+
 export function createComment(data: {
   work_item_id: string;
   author: string;
   body: string;
 }): Comment {
+  // Block noise phrases from being posted as comments (e.g. Harmony restart notices)
+  const trimmed = data.body.trim().toLowerCase();
+  if (BLOCKED_COMMENT_PHRASES.some((phrase) => trimmed === phrase.toLowerCase())) {
+    throw new Error(`Comment blocked: "${data.body.trim()}" is a known noise phrase`);
+  }
+
   const ts = now();
   const comment: Comment = {
     id: genId(),

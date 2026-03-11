@@ -663,6 +663,31 @@ describe('Comments', () => {
     expect(listComments(itemId)).toHaveLength(1);
     expect(listComments(otherItem.id)).toHaveLength(1);
   });
+
+  it('blocks noise phrases like "Session restarted."', () => {
+    expect(() =>
+      createComment({ work_item_id: itemId, author: 'Harmony', body: 'Session restarted.' })
+    ).toThrow('Comment blocked');
+
+    // Case-insensitive
+    expect(() =>
+      createComment({ work_item_id: itemId, author: 'Harmony', body: 'SESSION RESTARTED.' })
+    ).toThrow('Comment blocked');
+
+    // Without trailing period
+    expect(() =>
+      createComment({ work_item_id: itemId, author: 'Harmony', body: 'Session restarted' })
+    ).toThrow('Comment blocked');
+
+    // With whitespace padding
+    expect(() =>
+      createComment({ work_item_id: itemId, author: 'Harmony', body: '  Session restarted.  ' })
+    ).toThrow('Comment blocked');
+
+    // Normal comments still work
+    const comment = createComment({ work_item_id: itemId, author: 'Harmony', body: 'The session was restarted successfully.' });
+    expect(comment.body).toBe('The session was restarted successfully.');
+  });
 });
 
 // ── Approval Provenance (Description Integrity) ────────────────────────────────

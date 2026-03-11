@@ -795,12 +795,18 @@ async function handleApiRequest(
           if (!item) return error(res, "Work item not found", 404);
           const body = await parseBody(req);
           if (!body.body) return error(res, "body is required");
-          const comment = createComment({
-            work_item_id: itemId,
-            author: body.author ? String(body.author) : "anonymous",
-            body: String(body.body),
-          });
-          return json(res, comment, 201);
+          try {
+            const comment = createComment({
+              work_item_id: itemId,
+              author: body.author ? String(body.author) : "anonymous",
+              body: String(body.body),
+            });
+            return json(res, comment, 201);
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (msg.includes("Comment blocked")) return error(res, msg, 400);
+            throw e;
+          }
         }
       }
 
