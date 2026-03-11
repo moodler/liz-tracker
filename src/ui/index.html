@@ -6313,6 +6313,27 @@
       .song-styles-textarea::placeholder {
         color: var(--text-dim);
       }
+      /* Song Link Area */
+      .song-link-area {
+        padding: 12px 16px 16px;
+      }
+      .song-link-area .link-field-view {
+        padding: 4px 0;
+      }
+      .song-link-area .link-field-wrapper input[type="url"] {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 6px 10px;
+        border-radius: var(--radius);
+        font-size: 0.82rem;
+        outline: none;
+        font-family: inherit;
+      }
+      .song-link-area .link-field-wrapper input[type="url"]:focus {
+        border-color: var(--highlight);
+      }
 
       /* Song Lyrics Pane */
       .song-lyrics-toolbar {
@@ -10887,6 +10908,17 @@
                       </div>
                       <textarea class="song-styles-textarea" id="songStylesTextarea" placeholder="Describe the musical style, mood, instrumentation, vocal approach..."></textarea>
                     </div>
+                    <div class="song-link-area">
+                      <div class="song-styles-label"><span>Link</span></div>
+                      <div class="link-field-view" id="songLinkView" style="display:none;">
+                        <a id="songLinkAnchor" href="#" target="_blank" rel="noopener">—</a>
+                        <button class="link-field-edit-btn" id="songLinkEditBtn" title="Edit link">edit</button>
+                      </div>
+                      <div class="link-field-wrapper" id="songLinkEdit">
+                        <input type="url" id="songLinkInput" placeholder="https://..." />
+                        <button class="link-field-clear-btn" id="songLinkClear" title="Clear link" style="display:none;">&times;</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -10909,6 +10941,9 @@
 
           // Load attachments (for cover image and styles.md)
           loadSongAttachments();
+
+          // Populate link field
+          populateSongLink(item.link);
 
           // ── Sidebar tab switching ──
           $$("#songSpace .song-sidebar-tab").forEach(tab => {
@@ -11065,6 +11100,83 @@
             if (songStylesSaveTimer) clearTimeout(songStylesSaveTimer);
             songStylesSaveTimer = setTimeout(() => saveSongStyles(), 1500);
           });
+
+          // Link field — event bindings
+          $("#songLinkInput").addEventListener("input", () => {
+            const val = $("#songLinkInput").value.trim();
+            $("#songLinkClear").style.display = val ? "" : "none";
+          });
+          $("#songLinkClear").addEventListener("click", () => {
+            $("#songLinkInput").value = "";
+            $("#songLinkClear").style.display = "none";
+            saveSongLink("");
+          });
+          $("#songLinkEditBtn").addEventListener("click", () => {
+            $("#songLinkView").style.display = "none";
+            $("#songLinkEdit").style.display = "";
+            $("#songLinkInput").focus();
+          });
+          $("#songLinkInput").addEventListener("blur", () => {
+            const val = $("#songLinkInput").value.trim();
+            if (val) {
+              populateSongLink(val);
+            }
+            saveSongLink(val);
+          });
+          // Enter key saves the link
+          $("#songLinkInput").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              $("#songLinkInput").blur();
+            }
+          });
+        }
+
+        /** Populate the Song space link field (view/edit toggle like standard view). */
+        function populateSongLink(link) {
+          const linkInput = $("#songLinkInput");
+          const linkClear = $("#songLinkClear");
+          const linkView = $("#songLinkView");
+          const linkEdit = $("#songLinkEdit");
+          const linkAnchor = $("#songLinkAnchor");
+          if (!linkInput) return;
+
+          linkInput.value = link || "";
+          linkClear.style.display = link ? "" : "none";
+
+          if (link) {
+            linkAnchor.href = link;
+            let displayText;
+            try {
+              const url = new URL(link);
+              displayText = url.hostname + (url.pathname !== "/" ? url.pathname : "");
+              if (displayText.length > 50) displayText = displayText.substring(0, 47) + "...";
+            } catch {
+              displayText = link;
+            }
+            linkAnchor.textContent = displayText;
+            linkAnchor.title = link;
+            linkView.style.display = "";
+            linkEdit.style.display = "none";
+          } else {
+            linkView.style.display = "none";
+            linkEdit.style.display = "";
+          }
+        }
+
+        /** Save the link field value for the current song item. */
+        async function saveSongLink(val) {
+          if (!spaceItemId) return;
+          try {
+            await apiPatch(`/items/${spaceItemId}`, {
+              link: val || null,
+              actor: DEFAULT_AUTHOR,
+            });
+            if (spaceItemData) spaceItemData.link = val || null;
+            loadTracker();
+          } catch (e) {
+            toast("Failed to save link: " + e.message, "error");
+          }
         }
 
         /** Load attachments and populate cover image + styles from them. */
