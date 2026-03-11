@@ -11706,9 +11706,13 @@
           if (!input) return;
           const body = input.value.trim();
           if (!body || !spaceItemId) return;
+          const author = (() => {
+            try { return localStorage.getItem(STORAGE_AUTHOR_KEY) || DEFAULT_AUTHOR; }
+            catch { return DEFAULT_AUTHOR; }
+          })();
           try {
             await apiPost(`/items/${spaceItemId}/comments`, {
-              author: DEFAULT_AUTHOR,
+              author,
               body,
             });
             input.value = "";
@@ -11988,9 +11992,13 @@
           if (!input) return;
           const body = input.value.trim();
           if (!body || !spaceItemId) return;
+          const author = (() => {
+            try { return localStorage.getItem(STORAGE_AUTHOR_KEY) || DEFAULT_AUTHOR; }
+            catch { return DEFAULT_AUTHOR; }
+          })();
           try {
             await apiPost(`/items/${spaceItemId}/comments`, {
-              author: DEFAULT_AUTHOR,
+              author,
               body,
             });
             input.value = "";
