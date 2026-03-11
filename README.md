@@ -1,5 +1,9 @@
 # Liz Tracker
 
+<p align="center">
+  <img src="logo.png" alt="Liz Tracker" width="400">
+</p>
+
 A lightweight, self-hosted project management tracker with a kanban UI, REST API, MCP tools for AI agents, and an optional orchestrator that automatically dispatches approved work items to AI coding sessions.
 
 Built with TypeScript, SQLite, and vanilla JS. No frameworks, no build step for the frontend.
