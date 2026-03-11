@@ -12081,6 +12081,15 @@
             if (detailItemKey) {
               history.replaceState(null, "", `#/item/${detailItemKey}`);
             }
+            // Scroll to last comment if comments exist
+            if (item.comments && item.comments.length) {
+              requestAnimationFrame(() => {
+                const lastComment = $("#detailComments").lastElementChild;
+                if (lastComment) {
+                  lastComment.scrollIntoView({ block: "end", behavior: "instant" });
+                }
+              });
+            }
           } catch (e) {
             toast("Failed to load item: " + e.message, "error");
             closeDetail();
