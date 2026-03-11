@@ -323,6 +323,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 | `song` | music note (SVG) | Songwriting workspace — split-pane lyrics editor + conversation + metadata bar |
 | `text` | text lines (SVG) | Writing workspace — markdown editor + conversation for articles, blogs, long-form text |
 | `engagement` | briefcase (SVG) | Coordination workspace for contractors, services, and external engagements — structured dashboard (contact, quote, milestones, documents, comms log) + discussion sidebar. Uses `space_data` JSON for all structured content. |
+| `scheduled` | clock (SVG) | Scheduled task workspace — schedule config (frequency, time, days), live status panel (next/last run, run count), task instructions editor + run history sidebar. Used by the HARMONI project for recurring automated tasks. `space_data` stores `{ schedule: { frequency, time, days_of_week, timezone, cron_override }, status: { next_run, last_run, last_status, last_duration_ms, run_count } }`. |
 
 ### API Endpoints
 
@@ -338,6 +339,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 - `// ── Space: Song ──` — Song space renderer (lyrics pane, conversation, metadata bar)
 - `// ── Space: Text ──` — Text space renderer (markdown editor, conversation)
 - `// ── Space: Engagement ──` — Engagement space renderer (contact card, quote/financial, milestones, documents, comms log + discussion sidebar)
+- `// ── Space: Scheduled ──` — Scheduled task space renderer (schedule config, status panel, task instructions + run history sidebar)
 
 ### How It Works
 
