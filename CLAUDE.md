@@ -321,6 +321,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 | --- | --- | --- |
 | `standard` | 📋 | Default tracker view — opens the normal detail panel |
 | `song` | 🎵 | Songwriting workspace — split-pane lyrics editor + conversation + metadata bar |
+| `text` | 📝 | Writing workspace — markdown editor + conversation for articles, blogs, long-form text |
 
 ### API Endpoints
 
@@ -334,6 +335,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 - `// ── Space: Type Registry ──` — Space type definitions
 - `// ── Space: Overlay Shell ──` — Modal overlay container (glass-pane dialog with ~30px border), open/close logic
 - `// ── Space: Song ──` — Song space renderer (lyrics pane, conversation, metadata bar)
+- `// ── Space: Text ──` — Text space renderer (markdown editor, conversation)
 
 ### How It Works
 

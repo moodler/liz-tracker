@@ -6641,6 +6641,156 @@
         color: #00b894;
       }
 
+      /* Text Space */
+      .text-space {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+      .text-main-pane {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--border);
+        overflow: hidden;
+        min-width: 0;
+      }
+      .text-editor-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(16, 21, 38, 0.5);
+        flex-shrink: 0;
+      }
+      .text-editor-toolbar .space-btn {
+        font-size: 0.8rem;
+        padding: 3px 8px;
+      }
+      .text-editor-toolbar select {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 3px 8px;
+        border-radius: var(--radius-sm);
+        font-size: 0.8rem;
+      }
+      .text-editor-toolbar .toolbar-spacer {
+        flex: 1;
+      }
+      .text-editor-area {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0;
+        position: relative;
+      }
+      .text-editor-area textarea {
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        border: none;
+        color: var(--text);
+        font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+        font-size: 0.9rem;
+        line-height: 1.7;
+        padding: 16px 20px;
+        resize: none;
+        outline: none;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+      .text-editor-area textarea::placeholder {
+        color: var(--text-dim);
+      }
+      .text-preview-area {
+        width: 100%;
+        height: 100%;
+        overflow-y: auto;
+        padding: 16px 20px;
+        font-size: 0.9rem;
+        line-height: 1.7;
+        color: var(--text);
+      }
+      .text-preview-area h1, .text-preview-area h2, .text-preview-area h3,
+      .text-preview-area h4, .text-preview-area h5, .text-preview-area h6 {
+        color: var(--text);
+        margin: 1.2em 0 0.5em;
+      }
+      .text-preview-area h1 { font-size: 1.5rem; }
+      .text-preview-area h2 { font-size: 1.3rem; }
+      .text-preview-area h3 { font-size: 1.15rem; }
+      .text-preview-area p { margin: 0 0 0.8em; }
+      .text-preview-area ul, .text-preview-area ol { margin: 0 0 0.8em; padding-left: 1.5em; }
+      .text-preview-area li { margin-bottom: 0.3em; }
+      .text-preview-area code {
+        background: rgba(255, 255, 255, 0.06);
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-size: 0.85em;
+      }
+      .text-preview-area pre {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 12px 16px;
+        border-radius: var(--radius);
+        overflow-x: auto;
+        margin: 0 0 0.8em;
+      }
+      .text-preview-area pre code {
+        background: none;
+        padding: 0;
+      }
+      .text-preview-area blockquote {
+        border-left: 3px solid var(--highlight);
+        padding-left: 12px;
+        margin: 0 0 0.8em;
+        color: var(--text-muted);
+      }
+      .text-preview-area a { color: var(--highlight); }
+      .text-preview-area hr {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 1.5em 0;
+      }
+      .text-sidebar {
+        flex: 0 0 380px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .text-save-indicator {
+        font-size: 0.7rem;
+        color: var(--text-dim);
+        font-style: italic;
+        transition: opacity 0.3s;
+      }
+      .text-save-indicator.saving {
+        color: var(--highlight);
+      }
+      .text-save-indicator.saved {
+        color: #00b894;
+      }
+      .text-word-count {
+        font-size: 0.7rem;
+        color: var(--text-dim);
+        padding: 0 4px;
+      }
+
+      /* Mobile: text space responsive */
+      @media (max-width: 768px) {
+        .text-space {
+          flex-direction: column;
+        }
+        .text-main-pane {
+          flex: 0 0 50%;
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+        }
+        .text-sidebar {
+          flex: 0 0 50%;
+        }
+      }
+
       /* Space type selector in create modal / project settings */
       .space-type-selector {
         display: flex;
@@ -10660,6 +10810,7 @@
         const SPACE_TYPES = {
           standard: { name: "standard", label: "Standard", icon: "📋", description: "Default tracker item view" },
           song: { name: "song", label: "Song", icon: "🎵", description: "Songwriting workspace with lyrics editor and conversation" },
+          text: { name: "text", label: "Text", icon: "📝", description: "Writing workspace for articles, blogs, and long-form text" },
         };
 
         // ── Space: Overlay Shell ──
@@ -10696,6 +10847,8 @@
             const spaceType = item.space_type || "standard";
             if (spaceType === "song") {
               renderSpaceSong(item);
+            } else if (spaceType === "text") {
+              renderSpaceText(item);
             } else {
               // Fallback to normal detail
               closeSpaceOverlay();
@@ -10729,6 +10882,7 @@
           spaceItemData = null;
           if (spaceSaveTimer) { clearTimeout(spaceSaveTimer); spaceSaveTimer = null; }
           if (songStylesSaveTimer) { clearTimeout(songStylesSaveTimer); songStylesSaveTimer = null; }
+          if (textSaveTimer) { clearTimeout(textSaveTimer); textSaveTimer = null; }
           // Remove paste handler if set
           if (spaceBody._songPasteHandler) {
             document.removeEventListener("paste", spaceBody._songPasteHandler);
@@ -11363,6 +11517,340 @@
             const item = await apiGet(`/items/${spaceItemId}`);
             spaceItemData = item;
             renderSongDiscussion(item.comments || []);
+            toast("Comment posted");
+          } catch (e) {
+            toast("Failed to post comment: " + e.message, "error");
+          }
+        }
+
+        // ── Space: Text ──
+        let textSaveTimer = null;
+
+        function renderSpaceText(item) {
+          const description = item.description || "";
+
+          spaceBody.innerHTML = `
+            <div class="text-space" id="textSpace">
+              <div class="text-main-pane">
+                <div class="text-editor-toolbar">
+                  <select id="textVersionSelect" title="Version history">
+                    <option value="current">Current</option>
+                  </select>
+                  <button class="space-btn" id="textCopyBtn" title="Copy text to clipboard">Copy</button>
+                  <div class="toolbar-spacer"></div>
+                  <span class="text-word-count" id="textWordCount"></span>
+                  <button class="space-btn" id="textPreviewToggle" title="Toggle preview">Preview</button>
+                  <span class="text-save-indicator" id="textSaveIndicator"></span>
+                </div>
+                <div class="text-editor-area" id="textEditorArea">
+                  <textarea id="textEditorTextarea" placeholder="Start writing...&#10;&#10;Use Markdown for formatting:&#10;# Heading&#10;**bold**, *italic*&#10;- bullet points&#10;> blockquotes">${esc(description)}</textarea>
+                </div>
+                <div class="text-preview-area" id="textPreviewArea" style="display:none;"></div>
+              </div>
+              <div class="text-sidebar">
+                <div class="song-sidebar-tabs">
+                  <button class="song-sidebar-tab active" data-panel="harmoni">Harmoni</button>
+                  <button class="song-sidebar-tab" data-panel="discussion">Discussion</button>
+                </div>
+                <!-- Harmoni Chat Panel -->
+                <div class="song-sidebar-panel active" id="textPanelHarmoni">
+                  <div class="song-harmoni-chat">
+                    <div class="song-harmoni-header">
+                      <div class="song-harmoni-avatar">H</div>
+                      <div class="song-harmoni-header-info">
+                        <div class="song-harmoni-header-name">Harmoni</div>
+                        <div class="song-harmoni-header-status" id="textHarmoniStatus">Ready to help</div>
+                      </div>
+                    </div>
+                    <div class="song-harmoni-thread" id="textHarmoniThread"></div>
+                    <div class="song-harmoni-input">
+                      <textarea id="textHarmoniInput" placeholder="Ask Harmoni to help with your writing, suggest edits, brainstorm ideas..." rows="2"></textarea>
+                      <button id="textHarmoniSend">Send</button>
+                    </div>
+                  </div>
+                </div>
+                <!-- Discussion Panel (comments) -->
+                <div class="song-sidebar-panel" id="textPanelDiscussion">
+                  <div class="song-discussion">
+                    <div class="song-discussion-thread" id="textDiscussionThread"></div>
+                    <div class="song-discussion-input">
+                      <textarea id="textCommentInput" placeholder="Add a comment..." rows="2"></textarea>
+                      <button id="textCommentSubmit">Send</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+
+          // Populate version selector with full history
+          const versionSelect = $("#textVersionSelect");
+          if (spaceVersions.length > 0) {
+            spaceVersions.forEach(v => {
+              const opt = document.createElement("option");
+              opt.value = v.id;
+              opt.textContent = `v${v.version} — ${formatTime(v.created_at)}`;
+              versionSelect.appendChild(opt);
+            });
+          }
+
+          // Populate discussion thread
+          renderTextDiscussion(item.comments || []);
+
+          // Populate Harmoni empty state
+          renderTextHarmoniEmpty();
+
+          // Update word count
+          updateTextWordCount(description);
+
+          // ── Sidebar tab switching ──
+          $$("#textSpace .song-sidebar-tab").forEach(tab => {
+            tab.addEventListener("click", () => {
+              const panel = tab.dataset.panel;
+              $$("#textSpace .song-sidebar-tab").forEach(t => t.classList.remove("active"));
+              tab.classList.add("active");
+              $$("#textSpace .song-sidebar-panel").forEach(p => p.classList.remove("active"));
+              const targetPanel = $(`#textPanel${panel.charAt(0).toUpperCase() + panel.slice(1)}`);
+              if (targetPanel) targetPanel.classList.add("active");
+            });
+          });
+
+          // ── Event bindings ──
+          const textarea = $("#textEditorTextarea");
+          const saveIndicator = $("#textSaveIndicator");
+
+          // Auto-save (debounced)
+          textarea.addEventListener("input", () => {
+            saveIndicator.textContent = "Unsaved changes...";
+            saveIndicator.className = "text-save-indicator";
+            updateTextWordCount(textarea.value);
+            if (textSaveTimer) clearTimeout(textSaveTimer);
+            textSaveTimer = setTimeout(() => saveTextContent(), 2000);
+          });
+
+          // Cmd+S / Ctrl+S — manual save + version snapshot
+          textarea.addEventListener("keydown", (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+              e.preventDefault();
+              saveTextContent(true);
+            }
+          });
+
+          // Copy button
+          $("#textCopyBtn").addEventListener("click", () => {
+            navigator.clipboard.writeText(textarea.value).then(() => {
+              toast("Text copied to clipboard", "success");
+            }).catch(() => {
+              toast("Failed to copy", "error");
+            });
+          });
+
+          // Preview toggle
+          let textPreviewMode = false;
+          $("#textPreviewToggle").addEventListener("click", () => {
+            textPreviewMode = !textPreviewMode;
+            const editorEl = $("#textEditorArea");
+            const previewEl = $("#textPreviewArea");
+            if (textPreviewMode) {
+              previewEl.innerHTML = renderMarkdown(textarea.value);
+              editorEl.style.display = "none";
+              previewEl.style.display = "";
+              $("#textPreviewToggle").textContent = "Edit";
+            } else {
+              editorEl.style.display = "";
+              previewEl.style.display = "none";
+              $("#textPreviewToggle").textContent = "Preview";
+            }
+          });
+
+          // Version selector — browse history
+          versionSelect.addEventListener("change", async (e) => {
+            if (e.target.value === "current") {
+              textarea.value = spaceItemData.description || "";
+              textarea.disabled = false;
+              updateTextWordCount(textarea.value);
+              return;
+            }
+            const ver = spaceVersions.find(v => v.id === e.target.value);
+            if (ver) {
+              textarea.value = ver.description;
+              textarea.disabled = true; // Read-only when viewing old versions
+              updateTextWordCount(ver.description);
+            }
+          });
+
+          // Comment submit (discussion)
+          $("#textCommentSubmit").addEventListener("click", () => submitTextComment());
+          $("#textCommentInput").addEventListener("keydown", (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              submitTextComment();
+            }
+          });
+
+          // Harmoni chat send
+          $("#textHarmoniSend").addEventListener("click", () => sendTextHarmoniMessage());
+          $("#textHarmoniInput").addEventListener("keydown", (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              sendTextHarmoniMessage();
+            }
+          });
+        }
+
+        /** Update word count display for text space. */
+        function updateTextWordCount(text) {
+          const el = $("#textWordCount");
+          if (!el) return;
+          const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+          el.textContent = `${words} word${words !== 1 ? "s" : ""}`;
+        }
+
+        /** Render the Harmoni chat empty state for text space. */
+        function renderTextHarmoniEmpty() {
+          const thread = $("#textHarmoniThread");
+          if (!thread) return;
+          thread.innerHTML = `
+            <div class="song-harmoni-empty">
+              <div class="harmoni-wave">&#x1F4DD;</div>
+              <h4>Hi, I'm Harmoni</h4>
+              <p>Your writing assistant. Ask me to help draft content, suggest edits, improve flow, or brainstorm ideas.</p>
+            </div>
+          `;
+        }
+
+        /** Send a message to Harmoni in the text space. */
+        function sendTextHarmoniMessage() {
+          const input = $("#textHarmoniInput");
+          if (!input) return;
+          const text = input.value.trim();
+          if (!text) return;
+          input.value = "";
+
+          const thread = $("#textHarmoniThread");
+          if (!thread) return;
+
+          // Remove empty state if present
+          const emptyState = thread.querySelector(".song-harmoni-empty");
+          if (emptyState) emptyState.remove();
+
+          // Add user message
+          const userMsg = document.createElement("div");
+          userMsg.className = "harmoni-msg from-user";
+          userMsg.innerHTML = `
+            <div class="harmoni-msg-avatar">You</div>
+            <div class="harmoni-msg-bubble"><p>${esc(text)}</p></div>
+          `;
+          thread.appendChild(userMsg);
+          thread.scrollTop = thread.scrollHeight;
+
+          // Simulate Harmoni thinking response (placeholder until backend is wired)
+          setTimeout(() => {
+            const harmoniMsg = document.createElement("div");
+            harmoniMsg.className = "harmoni-msg from-harmoni";
+            harmoniMsg.innerHTML = `
+              <div class="harmoni-msg-avatar">H</div>
+              <div class="harmoni-msg-bubble"><p><em>Harmoni is not connected yet. This chat will be wired to the Harmoni backend in a future update.</em></p></div>
+            `;
+            thread.appendChild(harmoniMsg);
+            thread.scrollTop = thread.scrollHeight;
+          }, 500);
+        }
+
+        /** Render discussion thread (comments) in text space. */
+        function renderTextDiscussion(comments) {
+          const thread = $("#textDiscussionThread");
+          if (!thread) return;
+          thread.innerHTML = "";
+          if (!comments || comments.length === 0) {
+            thread.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:40px 20px;font-size:0.85rem;">No comments yet.</div>';
+            return;
+          }
+          comments.forEach(c => {
+            if (c.body && c.body.startsWith("[Version ") && c.body.includes(" saved]")) {
+              const div = document.createElement("div");
+              div.className = "song-version-marker";
+              div.innerHTML = `<span>${esc(c.body)}</span>`;
+              thread.appendChild(div);
+              return;
+            }
+            const div = document.createElement("div");
+            div.className = "song-comment";
+            div.dataset.author = c.author;
+            div.innerHTML = `
+              <div class="song-comment-header">
+                <span class="song-comment-author">${esc(c.author)}</span>
+                <span class="song-comment-time">${formatTime(c.created_at)}</span>
+              </div>
+              <div class="song-comment-body">${renderMarkdown(c.body)}</div>
+            `;
+            thread.appendChild(div);
+          });
+          thread.scrollTop = thread.scrollHeight;
+        }
+
+        /** Save text content (auto-save or manual). */
+        async function saveTextContent(createVersion = false) {
+          if (!spaceItemId) return;
+          const textarea = $("#textEditorTextarea");
+          if (!textarea || textarea.disabled) return;
+          const newDesc = textarea.value;
+          const saveIndicator = $("#textSaveIndicator");
+
+          try {
+            saveIndicator.textContent = "Saving...";
+            saveIndicator.className = "text-save-indicator saving";
+            await apiPatch(`/items/${spaceItemId}`, {
+              description: newDesc,
+              actor: DEFAULT_AUTHOR,
+            });
+            if (spaceItemData) spaceItemData.description = newDesc;
+
+            if (createVersion) {
+              const ver = await apiPost(`/items/${spaceItemId}/versions`, {
+                description: newDesc,
+                saved_by: DEFAULT_AUTHOR,
+              });
+              spaceVersions.push(ver);
+              const versionSelect = $("#textVersionSelect");
+              if (versionSelect) {
+                const opt = document.createElement("option");
+                opt.value = ver.id;
+                opt.textContent = `v${ver.version} — ${formatTime(ver.created_at)}`;
+                versionSelect.appendChild(opt);
+              }
+              saveIndicator.textContent = `v${ver.version} saved`;
+            } else {
+              saveIndicator.textContent = "Saved";
+            }
+            saveIndicator.className = "text-save-indicator saved";
+            setTimeout(() => {
+              if (saveIndicator.textContent === "Saved" || saveIndicator.textContent.startsWith("v")) {
+                saveIndicator.textContent = "";
+              }
+            }, 3000);
+          } catch (e) {
+            saveIndicator.textContent = "Save failed!";
+            saveIndicator.className = "text-save-indicator";
+            toast("Failed to save: " + e.message, "error");
+          }
+        }
+
+        /** Submit a comment in the text discussion. */
+        async function submitTextComment() {
+          const input = $("#textCommentInput");
+          if (!input) return;
+          const body = input.value.trim();
+          if (!body || !spaceItemId) return;
+          try {
+            await apiPost(`/items/${spaceItemId}/comments`, {
+              author: DEFAULT_AUTHOR,
+              body,
+            });
+            input.value = "";
+            const item = await apiGet(`/items/${spaceItemId}`);
+            spaceItemData = item;
+            renderTextDiscussion(item.comments || []);
             toast("Comment posted");
           } catch (e) {
             toast("Failed to post comment: " + e.message, "error");
