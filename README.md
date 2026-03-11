@@ -6,7 +6,9 @@
 
 A lightweight, self-hosted project management tracker with a kanban UI, REST API, MCP tools for AI agents, and an optional orchestrator that automatically dispatches approved work items to AI coding sessions.
 
-Created by [Martin Dougiamas](https://github.com/moodler). Built with TypeScript, SQLite, and vanilla JS. No frameworks, no build step for the frontend.
+Created by [Martin Dougiamas](https://github.com/moodler). I built this for myself, and development is VERY active.  I'm happy to take requests but I'm more focussed on my needs than yours right now!
+
+Built with TypeScript, SQLite, and vanilla JS. No frameworks, no build step for the frontend.
 
 ## Features
 
