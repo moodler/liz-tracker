@@ -4,9 +4,11 @@
   <img src="logo.png" alt="Liz Tracker" width="400">
 </p>
 
+## Run your life efficiently from any device 
+
 A lightweight, self-hosted project management tracker with a kanban UI, REST API, MCP tools for AI agents, and an optional orchestrator that automatically dispatches approved work items to AI coding sessions.
 
-It has a pretty UI in a desktop browser, and a completely different mobile and touch-optimised UI on phones and tablets.  You can sit on a couch with your phone and completely run your world.
+It has a pretty UI in a desktop browser, and a completely different mobile and touch-optimised UI on phones and tablets.  
 
 Created by [Martin Dougiamas](https://github.com/moodler). I built this for myself, and development is VERY active.  I'm happy to take requests but I'm more focussed on my needs than yours right now!
 
