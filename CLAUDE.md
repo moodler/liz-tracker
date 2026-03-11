@@ -319,9 +319,9 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 
 | Type | Icon | Description |
 | --- | --- | --- |
-| `standard` | 📋 | Default tracker view — opens the normal detail panel |
-| `song` | 🎵 | Songwriting workspace — split-pane lyrics editor + conversation + metadata bar |
-| `text` | 📝 | Writing workspace — markdown editor + conversation for articles, blogs, long-form text |
+| `standard` | document (SVG) | Default tracker view — opens the normal detail panel |
+| `song` | music note (SVG) | Songwriting workspace — split-pane lyrics editor + conversation + metadata bar |
+| `text` | text lines (SVG) | Writing workspace — markdown editor + conversation for articles, blogs, long-form text |
 
 ### API Endpoints
 
