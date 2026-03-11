@@ -13006,7 +13006,17 @@
             if (detailSnapshot && selectedProjectId && selectedProjectId !== detailSnapshot.project_id) {
               payload.project_id = selectedProjectId;
             }
+            const projectChanged = payload.project_id && payload.project_id !== detailSnapshot.project_id;
             const updatedItem = await apiPatch(`/items/${detailItemId}`, payload);
+            // If project changed, switch to the new project and close the detail panel
+            if (projectChanged && updatedItem && updatedItem.key) {
+              closeDetail();
+              const proj = projectsCache.find(p => p.id === payload.project_id);
+              const projName = proj ? proj.name : "new project";
+              toast(`Item moved to ${projName} as ${updatedItem.key}`);
+              switchProject(payload.project_id);
+              return;
+            }
             // If project changed, update the displayed key
             if (updatedItem && updatedItem.key) {
               $("#detailId").textContent = updatedItem.key;
