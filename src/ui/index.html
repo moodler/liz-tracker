@@ -11506,10 +11506,17 @@
               });
               spaceVersions.push(ver);
               // Update version nav (back button may now be enabled)
-              const backBtn = $("#songVersionBack");
-              if (backBtn) backBtn.disabled = false;
+              updateSongVersionNav();
               saveIndicator.textContent = `v${ver.version} saved`;
             } else {
+              // Backend auto-creates versions on description change — refresh version list
+              try {
+                const prevCount = spaceVersions.length;
+                spaceVersions = await apiGet(`/items/${spaceItemId}/versions`);
+                if (spaceVersions.length > prevCount) {
+                  updateSongVersionNav();
+                }
+              } catch (e2) { /* version refresh is non-critical */ }
               saveIndicator.textContent = "Saved";
             }
             saveIndicator.className = "song-save-indicator saved";
@@ -11824,10 +11831,17 @@
               });
               spaceVersions.push(ver);
               // Update version nav (back button may now be enabled)
-              const backBtn = $("#textVersionBack");
-              if (backBtn) backBtn.disabled = false;
+              updateTextVersionNav();
               saveIndicator.textContent = `v${ver.version} saved`;
             } else {
+              // Backend auto-creates versions on description change — refresh version list
+              try {
+                const prevCount = spaceVersions.length;
+                spaceVersions = await apiGet(`/items/${spaceItemId}/versions`);
+                if (spaceVersions.length > prevCount) {
+                  updateTextVersionNav();
+                }
+              } catch (e2) { /* version refresh is non-critical */ }
               saveIndicator.textContent = "Saved";
             }
             saveIndicator.className = "text-save-indicator saved";
