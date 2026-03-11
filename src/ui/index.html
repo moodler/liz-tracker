@@ -9717,7 +9717,7 @@
             (p) => p.id === currentProjectId,
           );
           const sessionLink = item.session_id
-            ? `<button onclick="window.open('${esc(buildOpencodeUrl(item.session_id, currentProject?.working_directory))}', '_blank'); event.stopPropagation();" title="Open in OpenCode">OpenCode \u2197</button>`
+            ? `<button onclick="window.open('${esc(buildOpencodeUrl(item.session_id, currentProject?.working_directory))}', 'opencode'); event.stopPropagation();" title="Open in OpenCode">OpenCode \u2197</button>`
             : "";
           const dispatchBtn =
             currentProject?.orchestration &&
@@ -9802,7 +9802,7 @@
               // Show session ID and a clickable deep link to open in OpenCode
               const url = result.opencodeUrl || result.opencode_url;
               if (url) {
-                toast(`Dispatched! <a href="${url}" target="_blank" style="color:#8bf;text-decoration:underline">Open in OpenCode ↗</a>`, "success", 8000);
+                toast(`Dispatched! <a href="${url}" target="opencode" style="color:#8bf;text-decoration:underline">Open in OpenCode ↗</a>`, "success", 8000);
               } else {
                 toast(`Dispatched! Session: ${result.sessionId}`);
               }
@@ -10358,7 +10358,7 @@
             : "";
           const agentStatusEmoji = agentStatusHtml(item.session_status);
           const sessionLink = item.session_id
-            ? `<button onclick="window.open('${esc(buildOpencodeUrl(item.session_id, project?.working_directory))}', '_blank'); event.stopPropagation();" title="Open in OpenCode">OpenCode \u2197</button>`
+            ? `<button onclick="window.open('${esc(buildOpencodeUrl(item.session_id, project?.working_directory))}', 'opencode'); event.stopPropagation();" title="Open in OpenCode">OpenCode \u2197</button>`
             : "";
           const dispatchBtn =
             project?.orchestration &&
