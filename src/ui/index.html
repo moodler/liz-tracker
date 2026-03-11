@@ -28,15 +28,10 @@
         --text-dim: #5a6380;
         --border: #233554;
         --border-light: #2d4059;
-        --col-brainstorming: #6c5ce7;
         --col-clarification: #fdcb6e;
-        --col-approved: #00b894;
         --col-in_development: #0984e3;
-        --col-in_review: #e17055;
         --col-needs_input: #d63031;
-        --col-testing: #a29bfe;
         --col-done: #2d3436;
-        --col-cancelled: #636e72;
         --pri-none: #636e72;
         --pri-low: #74b9ff;
         --pri-medium: #ffa502;
@@ -44,13 +39,11 @@
         --pri-urgent: #ff4757;
         --radius: 8px;
         --radius-sm: 4px;
-        --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.15);
         --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
         --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25);
         --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.5), 0 8px 20px rgba(0, 0, 0, 0.3);
         --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-        --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
         --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
         --transition: 150ms ease;
       }
@@ -8792,7 +8785,13 @@
               .replace(/_(.+?)_/g, "<em>$1</em>")
               .replace(
                 /\[([^\]]+)\]\(([^)]+)\)/g,
-                '<a href="$2" target="_blank">$1</a>',
+                (_, label, url) => {
+                  const decoded = url.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+                  if (/^https?:\/\/|^\//.test(decoded)) {
+                    return `<a href="${url}" target="_blank">${label}</a>`;
+                  }
+                  return `${label} (${url})`;
+                },
               );
           }
 

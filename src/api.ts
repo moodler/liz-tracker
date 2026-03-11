@@ -26,6 +26,7 @@
  */
 
 import http from "http";
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -279,6 +280,18 @@ function queryParams(url: string): URLSearchParams {
 
 // ── API Authentication (Section 4.8) ──
 
+/** Timing-safe token comparison to prevent timing attacks. */
+function tokenEquals(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    // Compare against self to keep constant time regardless of length mismatch
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 /**
  * Check if a request is authenticated.
  * If TRACKER_API_TOKEN is configured, ALL API endpoints require a valid Bearer token.
@@ -300,7 +313,7 @@ function checkAuth(
   }
 
   const token = authHeader.replace(/^Bearer\s+/i, "");
-  if (token !== TRACKER_API_TOKEN) {
+  if (!tokenEquals(token, TRACKER_API_TOKEN)) {
     error(res, "Invalid authentication token", 403);
     return false;
   }
@@ -362,7 +375,7 @@ async function handleApiRequest(
         return json(res, { valid: false, authRequired: true }, 401);
       }
       const token = authHeader.replace(/^Bearer\s+/i, "");
-      if (token === TRACKER_API_TOKEN) {
+      if (tokenEquals(token, TRACKER_API_TOKEN)) {
         return json(res, { valid: true, authRequired: true });
       }
       return json(res, { valid: false, authRequired: true }, 401);
