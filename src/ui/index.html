@@ -11076,10 +11076,9 @@
             formData.append("file", file, filename);
             formData.append("uploaded_by", DEFAULT_AUTHOR);
 
-            const token = localStorage.getItem("tracker_token");
             const resp = await fetch(`/api/v1/items/${spaceItemId}/attachments`, {
               method: "POST",
-              headers: token ? { "Authorization": `Bearer ${token}` } : {},
+              headers: authToken ? { "Authorization": `Bearer ${authToken}` } : {},
               body: formData,
             });
             if (!resp.ok) throw new Error("Upload failed");
