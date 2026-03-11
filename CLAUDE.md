@@ -322,6 +322,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 | `standard` | document (SVG) | Default tracker view — opens the normal detail panel |
 | `song` | music note (SVG) | Songwriting workspace — split-pane lyrics editor + conversation + metadata bar |
 | `text` | text lines (SVG) | Writing workspace — markdown editor + conversation for articles, blogs, long-form text |
+| `engagement` | briefcase (SVG) | Coordination workspace for contractors, services, and external engagements — structured dashboard (contact, quote, milestones, documents, comms log) + discussion sidebar. Uses `space_data` JSON for all structured content. |
 
 ### API Endpoints
 
@@ -336,6 +337,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 - `// ── Space: Overlay Shell ──` — Modal overlay container (glass-pane dialog with ~30px border), open/close logic
 - `// ── Space: Song ──` — Song space renderer (lyrics pane, conversation, metadata bar)
 - `// ── Space: Text ──` — Text space renderer (markdown editor, conversation)
+- `// ── Space: Engagement ──` — Engagement space renderer (contact card, quote/financial, milestones, documents, comms log + discussion sidebar)
 
 ### How It Works
 

@@ -119,7 +119,7 @@ export interface WorkItem {
   platform: Platform;
   date_due: string | null; // ISO 8601 date string (YYYY-MM-DD) or null
   link: string | null; // Optional URL associated with this item
-  space_type: string; // Space type (e.g. "standard", "song", "cover-design")
+  space_type: string; // Space type (e.g. "standard", "song", "text", "engagement")
   space_data: string | null; // JSON blob for space-specific custom fields
   locked_by: string | null;
   locked_at: string | null;

@@ -382,7 +382,7 @@ function createMcpServer(): McpServer {
       platform: z.enum(["any", "server", "ios", "web"]).optional().describe("Target platform"),
       date_due: z.string().optional().describe("Due date in YYYY-MM-DD format. Pass empty string to clear."),
       link: z.string().optional().describe("Optional URL link associated with this item. Pass empty string to clear."),
-      space_type: z.string().optional().describe('Space type for specialized UI (e.g. "standard", "song")'),
+      space_type: z.string().optional().describe('Space type for specialized UI (e.g. "standard", "song", "engagement")'),
       space_data: z.string().optional().describe("JSON blob for space-specific custom fields"),
       actor: z.string().optional().describe("Who made this change"),
     },
