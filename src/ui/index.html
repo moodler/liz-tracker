@@ -7286,7 +7286,11 @@
                 <button class="date-due-clear" id="detailDateDueClear" title="Clear due date" style="display:none;">&times;</button>
               </div>
             </div>
-            <div class="detail-field" style="flex: 1;"></div>
+            <div class="detail-field" id="detailSpaceTypeField" style="display:none;">
+              <label>Space</label>
+              <div class="space-type-selector" id="detailSpaceTypeSelector"></div>
+              <input type="hidden" id="detailSpaceType" value="standard" />
+            </div>
           </div>
           <div class="detail-row">
             <div class="detail-field" style="flex: 1; min-width: 0;">
@@ -11665,6 +11669,49 @@
           }
         }
 
+        // ── Detail: Space Type Selector ──
+        function populateDetailSpaceType(item) {
+          const field = $("#detailSpaceTypeField");
+          const selector = $("#detailSpaceTypeSelector");
+          const hidden = $("#detailSpaceType");
+          const proj = projectsCache.find(p => p.id === item.project_id);
+          const activeSpaces = proj && proj.active_spaces ? (typeof proj.active_spaces === "string" ? JSON.parse(proj.active_spaces) : proj.active_spaces) : ["standard"];
+
+          // Always show the space selector if the project has more than one active space,
+          // or if the item already has a non-standard space type (so it can be switched back)
+          const currentSpace = item.space_type || "standard";
+          hidden.value = currentSpace;
+
+          // Build the list of space options: active spaces + current space (if not already in list)
+          const spaceOptions = [...activeSpaces];
+          if (!spaceOptions.includes(currentSpace)) {
+            spaceOptions.push(currentSpace);
+          }
+
+          if (spaceOptions.length <= 1) {
+            field.style.display = "none";
+            return;
+          }
+
+          field.style.display = "";
+          selector.innerHTML = "";
+          spaceOptions.forEach(spaceName => {
+            const st = SPACE_TYPES[spaceName];
+            if (!st) return;
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "space-type-option" + (spaceName === currentSpace ? " active" : "");
+            btn.innerHTML = `<span class="space-type-icon">${st.icon}</span> ${esc(st.label)}`;
+            btn.addEventListener("click", () => {
+              hidden.value = spaceName;
+              $$(".space-type-option", selector).forEach(b => b.classList.remove("active"));
+              btn.classList.add("active");
+              checkDetailDirty();
+            });
+            selector.appendChild(btn);
+          });
+        }
+
         // ── Dirty tracking for Save button ──
         let detailSnapshot = null;
 
@@ -11678,6 +11725,7 @@
             requires_code: $("#detailRequiresCode").checked,
             date_due: $("#detailDateDue").value || "",
             link: $("#detailLink").value.trim(),
+            space_type: ($("#detailSpaceType") || {}).value || "standard",
           };
         }
 
@@ -11696,7 +11744,8 @@
             current.bot_dispatch !== detailSnapshot.bot_dispatch ||
             current.requires_code !== detailSnapshot.requires_code ||
             current.date_due !== detailSnapshot.date_due ||
-            current.link !== detailSnapshot.link;
+            current.link !== detailSnapshot.link ||
+            current.space_type !== detailSnapshot.space_type;
           saveBtn.disabled = !dirty;
         }
 
@@ -11716,6 +11765,8 @@
           dateDueClear.style.display = item.date_due ? "" : "none";
           // Link
           populateDetailLink(item.link);
+          // Space type selector
+          populateDetailSpaceType(item);
           // Space view toggle — show "Song View" button for non-standard space types
           const spaceViewBtn = $("#detailSpaceViewBtn");
           if (item.space_type && item.space_type !== "standard" && SPACE_TYPES[item.space_type]) {
@@ -12438,6 +12489,7 @@
         $("#detailSave").addEventListener("click", async () => {
           if (!detailItemId) return;
           try {
+            const spaceTypeVal = ($("#detailSpaceType") || {}).value || "standard";
             await apiPatch(`/items/${detailItemId}`, {
               title: $("#detailTitle").value.trim(),
               description: $("#detailDescription").value,
@@ -12447,6 +12499,7 @@
               requires_code: !$("#detailRequiresCode").checked,
               date_due: $("#detailDateDue").value || null,
               link: $("#detailLink").value.trim() || null,
+              space_type: spaceTypeVal,
               actor: DEFAULT_AUTHOR,
             });
             detailSnapshot = snapshotDetail();
