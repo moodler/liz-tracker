@@ -28,6 +28,22 @@ export const PORT = parseInt(process.env.PORT || "1000", 10);
 export const STORE_DIR =
   process.env.STORE_DIR || path.resolve(process.cwd(), "store");
 
+// ── Webhook config ──
+
+/**
+ * URL to POST comment webhook notifications to (e.g. Liz's tracker channel endpoint).
+ * When set, the tracker will POST a JSON payload to this URL whenever a qualifying
+ * comment is created. Set via WEBHOOK_URL env var or .env file.
+ */
+export const WEBHOOK_URL = process.env.WEBHOOK_URL || "";
+
+/**
+ * Shared secret for authenticating webhook payloads.
+ * Both the tracker (sender) and the receiver (Liz) must have the same secret.
+ * Set via WEBHOOK_SECRET env var or .env file.
+ */
+export const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "";
+
 // ── Container path translation ──
 
 /**
