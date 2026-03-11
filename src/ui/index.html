@@ -10761,6 +10761,97 @@
         let spaceItemData = null;
         let spaceSaveTimer = null;
         let spaceVersions = [];
+        let songVersionIndex = -1; // -1 = current (live editing), 0..N-1 = historical version
+        let textVersionIndex = -1;
+
+        // ── Version navigation (Song) — hoisted so saveSongLyrics can call it ──
+        function updateSongVersionNav() {
+          const backBtn = $("#songVersionBack");
+          const fwdBtn = $("#songVersionFwd");
+          const dateEl = $("#songVersionDate");
+          const revertBtn = $("#songRevertBtn");
+          if (!backBtn) return;
+
+          const hasVersions = spaceVersions.length > 0;
+
+          if (songVersionIndex === -1) {
+            // Viewing current (live) version
+            backBtn.disabled = !hasVersions;
+            fwdBtn.disabled = true;
+            dateEl.textContent = "";
+            revertBtn.style.display = "none";
+          } else {
+            // Viewing a historical version
+            const ver = spaceVersions[songVersionIndex];
+            backBtn.disabled = songVersionIndex <= 0;
+            fwdBtn.disabled = false; // can always go forward toward current
+            dateEl.textContent = ver ? `v${ver.version} — ${formatTime(ver.created_at)}` : "";
+            revertBtn.style.display = "";
+          }
+        }
+
+        function navigateSongVersion(newIndex) {
+          const textarea = $("#songLyricsTextarea");
+          if (!textarea) return;
+
+          songVersionIndex = newIndex;
+
+          if (songVersionIndex === -1) {
+            textarea.value = spaceItemData.description || "";
+            textarea.disabled = false;
+          } else {
+            const ver = spaceVersions[songVersionIndex];
+            if (ver) {
+              textarea.value = ver.description;
+              textarea.disabled = true;
+            }
+          }
+          updateSongVersionNav();
+        }
+
+        // ── Version navigation (Text) — hoisted so saveTextContent can call it ──
+        function updateTextVersionNav() {
+          const backBtn = $("#textVersionBack");
+          const fwdBtn = $("#textVersionFwd");
+          const dateEl = $("#textVersionDate");
+          const revertBtn = $("#textRevertBtn");
+          if (!backBtn) return;
+
+          const hasVersions = spaceVersions.length > 0;
+
+          if (textVersionIndex === -1) {
+            backBtn.disabled = !hasVersions;
+            fwdBtn.disabled = true;
+            dateEl.textContent = "";
+            revertBtn.style.display = "none";
+          } else {
+            const ver = spaceVersions[textVersionIndex];
+            backBtn.disabled = textVersionIndex <= 0;
+            fwdBtn.disabled = false;
+            dateEl.textContent = ver ? `v${ver.version} — ${formatTime(ver.created_at)}` : "";
+            revertBtn.style.display = "";
+          }
+        }
+
+        function navigateTextVersion(newIndex) {
+          const textarea = $("#textEditorTextarea");
+          if (!textarea) return;
+
+          textVersionIndex = newIndex;
+
+          if (textVersionIndex === -1) {
+            textarea.value = spaceItemData.description || "";
+            textarea.disabled = false;
+          } else {
+            const ver = spaceVersions[textVersionIndex];
+            if (ver) {
+              textarea.value = ver.description;
+              textarea.disabled = true;
+            }
+          }
+          updateTextWordCount(textarea.value);
+          updateTextVersionNav();
+        }
 
         async function openSpaceOverlay(itemId) {
           spaceItemId = itemId;
@@ -10957,56 +11048,9 @@
             </div>
           `;
 
-          // Initialize version navigation
-          // Version index: -1 = current (latest), 0 = oldest, spaceVersions.length-1 = newest version
-          let songVersionIndex = -1; // -1 means "current" (live editing)
+          // Initialize version navigation (functions are hoisted to outer scope)
+          songVersionIndex = -1;
           updateSongVersionNav();
-
-          function updateSongVersionNav() {
-            const backBtn = $("#songVersionBack");
-            const fwdBtn = $("#songVersionFwd");
-            const dateEl = $("#songVersionDate");
-            const revertBtn = $("#songRevertBtn");
-            if (!backBtn) return;
-
-            const hasVersions = spaceVersions.length > 0;
-
-            if (songVersionIndex === -1) {
-              // Viewing current (live) version
-              backBtn.disabled = !hasVersions;
-              fwdBtn.disabled = true;
-              dateEl.textContent = "";
-              revertBtn.style.display = "none";
-            } else {
-              // Viewing a historical version
-              const ver = spaceVersions[songVersionIndex];
-              backBtn.disabled = songVersionIndex <= 0;
-              fwdBtn.disabled = false; // can always go forward toward current
-              dateEl.textContent = ver ? `v${ver.version} — ${formatTime(ver.created_at)}` : "";
-              // Show revert if not viewing the most recent version
-              revertBtn.style.display = "";
-            }
-          }
-
-          function navigateSongVersion(newIndex) {
-            const textarea = $("#songLyricsTextarea");
-            if (!textarea) return;
-
-            songVersionIndex = newIndex;
-
-            if (songVersionIndex === -1) {
-              // Back to current
-              textarea.value = spaceItemData.description || "";
-              textarea.disabled = false;
-            } else {
-              const ver = spaceVersions[songVersionIndex];
-              if (ver) {
-                textarea.value = ver.description;
-                textarea.disabled = true;
-              }
-            }
-            updateSongVersionNav();
-          }
 
           // Populate discussion thread
           renderSongDiscussion(item.comments || []);
@@ -11598,52 +11642,9 @@
             </div>
           `;
 
-          // Initialize version navigation
-          let textVersionIndex = -1; // -1 means "current" (live editing)
+          // Initialize version navigation (functions are hoisted to outer scope)
+          textVersionIndex = -1;
           updateTextVersionNav();
-
-          function updateTextVersionNav() {
-            const backBtn = $("#textVersionBack");
-            const fwdBtn = $("#textVersionFwd");
-            const dateEl = $("#textVersionDate");
-            const revertBtn = $("#textRevertBtn");
-            if (!backBtn) return;
-
-            const hasVersions = spaceVersions.length > 0;
-
-            if (textVersionIndex === -1) {
-              backBtn.disabled = !hasVersions;
-              fwdBtn.disabled = true;
-              dateEl.textContent = "";
-              revertBtn.style.display = "none";
-            } else {
-              const ver = spaceVersions[textVersionIndex];
-              backBtn.disabled = textVersionIndex <= 0;
-              fwdBtn.disabled = false;
-              dateEl.textContent = ver ? `v${ver.version} — ${formatTime(ver.created_at)}` : "";
-              revertBtn.style.display = "";
-            }
-          }
-
-          function navigateTextVersion(newIndex) {
-            const textarea = $("#textEditorTextarea");
-            if (!textarea) return;
-
-            textVersionIndex = newIndex;
-
-            if (textVersionIndex === -1) {
-              textarea.value = spaceItemData.description || "";
-              textarea.disabled = false;
-            } else {
-              const ver = spaceVersions[textVersionIndex];
-              if (ver) {
-                textarea.value = ver.description;
-                textarea.disabled = true;
-              }
-            }
-            updateTextWordCount(textarea.value);
-            updateTextVersionNav();
-          }
 
           // Populate discussion thread
           renderTextDiscussion(item.comments || []);
