@@ -6112,19 +6112,182 @@
         flex: 1;
         overflow: hidden;
       }
-      .song-space.focus-mode .song-conversation {
-        display: none;
-      }
-      .song-space.focus-mode .song-lyrics {
+      .song-main-pane {
         flex: 1;
-      }
-      .song-lyrics {
-        flex: 0 0 55%;
         display: flex;
         flex-direction: column;
         border-right: 1px solid var(--border);
         overflow: hidden;
+        min-width: 0;
       }
+      .song-sidebar {
+        flex: 0 0 380px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .song-sidebar-tabs {
+        display: flex;
+        border-bottom: 1px solid var(--border);
+        background: rgba(16, 21, 38, 0.5);
+        flex-shrink: 0;
+      }
+      .song-sidebar-tab {
+        flex: 1;
+        padding: 8px 12px;
+        text-align: center;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-dim);
+        cursor: pointer;
+        border: none;
+        background: none;
+        border-bottom: 2px solid transparent;
+        transition: color 0.15s, border-color 0.15s;
+      }
+      .song-sidebar-tab:hover {
+        color: var(--text-muted);
+      }
+      .song-sidebar-tab.active {
+        color: var(--text);
+        border-bottom-color: var(--highlight);
+      }
+      .song-sidebar-panel {
+        flex: 1;
+        overflow: hidden;
+        display: none;
+        flex-direction: column;
+      }
+      .song-sidebar-panel.active {
+        display: flex;
+      }
+
+      /* Song Cover Image */
+      .song-cover-area {
+        padding: 16px;
+        flex-shrink: 0;
+        text-align: center;
+      }
+      .song-cover-container {
+        position: relative;
+        width: 100%;
+        max-width: 280px;
+        margin: 0 auto;
+        aspect-ratio: 1;
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.03);
+        border: 2px dashed var(--border);
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+      }
+      .song-cover-container:hover {
+        border-color: var(--highlight);
+        background: rgba(233, 69, 96, 0.05);
+      }
+      .song-cover-container.has-cover {
+        border-style: solid;
+        border-color: transparent;
+      }
+      .song-cover-container.drag-over {
+        border-color: var(--highlight);
+        background: rgba(233, 69, 96, 0.1);
+      }
+      .song-cover-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: none;
+      }
+      .song-cover-container.has-cover .song-cover-img {
+        display: block;
+      }
+      .song-cover-placeholder {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: var(--text-dim);
+        font-size: 0.8rem;
+      }
+      .song-cover-container.has-cover .song-cover-placeholder {
+        display: none;
+      }
+      .song-cover-placeholder .cover-icon {
+        font-size: 2rem;
+        opacity: 0.5;
+      }
+      .song-cover-actions {
+        margin-top: 8px;
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+      }
+      .song-cover-actions button {
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+        padding: 3px 10px;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-size: 0.75rem;
+        transition: background 0.15s, color 0.15s;
+      }
+      .song-cover-actions button:hover {
+        background: var(--bg-accent);
+        color: var(--text);
+      }
+
+      /* Song Styles Field */
+      .song-styles-area {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        padding: 0 16px 16px;
+        overflow: hidden;
+      }
+      .song-styles-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-dim);
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .song-styles-label .styles-save-status {
+        font-size: 0.65rem;
+        font-style: italic;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      .song-styles-textarea {
+        flex: 1;
+        width: 100%;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 10px 12px;
+        border-radius: var(--radius);
+        font-size: 0.82rem;
+        line-height: 1.5;
+        resize: none;
+        outline: none;
+        font-family: inherit;
+        min-height: 80px;
+      }
+      .song-styles-textarea:focus {
+        border-color: var(--highlight);
+      }
+      .song-styles-textarea::placeholder {
+        color: var(--text-dim);
+      }
+
+      /* Song Lyrics Pane */
       .song-lyrics-toolbar {
         display: flex;
         align-items: center;
@@ -6202,29 +6365,168 @@
         font-size: 0.85rem;
       }
 
-      /* Song Conversation Pane */
-      .song-conversation {
-        flex: 0 0 45%;
+      /* Harmoni Chat Pane */
+      .song-harmoni-chat {
+        flex: 1;
         display: flex;
         flex-direction: column;
         overflow: hidden;
       }
-      .song-conversation-header {
-        padding: 8px 16px;
+      .song-harmoni-header {
+        padding: 10px 16px;
         border-bottom: 1px solid var(--border);
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        gap: 8px;
         background: rgba(16, 21, 38, 0.5);
         flex-shrink: 0;
       }
-      .song-conversation-header h3 {
+      .song-harmoni-avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        flex-shrink: 0;
+      }
+      .song-harmoni-header-info {
+        flex: 1;
+        min-width: 0;
+      }
+      .song-harmoni-header-name {
         font-size: 0.85rem;
         font-weight: 600;
-        color: var(--text-muted);
-        margin: 0;
+        color: var(--text);
       }
-      .song-conversation-thread {
+      .song-harmoni-header-status {
+        font-size: 0.7rem;
+        color: var(--text-dim);
+      }
+      .song-harmoni-thread {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px 16px;
+      }
+      .song-harmoni-empty {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--text-dim);
+      }
+      .song-harmoni-empty .harmoni-wave {
+        font-size: 2.5rem;
+        margin-bottom: 12px;
+      }
+      .song-harmoni-empty h4 {
+        color: var(--text-muted);
+        margin: 0 0 8px;
+        font-size: 0.95rem;
+      }
+      .song-harmoni-empty p {
+        font-size: 0.82rem;
+        line-height: 1.5;
+        margin: 0;
+        max-width: 260px;
+        margin: 0 auto;
+      }
+      .harmoni-msg {
+        margin-bottom: 12px;
+        display: flex;
+        gap: 8px;
+      }
+      .harmoni-msg.from-user {
+        flex-direction: row-reverse;
+      }
+      .harmoni-msg-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+      }
+      .harmoni-msg.from-harmoni .harmoni-msg-avatar {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+      }
+      .harmoni-msg.from-user .harmoni-msg-avatar {
+        background: var(--highlight);
+        color: #fff;
+      }
+      .harmoni-msg-bubble {
+        max-width: 80%;
+        padding: 8px 12px;
+        border-radius: var(--radius);
+        font-size: 0.85rem;
+        line-height: 1.5;
+      }
+      .harmoni-msg.from-harmoni .harmoni-msg-bubble {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+      }
+      .harmoni-msg.from-user .harmoni-msg-bubble {
+        background: rgba(233, 69, 96, 0.15);
+        border: 1px solid rgba(233, 69, 96, 0.3);
+        color: var(--text);
+      }
+      .harmoni-msg-bubble p { margin: 0 0 6px; }
+      .harmoni-msg-bubble p:last-child { margin-bottom: 0; }
+      .song-harmoni-input {
+        padding: 12px 16px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        gap: 8px;
+        flex-shrink: 0;
+        background: rgba(16, 21, 38, 0.5);
+      }
+      .song-harmoni-input textarea {
+        flex: 1;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 8px 12px;
+        border-radius: var(--radius);
+        font-size: 0.85rem;
+        resize: none;
+        outline: none;
+        min-height: 38px;
+        max-height: 120px;
+        font-family: inherit;
+      }
+      .song-harmoni-input textarea:focus {
+        border-color: var(--highlight);
+      }
+      .song-harmoni-input textarea::placeholder {
+        color: var(--text-dim);
+      }
+      .song-harmoni-input button {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        border: none;
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: var(--radius);
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 600;
+        transition: opacity 0.15s;
+        align-self: flex-end;
+      }
+      .song-harmoni-input button:hover {
+        opacity: 0.85;
+      }
+
+      /* Song Discussion Pane (comments) */
+      .song-discussion {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .song-discussion-thread {
         flex: 1;
         overflow-y: auto;
         padding: 12px 16px;
@@ -6241,8 +6543,10 @@
         border-left: 3px solid var(--highlight);
       }
       .song-comment[data-author="Coder"],
-      .song-comment[data-author="coder"] {
-        border-left: 3px solid #00b894;
+      .song-comment[data-author="coder"],
+      .song-comment[data-author="Harmoni"],
+      .song-comment[data-author="harmoni"] {
+        border-left: 3px solid #667eea;
       }
       .song-comment-header {
         display: flex;
@@ -6280,7 +6584,7 @@
         border-radius: 10px;
         font-weight: 600;
       }
-      .song-conversation-input {
+      .song-discussion-input {
         padding: 12px 16px;
         border-top: 1px solid var(--border);
         display: flex;
@@ -6288,7 +6592,7 @@
         flex-shrink: 0;
         background: rgba(16, 21, 38, 0.5);
       }
-      .song-conversation-input textarea {
+      .song-discussion-input textarea {
         flex: 1;
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -6302,10 +6606,10 @@
         max-height: 120px;
         font-family: inherit;
       }
-      .song-conversation-input textarea:focus {
+      .song-discussion-input textarea:focus {
         border-color: var(--highlight);
       }
-      .song-conversation-input button {
+      .song-discussion-input button {
         background: var(--highlight);
         border: none;
         color: #fff;
@@ -6317,101 +6621,10 @@
         transition: opacity 0.15s;
         align-self: flex-end;
       }
-      .song-conversation-input button:hover {
+      .song-discussion-input button:hover {
         opacity: 0.85;
       }
 
-      /* Song Metadata Bar */
-      .song-metadata {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 10px 20px;
-        border-top: 1px solid var(--border);
-        background: rgba(16, 21, 38, 0.7);
-        flex-shrink: 0;
-        flex-wrap: wrap;
-        min-height: 46px;
-      }
-      .song-meta-field {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 0.8rem;
-      }
-      .song-meta-field label {
-        color: var(--text-dim);
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        white-space: nowrap;
-      }
-      .song-meta-field input,
-      .song-meta-field select {
-        background: var(--bg-card);
-        border: 1px solid transparent;
-        color: var(--text);
-        padding: 3px 8px;
-        border-radius: var(--radius-sm);
-        font-size: 0.8rem;
-        min-width: 60px;
-        max-width: 140px;
-        transition: border-color 0.15s;
-      }
-      .song-meta-field input:hover,
-      .song-meta-field input:focus {
-        border-color: var(--border-light);
-        outline: none;
-      }
-      .song-meta-field .meta-tags {
-        display: flex;
-        gap: 4px;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-      .song-meta-field .meta-tag {
-        background: var(--bg-accent);
-        color: var(--text-muted);
-        padding: 2px 8px;
-        border-radius: 10px;
-        font-size: 0.7rem;
-        cursor: pointer;
-        transition: background 0.15s;
-      }
-      .song-meta-field .meta-tag:hover {
-        background: var(--highlight);
-        color: #fff;
-      }
-      .song-meta-field .meta-tag-add {
-        background: transparent;
-        border: 1px dashed var(--border-light);
-        color: var(--text-dim);
-        padding: 2px 8px;
-        border-radius: 10px;
-        font-size: 0.7rem;
-        cursor: pointer;
-      }
-      .song-meta-field .meta-tag-add:hover {
-        border-color: var(--text-muted);
-        color: var(--text-muted);
-      }
-      .song-meta-link {
-        color: var(--highlight);
-        text-decoration: none;
-        font-size: 0.8rem;
-      }
-      .song-meta-link:hover {
-        text-decoration: underline;
-      }
-      .song-meta-audio {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .song-meta-audio audio {
-        height: 28px;
-        max-width: 200px;
-      }
       .song-save-indicator {
         font-size: 0.7rem;
         color: var(--text-dim);
@@ -6487,17 +6700,16 @@
         .song-space {
           flex-direction: column;
         }
-        .song-lyrics {
+        .song-main-pane {
           flex: 0 0 50%;
           border-right: none;
           border-bottom: 1px solid var(--border);
         }
-        .song-conversation {
+        .song-sidebar {
           flex: 0 0 50%;
         }
-        .song-metadata {
-          gap: 10px;
-          padding: 8px 12px;
+        .song-cover-container {
+          max-width: 180px;
         }
         .space-header {
           padding: 8px 12px;
@@ -10512,6 +10724,12 @@
           spaceItemId = null;
           spaceItemData = null;
           if (spaceSaveTimer) { clearTimeout(spaceSaveTimer); spaceSaveTimer = null; }
+          if (songStylesSaveTimer) { clearTimeout(songStylesSaveTimer); songStylesSaveTimer = null; }
+          // Remove paste handler if set
+          if (spaceBody._songPasteHandler) {
+            document.removeEventListener("paste", spaceBody._songPasteHandler);
+            spaceBody._songPasteHandler = null;
+          }
           spaceBody.innerHTML = "";
           delete $("#spaceModal").dataset.theme;
           // Clear URL hash
@@ -10557,19 +10775,20 @@
         });
 
         // ── Space: Song ──
+        let songStylesSaveTimer = null;
+        let songAttachmentsCache = [];
+
         function renderSpaceSong(item) {
-          const spaceData = item.space_data ? (typeof item.space_data === "string" ? JSON.parse(item.space_data) : item.space_data) : {};
           const description = item.description || "";
 
           spaceBody.innerHTML = `
             <div class="song-space" id="songSpace">
-              <div class="song-lyrics">
+              <div class="song-main-pane">
                 <div class="song-lyrics-toolbar">
                   <select id="songVersionSelect" title="Version history">
                     <option value="current">Current</option>
                   </select>
-                  <button class="space-btn" id="songCopyBtn" title="Copy lyrics to clipboard">📋 Copy</button>
-                  <button class="space-btn" id="songFocusBtn" title="Toggle focus mode">🎯 Focus</button>
+                  <button class="space-btn" id="songCopyBtn" title="Copy lyrics to clipboard">Copy</button>
                   <div class="toolbar-spacer"></div>
                   <button class="space-btn" id="songPreviewToggle" title="Toggle preview">Preview</button>
                   <span class="song-save-indicator" id="songSaveIndicator"></span>
@@ -10579,49 +10798,70 @@
                 </div>
                 <div class="song-lyrics-preview" id="songLyricsPreview" style="display:none;"></div>
               </div>
-              <div class="song-conversation">
-                <div class="song-conversation-header">
-                  <h3>Conversation</h3>
-                  <button class="space-btn" id="songCollapseConvo" title="Collapse conversation">◀</button>
+              <div class="song-sidebar">
+                <div class="song-sidebar-tabs">
+                  <button class="song-sidebar-tab active" data-panel="harmoni">Harmoni</button>
+                  <button class="song-sidebar-tab" data-panel="discussion">Discussion</button>
+                  <button class="song-sidebar-tab" data-panel="details">Details</button>
                 </div>
-                <div class="song-conversation-thread" id="songConversationThread"></div>
-                <div class="song-conversation-input">
-                  <textarea id="songCommentInput" placeholder="Add a comment or direction..." rows="2"></textarea>
-                  <button id="songCommentSubmit">Send</button>
+                <!-- Harmoni Chat Panel -->
+                <div class="song-sidebar-panel active" id="songPanelHarmoni">
+                  <div class="song-harmoni-chat">
+                    <div class="song-harmoni-header">
+                      <div class="song-harmoni-avatar">H</div>
+                      <div class="song-harmoni-header-info">
+                        <div class="song-harmoni-header-name">Harmoni</div>
+                        <div class="song-harmoni-header-status" id="songHarmoniStatus">Ready to help</div>
+                      </div>
+                    </div>
+                    <div class="song-harmoni-thread" id="songHarmoniThread"></div>
+                    <div class="song-harmoni-input">
+                      <textarea id="songHarmoniInput" placeholder="Ask Harmoni to help with lyrics, suggest changes..." rows="2"></textarea>
+                      <button id="songHarmoniSend">Send</button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div class="song-metadata" id="songMetadata">
-              <div class="song-meta-field">
-                <label>Genre</label>
-                <div class="meta-tags" id="songGenreTags"></div>
-              </div>
-              <div class="song-meta-field">
-                <label>Key</label>
-                <input type="text" id="songKey" value="${esc(spaceData.key || "")}" placeholder="Am" style="max-width:60px;" />
-              </div>
-              <div class="song-meta-field">
-                <label>BPM</label>
-                <input type="number" id="songBpm" value="${spaceData.bpm || ""}" placeholder="120" style="max-width:60px;" />
-              </div>
-              <div class="song-meta-field">
-                <label>Vocal</label>
-                <input type="text" id="songVocalStyle" value="${esc(spaceData.vocal_style || "")}" placeholder="Style..." style="max-width:120px;" />
-              </div>
-              <div class="song-meta-field" id="songSunoField" style="${spaceData.suno_url ? "" : "display:none;"}">
-                <label>Suno</label>
-                <a class="song-meta-link" id="songSunoLink" href="${esc(spaceData.suno_url || "#")}" target="_blank" rel="noopener">${spaceData.suno_url ? "Open ↗" : ""}</a>
-              </div>
-              <div class="song-meta-field" id="songAudioField" style="${spaceData.audio_url ? "" : "display:none;"}">
-                <label>Audio</label>
-                <div class="song-meta-audio">
-                  <audio controls preload="none" id="songAudioPlayer"><source src="${esc(spaceData.audio_url || "")}" /></audio>
+                <!-- Discussion Panel (comments) -->
+                <div class="song-sidebar-panel" id="songPanelDiscussion">
+                  <div class="song-discussion">
+                    <div class="song-discussion-thread" id="songDiscussionThread"></div>
+                    <div class="song-discussion-input">
+                      <textarea id="songCommentInput" placeholder="Add a comment..." rows="2"></textarea>
+                      <button id="songCommentSubmit">Send</button>
+                    </div>
+                  </div>
+                </div>
+                <!-- Details Panel (cover + styles) -->
+                <div class="song-sidebar-panel" id="songPanelDetails">
+                  <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;">
+                    <div class="song-cover-area">
+                      <div class="song-cover-container" id="songCoverContainer">
+                        <img class="song-cover-img" id="songCoverImg" alt="Cover" />
+                        <div class="song-cover-placeholder">
+                          <span class="cover-icon">🖼</span>
+                          <span>Drop, paste, or click to<br/>add cover image</span>
+                        </div>
+                      </div>
+                      <input type="file" id="songCoverFileInput" accept="image/*" style="display:none;" />
+                      <div class="song-cover-actions" id="songCoverActions" style="display:none;">
+                        <button id="songCoverChange">Change</button>
+                        <button id="songCoverRemove">Remove</button>
+                      </div>
+                    </div>
+                    <div class="song-styles-area">
+                      <div class="song-styles-label">
+                        <span>Style Description</span>
+                        <span class="styles-save-status" id="songStylesSaveStatus"></span>
+                      </div>
+                      <textarea class="song-styles-textarea" id="songStylesTextarea" placeholder="Describe the musical style, mood, instrumentation, vocal approach..."></textarea>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           `;
 
-          // Populate version selector
+          // Populate version selector with full history
           const versionSelect = $("#songVersionSelect");
           if (spaceVersions.length > 0) {
             spaceVersions.forEach(v => {
@@ -10632,13 +10872,26 @@
             });
           }
 
-          // Populate genre tags
-          const genreTags = $("#songGenreTags");
-          const genres = spaceData.genre || [];
-          renderGenreTags(genreTags, genres);
+          // Populate discussion thread
+          renderSongDiscussion(item.comments || []);
 
-          // Populate conversation thread
-          renderSongConversation(item.comments || []);
+          // Populate Harmoni empty state
+          renderSongHarmoniEmpty();
+
+          // Load attachments (for cover image and styles.md)
+          loadSongAttachments();
+
+          // ── Sidebar tab switching ──
+          $$("#songSpace .song-sidebar-tab").forEach(tab => {
+            tab.addEventListener("click", () => {
+              const panel = tab.dataset.panel;
+              $$("#songSpace .song-sidebar-tab").forEach(t => t.classList.remove("active"));
+              tab.classList.add("active");
+              $$("#songSpace .song-sidebar-panel").forEach(p => p.classList.remove("active"));
+              const targetPanel = $(`#songPanel${panel.charAt(0).toUpperCase() + panel.slice(1)}`);
+              if (targetPanel) targetPanel.classList.add("active");
+            });
+          });
 
           // ── Event bindings ──
           const textarea = $("#songLyricsTextarea");
@@ -10662,22 +10915,11 @@
 
           // Copy button
           $("#songCopyBtn").addEventListener("click", () => {
-            const text = textarea.value;
-            // Strip section markers formatting but keep the text
-            navigator.clipboard.writeText(text).then(() => {
+            navigator.clipboard.writeText(textarea.value).then(() => {
               toast("Lyrics copied to clipboard", "success");
             }).catch(() => {
               toast("Failed to copy", "error");
             });
-          });
-
-          // Focus mode toggle
-          let focusMode = false;
-          $("#songFocusBtn").addEventListener("click", () => {
-            focusMode = !focusMode;
-            const songSpace = $("#songSpace");
-            songSpace.classList.toggle("focus-mode", focusMode);
-            $("#songFocusBtn").textContent = focusMode ? "🎯 Unfocus" : "🎯 Focus";
           });
 
           // Preview toggle
@@ -10698,7 +10940,7 @@
             }
           });
 
-          // Version selector
+          // Version selector — browse history
           versionSelect.addEventListener("change", async (e) => {
             if (e.target.value === "current") {
               textarea.value = spaceItemData.description || "";
@@ -10712,17 +10954,8 @@
             }
           });
 
-          // Collapse conversation
-          $("#songCollapseConvo").addEventListener("click", () => {
-            focusMode = !focusMode;
-            $("#songSpace").classList.toggle("focus-mode", focusMode);
-            $("#songFocusBtn").textContent = focusMode ? "🎯 Unfocus" : "🎯 Focus";
-            $("#songCollapseConvo").textContent = focusMode ? "▶" : "◀";
-          });
-
-          // Comment submit
+          // Comment submit (discussion)
           $("#songCommentSubmit").addEventListener("click", () => submitSongComment());
-          // Cmd+Enter to submit comment
           $("#songCommentInput").addEventListener("keydown", (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
               e.preventDefault();
@@ -10730,11 +10963,229 @@
             }
           });
 
-          // Metadata field changes — auto-save
-          ["#songKey", "#songBpm", "#songVocalStyle"].forEach(sel => {
-            $(sel).addEventListener("change", () => saveSongMetadata());
-            $(sel).addEventListener("blur", () => saveSongMetadata());
+          // Harmoni chat send (frontend-only for now)
+          $("#songHarmoniSend").addEventListener("click", () => sendHarmoniMessage());
+          $("#songHarmoniInput").addEventListener("keydown", (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              sendHarmoniMessage();
+            }
           });
+
+          // Cover image — click to upload
+          const coverContainer = $("#songCoverContainer");
+          const coverFileInput = $("#songCoverFileInput");
+          coverContainer.addEventListener("click", () => coverFileInput.click());
+          coverFileInput.addEventListener("change", (e) => {
+            if (e.target.files && e.target.files[0]) {
+              uploadSongCover(e.target.files[0]);
+            }
+          });
+
+          // Cover image — drag & drop
+          coverContainer.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            coverContainer.classList.add("drag-over");
+          });
+          coverContainer.addEventListener("dragleave", () => {
+            coverContainer.classList.remove("drag-over");
+          });
+          coverContainer.addEventListener("drop", (e) => {
+            e.preventDefault();
+            coverContainer.classList.remove("drag-over");
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+              const file = e.dataTransfer.files[0];
+              if (file.type.startsWith("image/")) {
+                uploadSongCover(file);
+              } else {
+                toast("Please drop an image file", "error");
+              }
+            }
+          });
+
+          // Cover image — paste (listen on the whole space overlay)
+          const pasteHandler = (e) => {
+            // Only handle paste when the song space is open and Details tab is active
+            if (!spaceOverlay.classList.contains("open")) return;
+            if (!$("#songPanelDetails") || !$("#songPanelDetails").classList.contains("active")) return;
+            const items = e.clipboardData && e.clipboardData.items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i++) {
+              if (items[i].type.startsWith("image/")) {
+                e.preventDefault();
+                const file = items[i].getAsFile();
+                if (file) uploadSongCover(file);
+                break;
+              }
+            }
+          };
+          document.addEventListener("paste", pasteHandler);
+          // Store handler ref for cleanup
+          spaceBody._songPasteHandler = pasteHandler;
+
+          // Cover actions
+          if ($("#songCoverChange")) {
+            $("#songCoverChange").addEventListener("click", (e) => {
+              e.stopPropagation();
+              coverFileInput.click();
+            });
+          }
+          if ($("#songCoverRemove")) {
+            $("#songCoverRemove").addEventListener("click", (e) => {
+              e.stopPropagation();
+              removeSongCover();
+            });
+          }
+
+          // Styles textarea — auto-save (debounced)
+          const stylesTextarea = $("#songStylesTextarea");
+          stylesTextarea.addEventListener("input", () => {
+            const statusEl = $("#songStylesSaveStatus");
+            if (statusEl) statusEl.textContent = "unsaved...";
+            if (songStylesSaveTimer) clearTimeout(songStylesSaveTimer);
+            songStylesSaveTimer = setTimeout(() => saveSongStyles(), 1500);
+          });
+        }
+
+        /** Load attachments and populate cover image + styles from them. */
+        async function loadSongAttachments() {
+          if (!spaceItemId) return;
+          try {
+            songAttachmentsCache = await apiGet(`/items/${spaceItemId}/attachments`);
+            // Look for cover image
+            const coverAtt = songAttachmentsCache.find(a =>
+              /^cover\.(png|jpg|jpeg|webp)$/i.test(a.filename)
+            );
+            if (coverAtt) {
+              const coverImg = $("#songCoverImg");
+              const coverContainer = $("#songCoverContainer");
+              const coverActions = $("#songCoverActions");
+              if (coverImg && coverContainer) {
+                coverImg.src = `/api/v1/attachments/${coverAtt.id}`;
+                coverContainer.classList.add("has-cover");
+                if (coverActions) coverActions.style.display = "";
+              }
+            }
+            // Look for styles.md
+            const stylesAtt = songAttachmentsCache.find(a => a.filename === "styles.md");
+            if (stylesAtt) {
+              try {
+                const resp = await fetch(`/api/v1/attachments/${stylesAtt.id}`);
+                const stylesText = await resp.text();
+                const stylesTextarea = $("#songStylesTextarea");
+                if (stylesTextarea) stylesTextarea.value = stylesText;
+              } catch { /* ignore */ }
+            }
+          } catch { songAttachmentsCache = []; }
+        }
+
+        /** Upload a cover image file for the song. */
+        async function uploadSongCover(file) {
+          if (!spaceItemId) return;
+          try {
+            // Determine filename based on type
+            const ext = file.type === "image/png" ? "png" : (file.type === "image/webp" ? "webp" : "jpg");
+            const filename = `cover.${ext}`;
+
+            // Delete any existing cover attachment first
+            for (const att of songAttachmentsCache) {
+              if (/^cover\.(png|jpg|jpeg|webp)$/i.test(att.filename)) {
+                try { await apiDelete(`/attachments/${att.id}`); } catch { /* ignore */ }
+              }
+            }
+
+            // Upload using multipart/form-data
+            const formData = new FormData();
+            formData.append("file", file, filename);
+            formData.append("uploaded_by", DEFAULT_AUTHOR);
+
+            const token = localStorage.getItem("tracker_token");
+            const resp = await fetch(`/api/v1/items/${spaceItemId}/attachments`, {
+              method: "POST",
+              headers: token ? { "Authorization": `Bearer ${token}` } : {},
+              body: formData,
+            });
+            if (!resp.ok) throw new Error("Upload failed");
+            const att = await resp.json();
+
+            // Update cache
+            songAttachmentsCache = songAttachmentsCache.filter(a => !/^cover\.(png|jpg|jpeg|webp)$/i.test(a.filename));
+            songAttachmentsCache.push(att);
+
+            // Update UI
+            const coverImg = $("#songCoverImg");
+            const coverContainer = $("#songCoverContainer");
+            const coverActions = $("#songCoverActions");
+            if (coverImg && coverContainer) {
+              coverImg.src = `/api/v1/attachments/${att.id}`;
+              coverContainer.classList.add("has-cover");
+              if (coverActions) coverActions.style.display = "";
+            }
+            toast("Cover image uploaded", "success");
+          } catch (e) {
+            toast("Failed to upload cover: " + e.message, "error");
+          }
+        }
+
+        /** Remove the cover image. */
+        async function removeSongCover() {
+          if (!spaceItemId) return;
+          try {
+            for (const att of songAttachmentsCache) {
+              if (/^cover\.(png|jpg|jpeg|webp)$/i.test(att.filename)) {
+                await apiDelete(`/attachments/${att.id}`);
+              }
+            }
+            songAttachmentsCache = songAttachmentsCache.filter(a => !/^cover\.(png|jpg|jpeg|webp)$/i.test(a.filename));
+            const coverImg = $("#songCoverImg");
+            const coverContainer = $("#songCoverContainer");
+            const coverActions = $("#songCoverActions");
+            if (coverImg) coverImg.src = "";
+            if (coverContainer) coverContainer.classList.remove("has-cover");
+            if (coverActions) coverActions.style.display = "none";
+            toast("Cover image removed");
+          } catch (e) {
+            toast("Failed to remove cover: " + e.message, "error");
+          }
+        }
+
+        /** Save the styles description as a styles.md attachment. */
+        async function saveSongStyles() {
+          if (!spaceItemId) return;
+          const stylesTextarea = $("#songStylesTextarea");
+          if (!stylesTextarea) return;
+          const content = stylesTextarea.value;
+          const statusEl = $("#songStylesSaveStatus");
+
+          try {
+            if (statusEl) { statusEl.textContent = "saving..."; statusEl.style.color = "var(--highlight)"; }
+
+            // Delete existing styles.md
+            for (const att of songAttachmentsCache) {
+              if (att.filename === "styles.md") {
+                try { await apiDelete(`/attachments/${att.id}`); } catch { /* ignore */ }
+              }
+            }
+
+            // Upload new styles.md as JSON (base64)
+            const b64 = btoa(unescape(encodeURIComponent(content)));
+            const att = await apiPost(`/items/${spaceItemId}/attachments`, {
+              filename: "styles.md",
+              data: b64,
+              mime_type: "text/markdown",
+              uploaded_by: DEFAULT_AUTHOR,
+            });
+
+            // Update cache
+            songAttachmentsCache = songAttachmentsCache.filter(a => a.filename !== "styles.md");
+            songAttachmentsCache.push(att);
+
+            if (statusEl) { statusEl.textContent = "saved"; statusEl.style.color = "#00b894"; }
+            setTimeout(() => { if (statusEl && statusEl.textContent === "saved") statusEl.textContent = ""; }, 2000);
+          } catch (e) {
+            if (statusEl) { statusEl.textContent = "save failed"; statusEl.style.color = ""; }
+            toast("Failed to save styles: " + e.message, "error");
+          }
         }
 
         /** Render lyrics with syntax highlighting for section markers and stage directions. */
@@ -10743,7 +11194,6 @@
           const lines = text.split("\n");
           let html = "";
           for (const line of lines) {
-            // Check for section markers like [verse], [chorus 2], etc.
             const sectionMatch = line.match(/^\s*\[([\w\s-]+)\]\s*$/);
             if (sectionMatch) {
               const tag = sectionMatch[1].trim().toLowerCase();
@@ -10753,58 +11203,77 @@
                 continue;
               }
             }
-            // Check for stage directions like [soft vocal, whispered]
             const stageMatch = line.match(/^\s*\[([^\]]+)\]\s*$/);
             if (stageMatch && !line.match(/^\s*\[(verse|chorus|bridge|intro|outro|silence|solo|drop|pre-chorus|hook|interlude)/i)) {
               html += `<div><span class="lyric-stage-direction">[${esc(stageMatch[1])}]</span></div>`;
               continue;
             }
-            // Regular line — escape and preserve whitespace
             html += `<div>${line.trim() === "" ? "&nbsp;" : esc(line)}</div>`;
           }
           return html;
         }
 
-        /** Render genre tags with add/remove functionality. */
-        function renderGenreTags(container, genres) {
-          container.innerHTML = "";
-          genres.forEach((genre, i) => {
-            const tag = document.createElement("span");
-            tag.className = "meta-tag";
-            tag.textContent = genre;
-            tag.title = "Click to remove";
-            tag.addEventListener("click", () => {
-              genres.splice(i, 1);
-              renderGenreTags(container, genres);
-              saveSongMetadata();
-            });
-            container.appendChild(tag);
-          });
-          const addBtn = document.createElement("span");
-          addBtn.className = "meta-tag-add";
-          addBtn.textContent = "+ add";
-          addBtn.addEventListener("click", () => {
-            const genre = prompt("Add genre/style tag:");
-            if (genre && genre.trim()) {
-              genres.push(genre.trim());
-              renderGenreTags(container, genres);
-              saveSongMetadata();
-            }
-          });
-          container.appendChild(addBtn);
+        /** Render the Harmoni chat empty state. */
+        function renderSongHarmoniEmpty() {
+          const thread = $("#songHarmoniThread");
+          if (!thread) return;
+          thread.innerHTML = `
+            <div class="song-harmoni-empty">
+              <div class="harmoni-wave">&#x1F3B5;</div>
+              <h4>Hi, I'm Harmoni</h4>
+              <p>Your songwriting assistant. Ask me to help write lyrics, suggest changes, explore ideas, or refine your song.</p>
+            </div>
+          `;
         }
 
-        /** Render conversation thread in song space. */
-        function renderSongConversation(comments) {
-          const thread = $("#songConversationThread");
+        /** Send a message to Harmoni (frontend-only for now — backend will be wired later). */
+        function sendHarmoniMessage() {
+          const input = $("#songHarmoniInput");
+          if (!input) return;
+          const text = input.value.trim();
+          if (!text) return;
+          input.value = "";
+
+          const thread = $("#songHarmoniThread");
+          if (!thread) return;
+
+          // Remove empty state if present
+          const emptyState = thread.querySelector(".song-harmoni-empty");
+          if (emptyState) emptyState.remove();
+
+          // Add user message
+          const userMsg = document.createElement("div");
+          userMsg.className = "harmoni-msg from-user";
+          userMsg.innerHTML = `
+            <div class="harmoni-msg-avatar">You</div>
+            <div class="harmoni-msg-bubble"><p>${esc(text)}</p></div>
+          `;
+          thread.appendChild(userMsg);
+          thread.scrollTop = thread.scrollHeight;
+
+          // Simulate Harmoni thinking response (placeholder until backend is wired)
+          setTimeout(() => {
+            const harmoniMsg = document.createElement("div");
+            harmoniMsg.className = "harmoni-msg from-harmoni";
+            harmoniMsg.innerHTML = `
+              <div class="harmoni-msg-avatar">H</div>
+              <div class="harmoni-msg-bubble"><p><em>Harmoni is not connected yet. This chat will be wired to the Harmoni backend in a future update.</em></p></div>
+            `;
+            thread.appendChild(harmoniMsg);
+            thread.scrollTop = thread.scrollHeight;
+          }, 500);
+        }
+
+        /** Render discussion thread (comments) in song space. */
+        function renderSongDiscussion(comments) {
+          const thread = $("#songDiscussionThread");
+          if (!thread) return;
           thread.innerHTML = "";
           if (!comments || comments.length === 0) {
-            thread.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:40px 20px;font-size:0.85rem;">No comments yet. Start the conversation below.</div>';
+            thread.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:40px 20px;font-size:0.85rem;">No comments yet.</div>';
             return;
           }
-          // Check for version markers in comments
           comments.forEach(c => {
-            // Check if this comment is a version marker
             if (c.body && c.body.startsWith("[Version ") && c.body.includes(" saved]")) {
               const div = document.createElement("div");
               div.className = "song-version-marker";
@@ -10824,7 +11293,6 @@
             `;
             thread.appendChild(div);
           });
-          // Scroll to bottom
           thread.scrollTop = thread.scrollHeight;
         }
 
@@ -10851,7 +11319,6 @@
                 saved_by: DEFAULT_AUTHOR,
               });
               spaceVersions.push(ver);
-              // Update version selector
               const versionSelect = $("#songVersionSelect");
               if (versionSelect) {
                 const opt = document.createElement("option");
@@ -10859,13 +11326,13 @@
                 opt.textContent = `v${ver.version} — ${formatTime(ver.created_at)}`;
                 versionSelect.appendChild(opt);
               }
-              saveIndicator.textContent = `v${ver.version} saved ✓`;
+              saveIndicator.textContent = `v${ver.version} saved`;
             } else {
-              saveIndicator.textContent = "Saved ✓";
+              saveIndicator.textContent = "Saved";
             }
             saveIndicator.className = "song-save-indicator saved";
             setTimeout(() => {
-              if (saveIndicator.textContent.includes("✓")) {
+              if (saveIndicator.textContent === "Saved" || saveIndicator.textContent.startsWith("v")) {
                 saveIndicator.textContent = "";
               }
             }, 3000);
@@ -10876,31 +11343,7 @@
           }
         }
 
-        /** Save song metadata (space_data JSON). */
-        async function saveSongMetadata() {
-          if (!spaceItemId) return;
-          const genreTags = [];
-          $$("#songGenreTags .meta-tag").forEach(t => genreTags.push(t.textContent));
-          const spaceData = {
-            genre: genreTags,
-            key: ($("#songKey") || {}).value || "",
-            bpm: ($("#songBpm") || {}).value ? Number($("#songBpm").value) : null,
-            vocal_style: ($("#songVocalStyle") || {}).value || "",
-            suno_url: spaceItemData && spaceItemData.space_data ? (typeof spaceItemData.space_data === "string" ? JSON.parse(spaceItemData.space_data) : spaceItemData.space_data).suno_url || "" : "",
-            audio_url: spaceItemData && spaceItemData.space_data ? (typeof spaceItemData.space_data === "string" ? JSON.parse(spaceItemData.space_data) : spaceItemData.space_data).audio_url || "" : "",
-          };
-          try {
-            await apiPatch(`/items/${spaceItemId}`, {
-              space_data: JSON.stringify(spaceData),
-              actor: DEFAULT_AUTHOR,
-            });
-            if (spaceItemData) spaceItemData.space_data = JSON.stringify(spaceData);
-          } catch (e) {
-            toast("Failed to save metadata: " + e.message, "error");
-          }
-        }
-
-        /** Submit a comment in the song conversation. */
+        /** Submit a comment in the song discussion. */
         async function submitSongComment() {
           const input = $("#songCommentInput");
           if (!input) return;
@@ -10912,10 +11355,9 @@
               body,
             });
             input.value = "";
-            // Reload comments
             const item = await apiGet(`/items/${spaceItemId}`);
             spaceItemData = item;
-            renderSongConversation(item.comments || []);
+            renderSongDiscussion(item.comments || []);
             toast("Comment posted");
           } catch (e) {
             toast("Failed to post comment: " + e.message, "error");
