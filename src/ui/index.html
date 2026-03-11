@@ -6495,9 +6495,54 @@
         font-size: 0.85rem;
         line-height: 1.5;
         color: var(--text-muted);
+        word-break: break-word;
+        overflow-wrap: break-word;
       }
-      .song-comment-body p { margin: 0 0 8px; }
+      .song-comment-body p { margin: 0.4em 0; }
       .song-comment-body p:last-child { margin-bottom: 0; }
+      .song-comment-body ul,
+      .song-comment-body ol {
+        margin: 0.4em 0;
+        padding-left: 1.5em;
+      }
+      .song-comment-body li {
+        margin: 0.2em 0;
+      }
+      .song-comment-body h1,
+      .song-comment-body h2,
+      .song-comment-body h3 {
+        margin: 0.6em 0 0.3em;
+        color: var(--text);
+        line-height: 1.3;
+      }
+      .song-comment-body code {
+        background: rgba(99, 110, 114, 0.2);
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-family: monospace;
+        font-size: 0.9em;
+      }
+      .song-comment-body pre {
+        background: rgba(99, 110, 114, 0.15);
+        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        overflow-x: auto;
+        margin: 0.4em 0;
+      }
+      .song-comment-body pre code {
+        background: none;
+        padding: 0;
+      }
+      .song-comment-body blockquote {
+        border-left: 3px solid var(--border);
+        padding-left: 12px;
+        color: var(--text-muted);
+        margin: 0.4em 0;
+      }
+      .song-comment-body a {
+        color: var(--highlight);
+        text-decoration: underline;
+      }
       .song-version-marker {
         text-align: center;
         padding: 6px 0;
@@ -10764,6 +10809,79 @@
         let songVersionIndex = -1; // -1 = current (live editing), 0..N-1 = historical version
         let textVersionIndex = -1;
 
+        /**
+         * Live-refresh the space overlay (Song/Text) with background changes.
+         * Updates comments non-disruptively and updates description/versions
+         * only when the user is not actively editing the main textarea.
+         */
+        async function refreshSpaceOverlay() {
+          if (!spaceOverlay.classList.contains("open") || !spaceItemId) return;
+          try {
+            const item = await apiGet(`/items/${spaceItemId}`);
+            const spaceType = (item.space_type || "standard");
+
+            // --- Update discussion (comments) non-disruptively ---
+            const oldComments = (spaceItemData && spaceItemData.comments) || [];
+            const newComments = item.comments || [];
+            if (newComments.length !== oldComments.length ||
+                (newComments.length > 0 && oldComments.length > 0 &&
+                 newComments[newComments.length - 1].id !== oldComments[oldComments.length - 1].id)) {
+              if (spaceType === "song") {
+                renderSongDiscussion(newComments);
+              } else if (spaceType === "text") {
+                renderTextDiscussion(newComments);
+              }
+            }
+
+            // --- Update state select if state changed ---
+            const stateSelect = $("#spaceStateSelect");
+            if (stateSelect && stateSelect.value !== item.state) {
+              stateSelect.value = item.state;
+            }
+
+            // --- Update description if changed externally ---
+            // Only update if user is NOT actively editing (no pending save, textarea not focused)
+            const songTextarea = $("#songLyricsTextarea");
+            const textTextarea = $("#textEditorTextarea");
+            const activeTextarea = spaceType === "song" ? songTextarea : textTextarea;
+            const activeSaveTimer = spaceType === "song" ? spaceSaveTimer : textSaveTimer;
+            const isEditingSpace = activeTextarea && (
+              document.activeElement === activeTextarea || activeSaveTimer !== null
+            );
+
+            if (!isEditingSpace && activeTextarea) {
+              const currentVersionIdx = spaceType === "song" ? songVersionIndex : textVersionIndex;
+              // Only update if viewing current version (not browsing history)
+              if (currentVersionIdx === -1) {
+                const localDesc = spaceItemData ? spaceItemData.description : "";
+                if (item.description !== localDesc) {
+                  activeTextarea.value = item.description || "";
+                  // Update word count for text space
+                  if (spaceType === "text") {
+                    try { updateTextWordCount(item.description || ""); } catch {}
+                  }
+                }
+              }
+            }
+
+            // --- Update version list ---
+            try {
+              const newVersions = await apiGet(`/items/${spaceItemId}/versions`);
+              if (newVersions.length !== spaceVersions.length) {
+                spaceVersions = newVersions;
+                if (spaceType === "song") {
+                  updateSongVersionNav();
+                } else if (spaceType === "text") {
+                  updateTextVersionNav();
+                }
+              }
+            } catch {}
+
+            // Always keep spaceItemData in sync
+            spaceItemData = item;
+          } catch {}
+        }
+
         // ── Version navigation (Song) — hoisted so saveSongLyrics can call it ──
         function updateSongVersionNav() {
           const backBtn = $("#songVersionBack");
@@ -14645,13 +14763,13 @@
           if (createModalDirty) return true;
           if (createModal.classList.contains("open")) return true;
           if (Date.now() - lastUserActivity < IDLE_THRESHOLD) return true;
-          // Check if the user has an active text selection inside the detail panel
+          // Check if the user has an active text selection inside the detail panel, create modal, or space overlay
           const sel = window.getSelection();
           if (sel && sel.toString().length > 0) {
             const anchorNode = sel.anchorNode;
             if (anchorNode) {
               const el = anchorNode.nodeType === Node.ELEMENT_NODE ? anchorNode : anchorNode.parentElement;
-              if (el && (detailPanel.contains(el) || createModal.contains(el))) return true;
+              if (el && (detailPanel.contains(el) || createModal.contains(el) || spaceOverlay.contains(el))) return true;
             }
           }
           return false;
@@ -14664,6 +14782,11 @@
         function startRefresh() {
           if (refreshTimer) clearInterval(refreshTimer);
           refreshTimer = setInterval(async () => {
+            // Space overlay live refresh — always runs (handles its own edit guards internally)
+            if (spaceOverlay.classList.contains("open") && spaceItemId) {
+              try { await refreshSpaceOverlay(); } catch {}
+            }
+
             const userActive = isUserActive();
 
             // If user is active, only update the attention badge count (non-disruptive)
@@ -14720,6 +14843,18 @@
         createModal.addEventListener("mousedown", trackActivity);
         createModal.addEventListener("keydown", trackActivity);
         createModal.addEventListener("click", trackActivity);
+
+        // Track user interaction in the space overlay for isUserActive() checks
+        spaceOverlay.addEventListener("focusin", (e) => {
+          if (e.target.matches("input, textarea, select")) isEditing = true;
+          trackActivity();
+        });
+        spaceOverlay.addEventListener("focusout", (e) => {
+          if (e.target.matches("input, textarea, select")) isEditing = false;
+        });
+        spaceOverlay.addEventListener("mousedown", trackActivity);
+        spaceOverlay.addEventListener("keydown", trackActivity);
+        spaceOverlay.addEventListener("click", trackActivity);
 
         // ── Triage Mode ──
         const triageOverlay = $("#triageOverlay");
