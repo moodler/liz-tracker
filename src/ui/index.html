@@ -6086,6 +6086,9 @@
         background: var(--bg-accent);
         color: var(--text);
       }
+      .space-view-toggle-btn {
+        font-size: 0.8rem;
+      }
       .space-close-btn {
         background: none;
         border: none;
@@ -7236,6 +7239,7 @@
         </button>
         <span class="detail-id" id="detailId"></span>
         <div class="detail-actions">
+          <button class="btn btn-ghost btn-sm" id="detailSpaceViewBtn" title="Switch to song view" style="display:none;">🎵 Song View</button>
           <button class="btn btn-ghost btn-sm btn-icon" id="detailShare" title="Share link">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
@@ -7435,7 +7439,7 @@
           </div>
           <div class="space-header-right">
             <select class="space-state-select" id="spaceStateSelect"></select>
-            <button class="space-btn space-settings-btn" id="spaceSettingsBtn" title="Item settings">&#9881;</button>
+            <button class="space-btn space-view-toggle-btn" id="spaceViewToggleBtn" title="Switch to standard tracker view">📋 Standard View</button>
             <button class="space-close-btn" id="spaceCloseBtn" title="Close">&times;</button>
           </div>
         </div>
@@ -10766,11 +10770,12 @@
             if (spaceItemData) e.target.value = spaceItemData.state;
           }
         });
-        // Settings button — open normal detail panel as a side panel
-        $("#spaceSettingsBtn").addEventListener("click", () => {
+        // View toggle — switch to standard tracker view
+        $("#spaceViewToggleBtn").addEventListener("click", () => {
           if (spaceItemId) {
+            const id = spaceItemId;
             closeSpaceOverlay();
-            openDetail(spaceItemId);
+            openDetail(id, true); // forceStandard=true to bypass space routing
           }
         });
 
@@ -11540,6 +11545,17 @@
           dateDueClear.style.display = item.date_due ? "" : "none";
           // Link
           populateDetailLink(item.link);
+          // Space view toggle — show "Song View" button for non-standard space types
+          const spaceViewBtn = $("#detailSpaceViewBtn");
+          if (item.space_type && item.space_type !== "standard" && SPACE_TYPES[item.space_type]) {
+            const spaceInfo = SPACE_TYPES[item.space_type];
+            spaceViewBtn.textContent = `${spaceInfo.icon} ${spaceInfo.label} View`;
+            spaceViewBtn.title = `Switch to ${spaceInfo.label.toLowerCase()} view`;
+            spaceViewBtn.style.display = "";
+            spaceViewBtn.dataset.itemId = item.id;
+          } else {
+            spaceViewBtn.style.display = "none";
+          }
           detailSnapshot = snapshotDetail();
           $("#detailSave").disabled = true;
 
@@ -12076,6 +12092,15 @@
 
         detailOverlay.addEventListener("click", closeDetail);
         $("#detailClose").addEventListener("click", closeDetail);
+
+        // Space view toggle — switch from standard detail to space overlay
+        $("#detailSpaceViewBtn").addEventListener("click", () => {
+          const itemId = $("#detailSpaceViewBtn").dataset.itemId;
+          if (itemId) {
+            closeDetail();
+            openSpaceOverlay(itemId);
+          }
+        });
 
         // Share button — Web Share API on mobile, clipboard fallback on desktop
         // Swap to share icon on mobile when Web Share API is available
