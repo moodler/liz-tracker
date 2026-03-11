@@ -64,6 +64,18 @@ import { execFileSync } from "child_process";
 // ── Helpers ──
 
 /**
+ * MIME types that the Claude API accepts for base64-encoded image content.
+ * SVG (image/svg+xml) and other non-raster image types are NOT supported
+ * and will cause an API error if embedded.
+ */
+const EMBEDDABLE_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
+
+/**
  * Sanitize an error message that might contain raw HTML.
  * If the message looks like HTML (starts with `<` or contains `<!DOCTYPE`),
  * extract a readable summary instead of logging the full HTML blob.
@@ -1458,10 +1470,11 @@ async function dispatch(item: WorkItem): Promise<string | null> {
 
     // Add file attachments as FilePartInput (images only, with size cap)
     // Use 4.5MB to leave headroom below the API's 5MB decoded-image limit
+    // Only embed MIME types accepted by the Claude API (see EMBEDDABLE_IMAGE_TYPES)
     const MAX_EMBED_SIZE = 4.5 * 1024 * 1024;
     const attachments = listAttachments(item.id);
     for (const attachment of attachments) {
-      if (attachment.mime_type.startsWith("image/")) {
+      if (EMBEDDABLE_IMAGE_TYPES.has(attachment.mime_type)) {
         try {
           const filePath = path.join(STORE_DIR, attachment.storage_path);
           if (fs.existsSync(filePath)) {
@@ -1619,10 +1632,11 @@ async function dispatchForClarification(item: WorkItem): Promise<string | null> 
     ];
 
     // Add image attachments (check actual file size, not just DB value)
+    // Only embed MIME types accepted by the Claude API (see EMBEDDABLE_IMAGE_TYPES)
     const MAX_EMBED_SIZE = 4.5 * 1024 * 1024;
     const attachments = listAttachments(item.id);
     for (const attachment of attachments) {
-      if (attachment.mime_type.startsWith("image/")) {
+      if (EMBEDDABLE_IMAGE_TYPES.has(attachment.mime_type)) {
         try {
           const filePath = path.join(STORE_DIR, attachment.storage_path);
           if (fs.existsSync(filePath)) {
@@ -1818,7 +1832,7 @@ function buildPrompt(
         : a.size_bytes < 1024 * 1024 ? `${(a.size_bytes / 1024).toFixed(1)}KB`
         : `${(a.size_bytes / (1024 * 1024)).toFixed(1)}MB`;
 
-      if (a.mime_type.startsWith("image/") && a.size_bytes <= MAX_EMBED_SIZE) {
+      if (EMBEDDABLE_IMAGE_TYPES.has(a.mime_type) && a.size_bytes <= MAX_EMBED_SIZE) {
         lines.push(`- 📎 **${a.filename}** (${sizeStr}, ${a.mime_type}) — *embedded as image in prompt parts*`);
       } else {
         lines.push(`- 📎 **${a.filename}** (${sizeStr}, ${a.mime_type}) — uploaded by ${a.uploaded_by}`);
