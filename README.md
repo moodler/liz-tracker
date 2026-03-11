@@ -12,11 +12,12 @@ It has a pretty UI in a desktop browser, and a completely different mobile and t
 
 Created by [Martin Dougiamas](https://github.com/moodler). I am building this for myself, and development is VERY active.  I'm happy to take requests but I'm more focussed on my needs than yours right now!   That said, I'm trying to keep it useful for anyone.
 
-Built with TypeScript, SQLite, and vanilla JS. No frameworks, no build step for the frontend.
+
 
 ## Features
 
 - **Kanban dashboard** — drag-and-drop board with dark theme, installable as a PWA
+- **TypeScript and vanilla JS** — No frameworks, no build step for the frontend.
 - **REST API** — full CRUD for projects, work items, comments, attachments, dependencies
 - **MCP server** — 30 tools for AI agents to manage work items programmatically (Streamable HTTP)
 - **AI orchestrator** — automatically dispatches approved items to [OpenCode](https://opencode.ai) coding sessions, monitors progress via SSE, and handles failures with circuit breakers and per-item retry limits
