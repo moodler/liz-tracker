@@ -686,14 +686,17 @@
         margin-bottom: 6px;
         align-self: flex-start;
       }
+      .card-key-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 2px;
+      }
       .card-key {
-        font-size: 0.72rem;
+        font-size: 0.94rem;
         font-weight: 700;
         color: var(--text-dim);
         font-family: monospace;
         letter-spacing: 0.3px;
-        margin-bottom: 2px;
-        display: block;
       }
       .card-title {
         font-size: 1.35rem;
@@ -3452,7 +3455,7 @@
           font-size: inherit !important;
         }
         /* Restore small badge fonts after the input override */
-        .card-key { font-size: 0.72rem !important; }
+        .card-key { font-size: 0.94rem !important; }
         .priority-badge { font-size: 0.7rem !important; }
         .code-badge { font-size: 0.7rem !important; }
         .session-badge { font-size: 0.65rem !important; }
@@ -4923,7 +4926,7 @@
       html.is-ipad input,
       html.is-ipad textarea,
       html.is-ipad select { font-size: 16px !important; }
-      html.is-ipad .card-key { font-size: 0.72rem !important; }
+      html.is-ipad .card-key { font-size: 0.94rem !important; }
       html.is-ipad .priority-badge { font-size: 0.7rem !important; }
       html.is-ipad .code-badge { font-size: 0.7rem !important; }
       html.is-ipad .session-badge { font-size: 0.65rem !important; }
@@ -5884,7 +5887,7 @@
       .density-compact .attention-badge {
         display: none;
       }
-      .density-compact .card-key {
+      .density-compact .card-key-row {
         margin-bottom: 0;
         flex-shrink: 0;
       }
@@ -9769,7 +9772,7 @@
           return `<div class="card" data-id="${esc(item.id)}" data-attention="${cardAttention(item)}" draggable="true">
     ${agentStatusEmoji}
     ${badgeHtml}
-    ${keyHtml}${spaceIcon}
+    ${keyHtml || spaceIcon ? `<div class="card-key-row">${keyHtml}${spaceIcon}</div>` : ""}
     <div class="card-title">${esc(item.title)}</div>
     ${desc}
     <div class="card-meta">
