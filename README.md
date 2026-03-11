@@ -6,6 +6,8 @@
 
 A lightweight, self-hosted project management tracker with a kanban UI, REST API, MCP tools for AI agents, and an optional orchestrator that automatically dispatches approved work items to AI coding sessions.
 
+It has a pretty UI in a desktop browser, and a completely different mobile and touch-optimised UI on phones and tablets.  You can sit on a couch with your phone and completely run your world.
+
 Created by [Martin Dougiamas](https://github.com/moodler). I built this for myself, and development is VERY active.  I'm happy to take requests but I'm more focussed on my needs than yours right now!
 
 Built with TypeScript, SQLite, and vanilla JS. No frameworks, no build step for the frontend.
