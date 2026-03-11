@@ -752,6 +752,7 @@ export function _initTestTrackerDatabase(): void {
 export type TrackerEventType =
   | "work_item.created"
   | "work_item.updated"
+  | "work_item.moved"
   | "work_item.state_changed"
   | "work_item.deleted"
   | "comment.created"
@@ -1301,6 +1302,83 @@ export function updateWorkItem(
     project_id: updated.project_id,
     actor: data.actor || "system",
     data: { ...data },
+    timestamp: updated.updated_at,
+  });
+
+  return updated;
+}
+
+/**
+ * Move a work item to a different project.
+ *
+ * Allocates a new seq_number from the target project, updates project_id,
+ * and resets space_type to "standard" if the current space isn't active
+ * on the destination project.
+ */
+export function moveWorkItem(
+  id: string,
+  targetProjectId: string,
+  actor?: string,
+): WorkItem | undefined {
+  const existing = getWorkItem(id);
+  if (!existing) return undefined;
+
+  // No-op if same project
+  if (existing.project_id === targetProjectId) return existing;
+
+  const targetProject = getProject(targetProjectId);
+  if (!targetProject) return undefined;
+
+  // Allocate a new seq_number from the target project
+  const seqResult = db
+    .prepare(
+      "UPDATE tracker_projects SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq",
+    )
+    .get(targetProjectId) as { next_seq: number } | undefined;
+  const newSeqNumber = seqResult ? seqResult.next_seq - 1 : 0;
+
+  // Check if the item's current space_type is active on the target project
+  const activeSpaces: string[] = targetProject.active_spaces
+    ? (typeof targetProject.active_spaces === "string"
+        ? JSON.parse(targetProject.active_spaces)
+        : targetProject.active_spaces)
+    : ["standard"];
+
+  const currentSpace = existing.space_type || "standard";
+  const resetSpace = !activeSpaces.includes(currentSpace);
+
+  const ts = now();
+  const fields = [
+    "project_id = ?",
+    "seq_number = ?",
+    "position = 0",
+    "updated_at = ?",
+  ];
+  const values: unknown[] = [targetProjectId, newSeqNumber, ts];
+
+  if (resetSpace) {
+    fields.push("space_type = ?", "space_data = ?");
+    values.push("standard", null);
+  }
+
+  values.push(id);
+  db.prepare(
+    `UPDATE tracker_work_items SET ${fields.join(", ")} WHERE id = ?`,
+  ).run(...values);
+
+  const updated = getWorkItem(id)!;
+  emit({
+    type: "work_item.moved",
+    work_item_id: id,
+    project_id: updated.project_id,
+    actor: actor || "system",
+    data: {
+      from_project_id: existing.project_id,
+      to_project_id: targetProjectId,
+      old_seq_number: existing.seq_number,
+      new_seq_number: newSeqNumber,
+      space_reset: resetSpace,
+    },
     timestamp: updated.updated_at,
   });
 

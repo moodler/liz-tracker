@@ -46,7 +46,7 @@ npm run test:coverage # Run tests with coverage report
 - The `_initTestTrackerDatabase()` function in `db.ts` creates a fresh in-memory DB for each test suite
 
 **Current test coverage:**
-- `src/db.test.ts` — actor classification, state transitions (incl. security rules), project/item CRUD, locks, dependencies, comments, approval provenance
+- `src/db.test.ts` — actor classification, state transitions (incl. security rules), project/item CRUD, locks, dependencies, comments, approval provenance, move between projects
 
 **To activate the pre-push hook** (run once per clone):
 ```bash
@@ -325,7 +325,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 
 ### API Endpoints
 
-- `PATCH /items/:id` — accepts `space_type` and `space_data` fields
+- `PATCH /items/:id` — accepts `space_type`, `space_data`, and `project_id` fields. Passing `project_id` moves the item to another project (allocates new seq_number, resets space if needed).
 - `PATCH /projects/:id` — accepts `active_spaces` field (JSON array)
 - `GET /items/:id/versions` — returns description version history
 - `POST /items/:id/versions` — save a description version snapshot

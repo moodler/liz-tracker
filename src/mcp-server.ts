@@ -20,6 +20,7 @@ import {
   getWorkItemKey,
   listWorkItems,
   updateWorkItem,
+  moveWorkItem,
   changeWorkItemState,
   lockWorkItem,
   unlockWorkItem,
@@ -383,6 +384,29 @@ function createMcpServer(): McpServer {
       });
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
       return { content: [{ type: "text", text: JSON.stringify(item, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "tracker_move_item",
+    "Move a work item to a different project. Allocates a new sequence number and resets space_type if not available on the target project.",
+    {
+      item_id: z.string().describe("Work item ID or display key (e.g. \"TRACK-5\")"),
+      target_project_id: z.string().describe("Target project ID to move the item to"),
+      actor: z.string().optional().describe("Who is making this change"),
+    },
+    async (args) => {
+      // Resolve display key to ID if needed
+      let itemId = args.item_id;
+      if (itemId.includes("-")) {
+        const resolved = getWorkItemByKey(itemId);
+        if (resolved) itemId = resolved.id;
+      }
+      const targetProject = getProject(args.target_project_id);
+      if (!targetProject) return { content: [{ type: "text", text: "Error: Target project not found" }] };
+      const item = moveWorkItem(itemId, args.target_project_id, args.actor);
+      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
+      return { content: [{ type: "text", text: JSON.stringify({ ...item, key: getWorkItemKey(item) }, null, 2) }] };
     },
   );
 

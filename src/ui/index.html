@@ -7397,6 +7397,12 @@
           </div>
           <div class="detail-row">
             <div class="detail-field">
+              <label>Project</label>
+              <select id="detailProject"></select>
+            </div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-field">
               <label>Priority</label>
               <select id="detailPriority">
                 <option value="none">None</option>
@@ -12122,6 +12128,34 @@
           }
         }
 
+        // ── Detail: Project Selector ──
+        function populateDetailProject(item) {
+          const projSelect = $("#detailProject");
+          projSelect.innerHTML = "";
+          projectsCache.forEach(p => {
+            const opt = document.createElement("option");
+            opt.value = p.id;
+            opt.textContent = p.name;
+            projSelect.appendChild(opt);
+          });
+          projSelect.value = item.project_id;
+          // When project changes, update space type selector for the new project
+          projSelect.onchange = () => {
+            const newProjectId = projSelect.value;
+            const proj = projectsCache.find(p => p.id === newProjectId);
+            const activeSpaces = proj && proj.active_spaces ? (typeof proj.active_spaces === "string" ? JSON.parse(proj.active_spaces) : proj.active_spaces) : ["standard"];
+            const currentSpace = ($("#detailSpaceType") || {}).value || "standard";
+            // Reset space to standard if the current space isn't available on the new project
+            if (!activeSpaces.includes(currentSpace)) {
+              $("#detailSpaceType").value = "standard";
+            }
+            // Re-render space type selector with the new project's active spaces
+            const fakeItem = { project_id: newProjectId, space_type: $("#detailSpaceType").value };
+            populateDetailSpaceType(fakeItem);
+            checkDetailDirty();
+          };
+        }
+
         // ── Detail: Space Type Selector ──
         function populateDetailSpaceType(item) {
           const field = $("#detailSpaceTypeField");
@@ -12179,6 +12213,7 @@
             date_due: $("#detailDateDue").value || "",
             link: $("#detailLink").value.trim(),
             space_type: ($("#detailSpaceType") || {}).value || "standard",
+            project_id: ($("#detailProject") || {}).value || "",
           };
         }
 
@@ -12198,7 +12233,8 @@
             current.requires_code !== detailSnapshot.requires_code ||
             current.date_due !== detailSnapshot.date_due ||
             current.link !== detailSnapshot.link ||
-            current.space_type !== detailSnapshot.space_type;
+            current.space_type !== detailSnapshot.space_type ||
+            current.project_id !== detailSnapshot.project_id;
           saveBtn.disabled = !dirty;
         }
 
@@ -12207,6 +12243,8 @@
           $("#detailTitle").value = item.title;
           $("#detailDescription").value = item.description || "";
           showDescView(item.description || "");
+          // Project selector
+          populateDetailProject(item);
           $("#detailPriority").value = item.priority;
           $("#detailAssignee").value = item.assignee || "";
           $("#detailBotDispatch").checked = !!item.bot_dispatch;
@@ -12943,7 +12981,8 @@
           if (!detailItemId) return;
           try {
             const spaceTypeVal = ($("#detailSpaceType") || {}).value || "standard";
-            await apiPatch(`/items/${detailItemId}`, {
+            const selectedProjectId = ($("#detailProject") || {}).value || "";
+            const payload = {
               title: $("#detailTitle").value.trim(),
               description: $("#detailDescription").value,
               priority: $("#detailPriority").value,
@@ -12954,7 +12993,16 @@
               link: $("#detailLink").value.trim() || null,
               space_type: spaceTypeVal,
               actor: DEFAULT_AUTHOR,
-            });
+            };
+            // Include project_id if it changed (triggers a move)
+            if (detailSnapshot && selectedProjectId && selectedProjectId !== detailSnapshot.project_id) {
+              payload.project_id = selectedProjectId;
+            }
+            const updatedItem = await apiPatch(`/items/${detailItemId}`, payload);
+            // If project changed, update the displayed key
+            if (updatedItem && updatedItem.key) {
+              $("#detailId").textContent = updatedItem.key;
+            }
             detailSnapshot = snapshotDetail();
             $("#detailSave").disabled = true;
             toast("Item updated");

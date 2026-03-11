@@ -47,6 +47,7 @@ import {
   getWorkItemKey,
   listWorkItems,
   updateWorkItem,
+  moveWorkItem,
   changeWorkItemState,
   deleteWorkItem,
   lockWorkItem,
@@ -1015,6 +1016,13 @@ async function handleApiRequest(
               res,
               `Invalid priority. Valid: ${VALID_PRIORITIES.join(", ")}`,
             );
+          }
+          // Handle project move if project_id changed
+          if (body.project_id) {
+            const targetProject = getProject(String(body.project_id));
+            if (!targetProject) return error(res, "Target project not found", 404);
+            const moved = moveWorkItem(itemId, String(body.project_id), body.actor ? String(body.actor) : undefined);
+            if (!moved) return error(res, "Work item not found", 404);
           }
           const item = updateWorkItem(itemId, {
             title: body.title ? String(body.title) : undefined,

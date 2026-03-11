@@ -32,6 +32,7 @@ import {
   listComments,
   listTransitions,
   updateWorkItem,
+  moveWorkItem,
   getDispatchableItems,
   getClarifiableItems,
   createDescriptionVersion,
@@ -1324,5 +1325,93 @@ describe('Description Versioning', () => {
     const versions = listDescriptionVersions(item.id);
     expect(versions.length).toBe(1);
     expect(versions[0].saved_by).toBe('Martin');
+  });
+});
+
+// ── moveWorkItem ──────────────────────────────────────────────────────────────
+
+describe('moveWorkItem', () => {
+  beforeEach(() => _initTestTrackerDatabase());
+
+  it('moves an item to a different project with new seq_number', () => {
+    const projectA = createProject({ name: 'Project A', short_name: 'PA' });
+    const projectB = createProject({ name: 'Project B', short_name: 'PB' });
+    // Create an existing item in projectB so its next_seq advances
+    createWorkItem({ project_id: projectB.id, title: 'Existing in B' });
+    const item = createWorkItem({ project_id: projectA.id, title: 'Movable Item' });
+
+    expect(item.project_id).toBe(projectA.id);
+    expect(item.seq_number).toBe(1); // first item in projectA
+
+    const moved = moveWorkItem(item.id, projectB.id, 'Martin');
+    expect(moved).toBeDefined();
+    expect(moved!.project_id).toBe(projectB.id);
+    expect(moved!.seq_number).toBe(2); // second item in projectB
+    // New key should use projectB's short_name
+    const key = getWorkItemKey(moved!);
+    expect(key).toBe('PB-2');
+  });
+
+  it('returns existing item unchanged when moving to same project', () => {
+    const project = createProject({ name: 'Same Proj' });
+    const item = createWorkItem({ project_id: project.id, title: 'Static Item' });
+
+    const result = moveWorkItem(item.id, project.id);
+    expect(result).toBeDefined();
+    expect(result!.project_id).toBe(project.id);
+    expect(result!.seq_number).toBe(item.seq_number);
+  });
+
+  it('returns undefined for non-existent item', () => {
+    const project = createProject({ name: 'Target' });
+    const result = moveWorkItem('nonexistent', project.id);
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for non-existent target project', () => {
+    const project = createProject({ name: 'Source' });
+    const item = createWorkItem({ project_id: project.id, title: 'Orphan' });
+    const result = moveWorkItem(item.id, 'nonexistent');
+    expect(result).toBeUndefined();
+  });
+
+  it('resets space_type to standard if not active on target project', () => {
+    const projectA = createProject({ name: 'Music Proj' });
+    const projectB = createProject({ name: 'Plain Proj' });
+    // Set projectA to have song space active
+    updateProject(projectA.id, { active_spaces: JSON.stringify(['standard', 'song']) });
+    // projectB only has standard (default)
+    updateProject(projectB.id, { active_spaces: JSON.stringify(['standard']) });
+
+    const item = createWorkItem({ project_id: projectA.id, title: 'Song Item', space_type: 'song' });
+    expect(item.space_type).toBe('song');
+
+    const moved = moveWorkItem(item.id, projectB.id);
+    expect(moved).toBeDefined();
+    expect(moved!.space_type).toBe('standard');
+    expect(moved!.space_data).toBeNull();
+  });
+
+  it('preserves space_type if active on target project', () => {
+    const projectA = createProject({ name: 'Music A' });
+    const projectB = createProject({ name: 'Music B' });
+    updateProject(projectA.id, { active_spaces: JSON.stringify(['standard', 'song']) });
+    updateProject(projectB.id, { active_spaces: JSON.stringify(['standard', 'song']) });
+
+    const item = createWorkItem({ project_id: projectA.id, title: 'Song Item', space_type: 'song' });
+    const moved = moveWorkItem(item.id, projectB.id);
+    expect(moved).toBeDefined();
+    expect(moved!.space_type).toBe('song');
+  });
+
+  it('resets position to 0 on move', () => {
+    const projectA = createProject({ name: 'From' });
+    const projectB = createProject({ name: 'To' });
+    const item = createWorkItem({ project_id: projectA.id, title: 'Positioned' });
+    updateWorkItem(item.id, { position: 5 });
+
+    const moved = moveWorkItem(item.id, projectB.id);
+    expect(moved).toBeDefined();
+    expect(moved!.position).toBe(0);
   });
 });
