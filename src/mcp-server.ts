@@ -182,6 +182,25 @@ function translateContainerPath(containerPath: string): { hostPath: string; tran
   return null;
 }
 
+/**
+ * Resolve an item identifier — could be a raw ID or a display key like "WRITING-28".
+ * Tries key lookup first (if it matches the KEY-NUMBER pattern), falls back to raw ID.
+ * Returns the resolved WorkItem or undefined if not found.
+ */
+function resolveItem(idOrKey: string): ReturnType<typeof getWorkItem> {
+  return getWorkItemByKey(idOrKey) || getWorkItem(idOrKey);
+}
+
+/**
+ * Resolve an item identifier to a raw ID string.
+ * Returns the raw ID if found, otherwise returns the original string (for error handling downstream).
+ */
+function resolveId(idOrKey: string): string {
+  const item = getWorkItemByKey(idOrKey);
+  if (item) return item.id;
+  return idOrKey;
+}
+
 function createMcpServer(): McpServer {
   const server = new McpServer({
     name: "tracker",
@@ -246,7 +265,7 @@ function createMcpServer(): McpServer {
       platform: z.enum(["any", "server", "ios", "web"]).optional().describe("Target platform"),
       date_due: z.string().optional().describe("Due date in YYYY-MM-DD format (optional)"),
       link: z.string().optional().describe("Optional URL link associated with this item"),
-      space_type: z.string().optional().describe('Space type for specialized UI (e.g. "standard", "song"). Default: "standard"'),
+      space_type: z.string().optional().describe('Space type for specialized UI (e.g. "standard", "song", "engagement"). Default: "standard"'),
       space_data: z.string().optional().describe("JSON blob for space-specific custom fields"),
       created_by: z.string().optional().describe("Who created this"),
       blocked_by: z.array(z.string()).optional().describe('Item IDs or display keys (e.g. "TRACK-5") that block this item. The blocked item cannot be worked on until all blockers are done/testing/cancelled.'),
@@ -353,7 +372,7 @@ function createMcpServer(): McpServer {
     "tracker_update_item",
     "Update a work item (title, description, priority, assignee, labels, requires_code, platform)",
     {
-      item_id: z.string().describe("Work item ID"),
+      item_id: z.string().describe("Work item ID or display key (e.g. \"WRITING-28\")"),
       title: z.string().optional().describe("New title"),
       description: z.string().optional().describe("New description"),
       priority: z.string().optional().describe("New priority"),
@@ -368,7 +387,8 @@ function createMcpServer(): McpServer {
       actor: z.string().optional().describe("Who made this change"),
     },
     async (args) => {
-      const item = updateWorkItem(args.item_id, {
+      const itemId = resolveId(args.item_id);
+      const item = updateWorkItem(itemId, {
         title: args.title,
         description: args.description,
         priority: args.priority as Priority | undefined,
@@ -383,7 +403,7 @@ function createMcpServer(): McpServer {
         actor: args.actor,
       });
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      return { content: [{ type: "text", text: JSON.stringify(item, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ ...item, key: getWorkItemKey(item) }, null, 2) }] };
     },
   );
 
@@ -414,7 +434,7 @@ function createMcpServer(): McpServer {
     "tracker_change_state",
     `Change the state of a work item. Records a transition in the audit trail. Note: only human actors (dashboard) can move items to 'approved' or 'cancelled' state.`,
     {
-      item_id: z.string().describe("Work item ID"),
+      item_id: z.string().describe("Work item ID or display key (e.g. \"WRITING-28\")"),
       state: z.string().describe(`New state: ${VALID_STATES.join(", ")}`),
       actor: z.string().optional().describe("Who is making this change"),
       comment: z.string().optional().describe("Optional comment about why"),
@@ -428,7 +448,8 @@ function createMcpServer(): McpServer {
         // human source). Force actor_class = "agent" so that passing a human actor name
         // cannot bypass the approved/cancelled guard (LIZ-57).
         const MCP_ACTOR_CLASS: ActorClass = "agent";
-        const item = changeWorkItemState(args.item_id, args.state as WorkItemState, args.actor || "Coder", args.comment, MCP_ACTOR_CLASS);
+        const itemId = resolveId(args.item_id);
+        const item = changeWorkItemState(itemId, args.state as WorkItemState, args.actor || "Coder", args.comment, MCP_ACTOR_CLASS);
         if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
         return { content: [{ type: "text", text: JSON.stringify(item, null, 2) }] };
       } catch (e) {
@@ -444,14 +465,14 @@ function createMcpServer(): McpServer {
     "tracker_add_comment",
     "Add a comment to a work item.",
     {
-      item_id: z.string().describe("Work item ID"),
+      item_id: z.string().describe("Work item ID or display key (e.g. \"WRITING-28\")"),
       author: z.string().optional().describe("Comment author"),
       body: z.string().describe("Comment text (supports markdown)"),
     },
     async (args) => {
-      const item = getWorkItem(args.item_id);
+      const item = resolveItem(args.item_id);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      const comment = createComment({ work_item_id: args.item_id, author: args.author || "Coder", body: args.body });
+      const comment = createComment({ work_item_id: item.id, author: args.author || "Coder", body: args.body });
       return { content: [{ type: "text", text: JSON.stringify(comment, null, 2) }] };
     },
   );
@@ -462,12 +483,13 @@ function createMcpServer(): McpServer {
     "tracker_watch_item",
     "Watch a work item for changes.",
     {
-      item_id: z.string().describe("Work item ID"),
+      item_id: z.string().describe("Work item ID or display key (e.g. \"WRITING-28\")"),
       entity: z.string().describe("Who should watch"),
       notify_via: z.string().optional().describe("Notification method"),
     },
     async (args) => {
-      const watcher = addWatcher({ work_item_id: args.item_id, entity: args.entity, notify_via: args.notify_via });
+      const itemId = resolveId(args.item_id);
+      const watcher = addWatcher({ work_item_id: itemId, entity: args.entity, notify_via: args.notify_via });
       return { content: [{ type: "text", text: JSON.stringify(watcher, null, 2) }] };
     },
   );
@@ -510,11 +532,12 @@ function createMcpServer(): McpServer {
     "tracker_lock_item",
     "Lock a work item to signal you are actively working on it. Locks auto-expire after 2 hours.",
     {
-      item_id: z.string().describe("Work item ID"),
+      item_id: z.string().describe("Work item ID or display key (e.g. \"WRITING-28\")"),
       agent: z.string().describe("Agent name"),
     },
     async (args) => {
-      const item = lockWorkItem(args.item_id, args.agent);
+      const itemId = resolveId(args.item_id);
+      const item = lockWorkItem(itemId, args.agent);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
       return { content: [{ type: "text", text: JSON.stringify(item, null, 2) }] };
     },
@@ -523,9 +546,10 @@ function createMcpServer(): McpServer {
   server.tool(
     "tracker_unlock_item",
     "Unlock a work item when done working or handing off.",
-    { item_id: z.string().describe("Work item ID") },
+    { item_id: z.string().describe("Work item ID or display key (e.g. \"WRITING-28\")") },
     async (args) => {
-      const item = unlockWorkItem(args.item_id);
+      const itemId = resolveId(args.item_id);
+      const item = unlockWorkItem(itemId);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
       return { content: [{ type: "text", text: JSON.stringify(item, null, 2) }] };
     },
@@ -551,12 +575,14 @@ function createMcpServer(): McpServer {
     "tracker_add_dependency",
     "Add a dependency: the item is blocked by another item. Use this to create chains of work where one issue must be completed before another can start. A blocked item won't be dispatched for implementation until all its blockers reach done/testing/cancelled state.",
     {
-      work_item_id: z.string().describe("The item that is blocked"),
-      depends_on_id: z.string().describe("The item that must be completed first"),
+      work_item_id: z.string().describe("The item that is blocked (ID or display key e.g. \"WRITING-28\")"),
+      depends_on_id: z.string().describe("The item that must be completed first (ID or display key e.g. \"WRITING-28\")"),
     },
     async (args) => {
       try {
-        const dep = addDependency(args.work_item_id, args.depends_on_id);
+        const workItemId = resolveId(args.work_item_id);
+        const dependsOnId = resolveId(args.depends_on_id);
+        const dep = addDependency(workItemId, dependsOnId);
         return { content: [{ type: "text", text: JSON.stringify(dep, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : "Failed"}` }] };
@@ -568,11 +594,13 @@ function createMcpServer(): McpServer {
     "tracker_remove_dependency",
     "Remove a dependency between two items.",
     {
-      work_item_id: z.string().describe("The item that was blocked"),
-      depends_on_id: z.string().describe("The item it depended on"),
+      work_item_id: z.string().describe("The item that was blocked (ID or display key e.g. \"WRITING-28\")"),
+      depends_on_id: z.string().describe("The item it depended on (ID or display key e.g. \"WRITING-28\")"),
     },
     async (args) => {
-      const ok = removeDependency(args.work_item_id, args.depends_on_id);
+      const workItemId = resolveId(args.work_item_id);
+      const dependsOnId = resolveId(args.depends_on_id);
+      const ok = removeDependency(workItemId, dependsOnId);
       return { content: [{ type: "text", text: ok ? "Dependency removed." : "Error: Dependency not found." }] };
     },
   );
@@ -580,9 +608,10 @@ function createMcpServer(): McpServer {
   server.tool(
     "tracker_get_blockers",
     "Get unfinished blockers for an item. Returns items that must reach done/testing/cancelled before this item can be worked on.",
-    { item_id: z.string().describe("Work item ID") },
+    { item_id: z.string().describe("Work item ID or display key (e.g. \"WRITING-28\")") },
     async (args) => {
-      const blockerList = getBlockers(args.item_id);
+      const itemId = resolveId(args.item_id);
+      const blockerList = getBlockers(itemId);
       if (blockerList.length === 0) return { content: [{ type: "text", text: "No blockers — item is unblocked." }] };
       const msg = `Blocked by ${blockerList.length} item(s):\n` +
         blockerList.map((b) => {
@@ -785,9 +814,10 @@ function createMcpServer(): McpServer {
   server.tool(
     "tracker_dispatch_item",
     "Manually dispatch a work item to OpenCode for implementation. Item must be approved, have bot_dispatch enabled, not be locked/blocked, and its project must have a working_directory set.",
-    { item_id: z.string().describe("Work item ID") },
+    { item_id: z.string().describe("Work item ID or display key (e.g. \"WRITING-28\")") },
     async (args) => {
-      const result = await dispatchItem(args.item_id);
+      const itemId = resolveId(args.item_id);
+      const result = await dispatchItem(itemId);
       if ("error" in result) {
         return { content: [{ type: "text", text: `Error: ${result.error}` }] };
       }
