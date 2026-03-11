@@ -15298,8 +15298,8 @@
                 if (!existing) {
                   const btn = document.createElement("button");
                   btn.className = "triage-entry-btn";
-                  btn.style.cssText = "font-size: 0.75rem; padding: 4px 10px;";
-                  btn.innerHTML = `&#9889; Triage <span class="triage-count">${count}</span>`;
+                  btn.style.cssText = "font-size: 0.75rem; padding: 4px 8px;";
+                  btn.innerHTML = `&#9889; <span class="triage-count">${count}</span>`;
                   btn.addEventListener("click", (e) => {
                     e.stopPropagation();
                     openTriageMode(currentProjectId);
