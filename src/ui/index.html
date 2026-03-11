@@ -11234,13 +11234,30 @@
           });
 
           // Copy button — copies full description/artifact to clipboard
+          // Uses fallback for non-secure contexts (HTTP on LAN IP) where navigator.clipboard is unavailable
           $("#songCopyBtn").addEventListener("click", () => {
-            navigator.clipboard.writeText(textarea.value).then(() => {
+            const text = textarea.value;
+            const showPopup = () => {
               const popup = $("#songCopyPopup");
               if (popup) { popup.classList.add("show"); setTimeout(() => popup.classList.remove("show"), 1800); }
-            }).catch(() => {
-              toast("Failed to copy", "error");
-            });
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).then(showPopup).catch(() => {
+                // Clipboard API rejected (non-secure context?) — use execCommand fallback
+                const ta = document.createElement("textarea");
+                ta.value = text; ta.style.position = "fixed"; ta.style.left = "-9999px";
+                document.body.appendChild(ta); ta.select();
+                try { document.execCommand("copy"); showPopup(); } catch { toast("Failed to copy", "error"); }
+                document.body.removeChild(ta);
+              });
+            } else {
+              // No Clipboard API — use legacy execCommand fallback
+              const ta = document.createElement("textarea");
+              ta.value = text; ta.style.position = "fixed"; ta.style.left = "-9999px";
+              document.body.appendChild(ta); ta.select();
+              try { document.execCommand("copy"); showPopup(); } catch { toast("Failed to copy", "error"); }
+              document.body.removeChild(ta);
+            }
           });
 
           // Preview toggle
@@ -11831,13 +11848,30 @@
           });
 
           // Copy button — copies full description/artifact to clipboard
+          // Uses fallback for non-secure contexts (HTTP on LAN IP) where navigator.clipboard is unavailable
           $("#textCopyBtn").addEventListener("click", () => {
-            navigator.clipboard.writeText(textarea.value).then(() => {
+            const text = textarea.value;
+            const showPopup = () => {
               const popup = $("#textCopyPopup");
               if (popup) { popup.classList.add("show"); setTimeout(() => popup.classList.remove("show"), 1800); }
-            }).catch(() => {
-              toast("Failed to copy", "error");
-            });
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).then(showPopup).catch(() => {
+                // Clipboard API rejected (non-secure context?) — use execCommand fallback
+                const ta = document.createElement("textarea");
+                ta.value = text; ta.style.position = "fixed"; ta.style.left = "-9999px";
+                document.body.appendChild(ta); ta.select();
+                try { document.execCommand("copy"); showPopup(); } catch { toast("Failed to copy", "error"); }
+                document.body.removeChild(ta);
+              });
+            } else {
+              // No Clipboard API — use legacy execCommand fallback
+              const ta = document.createElement("textarea");
+              ta.value = text; ta.style.position = "fixed"; ta.style.left = "-9999px";
+              document.body.appendChild(ta); ta.select();
+              try { document.execCommand("copy"); showPopup(); } catch { toast("Failed to copy", "error"); }
+              document.body.removeChild(ta);
+            }
           });
 
           // Preview toggle
