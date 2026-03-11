@@ -6349,6 +6349,15 @@
         font-size: 0.8rem;
         padding: 3px 8px;
       }
+      .song-revert-btn {
+        background: rgba(var(--accent-r, 99), var(--accent-g, 102), var(--accent-b, 241), 0.2) !important;
+        border-color: var(--accent, #6366f1) !important;
+        color: var(--accent, #6366f1) !important;
+      }
+      .song-revert-btn:hover {
+        background: rgba(var(--accent-r, 99), var(--accent-g, 102), var(--accent-b, 241), 0.4) !important;
+        color: #fff !important;
+      }
       .song-lyrics-toolbar select {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -10859,6 +10868,7 @@
                   <select id="songVersionSelect" title="Version history">
                     <option value="current">Current</option>
                   </select>
+                  <button class="space-btn song-revert-btn" id="songRevertBtn" title="Revert to this version" style="display:none;">Revert</button>
                   <button class="space-btn" id="songCopyBtn" title="Copy lyrics to clipboard">Copy</button>
                   <div class="toolbar-spacer"></div>
                   <button class="space-btn" id="songPreviewToggle" title="Toggle preview">Preview</button>
@@ -11005,16 +11015,54 @@
           });
 
           // Version selector — browse history
+          const revertBtn = $("#songRevertBtn");
           versionSelect.addEventListener("change", async (e) => {
             if (e.target.value === "current") {
               textarea.value = spaceItemData.description || "";
               textarea.disabled = false;
+              revertBtn.style.display = "none";
               return;
             }
             const ver = spaceVersions.find(v => v.id === e.target.value);
             if (ver) {
               textarea.value = ver.description;
               textarea.disabled = true; // Read-only when viewing old versions
+              revertBtn.style.display = "";
+            }
+          });
+
+          // Revert to selected version
+          revertBtn.addEventListener("click", async () => {
+            const selectedVersionId = versionSelect.value;
+            if (selectedVersionId === "current") return;
+            const ver = spaceVersions.find(v => v.id === selectedVersionId);
+            if (!ver) return;
+            if (!confirm(`Revert to version ${ver.version}? The current content will be saved as a new version.`)) return;
+            try {
+              const result = await apiPost(`/items/${spaceItemId}/versions/revert`, {
+                version_id: selectedVersionId,
+                actor: DEFAULT_AUTHOR,
+              });
+              // Update local state
+              if (spaceItemData) spaceItemData.description = ver.description;
+              textarea.value = ver.description;
+              textarea.disabled = false;
+              revertBtn.style.display = "none";
+              // Reload versions list
+              try {
+                spaceVersions = await apiGet(`/items/${spaceItemId}/versions`);
+                versionSelect.innerHTML = '<option value="current">Current</option>';
+                spaceVersions.forEach(v => {
+                  const opt = document.createElement("option");
+                  opt.value = v.id;
+                  opt.textContent = `v${v.version} — ${formatTime(v.created_at)}`;
+                  versionSelect.appendChild(opt);
+                });
+              } catch {}
+              versionSelect.value = "current";
+              toast("Reverted to version " + ver.version, "success");
+            } catch (e) {
+              toast("Failed to revert: " + (e.message || e), "error");
             }
           });
 
@@ -11457,6 +11505,7 @@
                   <select id="textVersionSelect" title="Version history">
                     <option value="current">Current</option>
                   </select>
+                  <button class="space-btn song-revert-btn" id="textRevertBtn" title="Revert to this version" style="display:none;">Revert</button>
                   <button class="space-btn" id="textCopyBtn" title="Copy text to clipboard">Copy</button>
                   <div class="toolbar-spacer"></div>
                   <span class="text-word-count" id="textWordCount"></span>
@@ -11564,10 +11613,12 @@
           });
 
           // Version selector — browse history
+          const textRevertBtn = $("#textRevertBtn");
           versionSelect.addEventListener("change", async (e) => {
             if (e.target.value === "current") {
               textarea.value = spaceItemData.description || "";
               textarea.disabled = false;
+              textRevertBtn.style.display = "none";
               updateTextWordCount(textarea.value);
               return;
             }
@@ -11575,7 +11626,44 @@
             if (ver) {
               textarea.value = ver.description;
               textarea.disabled = true; // Read-only when viewing old versions
+              textRevertBtn.style.display = "";
               updateTextWordCount(ver.description);
+            }
+          });
+
+          // Revert to selected version
+          textRevertBtn.addEventListener("click", async () => {
+            const selectedVersionId = versionSelect.value;
+            if (selectedVersionId === "current") return;
+            const ver = spaceVersions.find(v => v.id === selectedVersionId);
+            if (!ver) return;
+            if (!confirm(`Revert to version ${ver.version}? The current content will be saved as a new version.`)) return;
+            try {
+              const result = await apiPost(`/items/${spaceItemId}/versions/revert`, {
+                version_id: selectedVersionId,
+                actor: DEFAULT_AUTHOR,
+              });
+              // Update local state
+              if (spaceItemData) spaceItemData.description = ver.description;
+              textarea.value = ver.description;
+              textarea.disabled = false;
+              textRevertBtn.style.display = "none";
+              updateTextWordCount(ver.description);
+              // Reload versions list
+              try {
+                spaceVersions = await apiGet(`/items/${spaceItemId}/versions`);
+                versionSelect.innerHTML = '<option value="current">Current</option>';
+                spaceVersions.forEach(v => {
+                  const opt = document.createElement("option");
+                  opt.value = v.id;
+                  opt.textContent = `v${v.version} — ${formatTime(v.created_at)}`;
+                  versionSelect.appendChild(opt);
+                });
+              } catch {}
+              versionSelect.value = "current";
+              toast("Reverted to version " + ver.version, "success");
+            } catch (e) {
+              toast("Failed to revert: " + (e.message || e), "error");
             }
           });
 

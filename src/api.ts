@@ -78,6 +78,7 @@ import {
   MAX_ATTACHMENT_SIZE,
   createDescriptionVersion,
   listDescriptionVersions,
+  revertToDescriptionVersion,
   classifyActor,
   VALID_STATES,
   VALID_PRIORITIES,
@@ -824,6 +825,29 @@ async function handleApiRequest(
           saved_by: body.saved_by ? String(body.saved_by) : "system",
         });
         return json(res, version, 201);
+      }
+
+      // POST /items/:id/versions/:vid/revert — revert description to a specific version
+      if (
+        parts.length === 4 &&
+        parts[2] === "versions" &&
+        parts[3] === "revert" &&
+        method === "POST"
+      ) {
+        const body = await parseBody(req);
+        const versionId = body.version_id ? String(body.version_id) : "";
+        if (!versionId) return error(res, "version_id is required");
+        const result = revertToDescriptionVersion(
+          itemId,
+          versionId,
+          body.actor ? String(body.actor) : "system",
+        );
+        if (!result) return error(res, "Work item or version not found", 404);
+        return json(res, {
+          ...result.item,
+          key: getWorkItemKey(result.item),
+          reverted_to_version: result.version.version,
+        });
       }
 
       // GET /items/:id/audits — execution audit records (Section 4.6.2)

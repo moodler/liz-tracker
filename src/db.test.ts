@@ -34,6 +34,10 @@ import {
   updateWorkItem,
   getDispatchableItems,
   getClarifiableItems,
+  createDescriptionVersion,
+  listDescriptionVersions,
+  getDescriptionVersion,
+  revertToDescriptionVersion,
   VALID_STATES,
   VALID_PRIORITIES,
 } from './db.js';
@@ -1139,5 +1143,186 @@ describe('Project Context', () => {
     const fetched = getProject(p.id);
     expect(fetched).toBeDefined();
     expect(fetched!.context).toBe('Priority items for Q1: performance and stability.');
+  });
+});
+
+// ── Description Versioning ──────────────────────────────────────────────────────
+
+describe('Description Versioning', () => {
+  beforeEach(() => {
+    _initTestTrackerDatabase();
+  });
+
+  it('auto-creates a version when description changes via updateWorkItem', () => {
+    const project = createProject({ name: 'Version Test' });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Test Item',
+      description: 'Version 1 content',
+    });
+
+    // Update description — should auto-save old description as a version
+    updateWorkItem(item.id, { description: 'Version 2 content' });
+
+    const versions = listDescriptionVersions(item.id);
+    expect(versions.length).toBe(1);
+    expect(versions[0].description).toBe('Version 1 content');
+    expect(versions[0].version).toBe(1);
+  });
+
+  it('does not create duplicate versions for same description', () => {
+    const project = createProject({ name: 'Dup Test' });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Test Item',
+      description: 'Original content',
+    });
+
+    // First update — creates version for "Original content"
+    updateWorkItem(item.id, { description: 'Update 1' });
+    // Update back to something else — creates version for "Update 1"
+    updateWorkItem(item.id, { description: 'Update 2' });
+
+    const versions = listDescriptionVersions(item.id);
+    expect(versions.length).toBe(2);
+    expect(versions[0].description).toBe('Original content');
+    expect(versions[1].description).toBe('Update 1');
+  });
+
+  it('does not create a version when description is unchanged', () => {
+    const project = createProject({ name: 'NoChange Test' });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Test Item',
+      description: 'Same content',
+    });
+
+    // Update with same description — no version should be created
+    updateWorkItem(item.id, { description: 'Same content' });
+
+    const versions = listDescriptionVersions(item.id);
+    expect(versions.length).toBe(0);
+  });
+
+  it('does not create a version when description is empty/null', () => {
+    const project = createProject({ name: 'Empty Test' });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Test Item',
+      description: '',
+    });
+
+    // Update from empty — no version for empty string
+    updateWorkItem(item.id, { description: 'Now has content' });
+
+    const versions = listDescriptionVersions(item.id);
+    expect(versions.length).toBe(0);
+  });
+
+  it('creates manual versions via createDescriptionVersion', () => {
+    const project = createProject({ name: 'Manual Version' });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Test Item',
+      description: 'Some lyrics',
+    });
+
+    const ver = createDescriptionVersion({
+      work_item_id: item.id,
+      description: 'Some lyrics',
+      saved_by: 'Martin',
+    });
+
+    expect(ver.version).toBe(1);
+    expect(ver.description).toBe('Some lyrics');
+    expect(ver.saved_by).toBe('Martin');
+
+    const fetched = getDescriptionVersion(ver.id);
+    expect(fetched).toBeDefined();
+    expect(fetched!.id).toBe(ver.id);
+  });
+
+  it('reverts to a previous version', () => {
+    const project = createProject({ name: 'Revert Test' });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Test Item',
+      description: 'Version 1',
+    });
+
+    // Create some changes to build version history
+    updateWorkItem(item.id, { description: 'Version 2' });
+    updateWorkItem(item.id, { description: 'Version 3' });
+
+    // We should have 2 auto-versions: "Version 1" and "Version 2"
+    const versions = listDescriptionVersions(item.id);
+    expect(versions.length).toBe(2);
+    expect(versions[0].description).toBe('Version 1');
+    expect(versions[1].description).toBe('Version 2');
+
+    // Revert to version 1
+    const result = revertToDescriptionVersion(item.id, versions[0].id, 'Martin');
+    expect(result).toBeDefined();
+    expect(result!.item.description).toBe('Version 1');
+    expect(result!.version.version).toBe(1);
+
+    // Current description should now be "Version 1"
+    const updated = getWorkItem(item.id);
+    expect(updated!.description).toBe('Version 1');
+
+    // "Version 3" should have been auto-saved as a version before revert
+    const versionsAfter = listDescriptionVersions(item.id);
+    expect(versionsAfter.length).toBe(3);
+    expect(versionsAfter[2].description).toBe('Version 3');
+  });
+
+  it('revert returns undefined for invalid version id', () => {
+    const project = createProject({ name: 'Invalid Revert' });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Test Item',
+      description: 'Content',
+    });
+
+    const result = revertToDescriptionVersion(item.id, 'nonexistent-id', 'Martin');
+    expect(result).toBeUndefined();
+  });
+
+  it('revert returns undefined for version belonging to different item', () => {
+    const project = createProject({ name: 'Cross Item Revert' });
+    const item1 = createWorkItem({
+      project_id: project.id,
+      title: 'Item 1',
+      description: 'Content 1',
+    });
+    const item2 = createWorkItem({
+      project_id: project.id,
+      title: 'Item 2',
+      description: 'Content 2',
+    });
+
+    const ver = createDescriptionVersion({
+      work_item_id: item1.id,
+      description: 'Content 1',
+    });
+
+    // Try to revert item2 to item1's version — should fail
+    const result = revertToDescriptionVersion(item2.id, ver.id, 'Martin');
+    expect(result).toBeUndefined();
+  });
+
+  it('records actor in auto-versioned snapshots', () => {
+    const project = createProject({ name: 'Actor Test' });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Test Item',
+      description: 'Original',
+    });
+
+    updateWorkItem(item.id, { description: 'Updated', actor: 'Martin' });
+
+    const versions = listDescriptionVersions(item.id);
+    expect(versions.length).toBe(1);
+    expect(versions[0].saved_by).toBe('Martin');
   });
 });

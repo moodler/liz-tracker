@@ -1223,6 +1223,22 @@ export function updateWorkItem(
   if (data.description !== undefined) {
     fields.push("description = ?");
     values.push(data.description);
+    // Auto-save old description as a version snapshot (if it actually changed)
+    if (existing.description && data.description !== existing.description) {
+      // Check if the latest version already matches the old description (avoid duplicates)
+      const latestVer = db
+        .prepare(
+          "SELECT description FROM tracker_description_versions WHERE work_item_id = ? ORDER BY version DESC LIMIT 1",
+        )
+        .get(id) as { description: string } | undefined;
+      if (!latestVer || latestVer.description !== existing.description) {
+        createDescriptionVersion({
+          work_item_id: id,
+          description: existing.description,
+          saved_by: data.actor || "system",
+        });
+      }
+    }
   }
   if (data.priority !== undefined) {
     fields.push("priority = ?");
@@ -1502,6 +1518,28 @@ export function getDescriptionVersion(id: string): DescriptionVersion | undefine
   return db
     .prepare("SELECT * FROM tracker_description_versions WHERE id = ?")
     .get(id) as DescriptionVersion | undefined;
+}
+
+/** Revert an item's description to a specific version. Saves current description as a new version first. */
+export function revertToDescriptionVersion(
+  workItemId: string,
+  versionId: string,
+  actor?: string,
+): { item: WorkItem; version: DescriptionVersion } | undefined {
+  const item = getWorkItem(workItemId);
+  if (!item) return undefined;
+  const ver = getDescriptionVersion(versionId);
+  if (!ver || ver.work_item_id !== workItemId) return undefined;
+
+  // Save current description as a version snapshot before reverting
+  // (updateWorkItem auto-versioning will handle this)
+  const updated = updateWorkItem(workItemId, {
+    description: ver.description,
+    actor: actor || "system",
+  });
+  if (!updated) return undefined;
+
+  return { item: updated, version: ver };
 }
 
 /** Delete all description versions for a work item (used when deleting items). */
