@@ -312,13 +312,13 @@ Configuration is loaded from environment variables, with a simple `.env` file lo
 | `CIRCUIT_BREAKER_THRESHOLD` | `2` | Consecutive failures before auto-pause |
 | `CIRCUIT_BREAKER_WINDOW` | `3600000` (1 hour) | Failure counting window in ms |
 | `ITEM_DISPATCH_FAILURE_LIMIT` | `3` | Per-item failures before auto-shelving |
-| `LIZ_PROJECT_ROOT` | `~/liz` | Host path for container path translation |
+| `ASSISTANT_PROJECT_ROOT` | `~/assistant` | Host path for container path translation |
 
 ### API Token Resolution
 
 The API token is resolved in priority order:
 1. `TRACKER_API_TOKEN` environment variable
-2. `TRACKER_API_TOKEN` in `~/.config/liz/.env`
+2. `TRACKER_API_TOKEN` in `~/.config/assistant/.env`
 3. Token file at `{STORE_DIR}/auth_token` (auto-generated on first run)
 
 If no token exists anywhere, a random 32-byte hex token is generated and saved to `{STORE_DIR}/auth_token` with mode 0600.
@@ -522,7 +522,7 @@ All MCP tool calls that perform state transitions pass `actorClassOverride: "age
 
 ### Container Path Translation
 
-The `tracker_upload_attachment_from_path` tool supports container path translation for agents running inside containers. Paths starting with `/workspace/group/` or `/workspace/project/` are mapped to host filesystem paths using `LIZ_PROJECT_ROOT`.
+The `tracker_upload_attachment_from_path` tool supports container path translation for agents running inside containers. Paths starting with `/workspace/group/` or `/workspace/project/` are mapped to host filesystem paths using `ASSISTANT_PROJECT_ROOT`.
 
 ---
 

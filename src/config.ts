@@ -31,17 +31,17 @@ export const STORE_DIR =
 // ── Container path translation ──
 
 /**
- * Root directory of the Liz project on the host filesystem.
+ * Root directory of the assistant project on the host filesystem.
  * Used to translate container paths (e.g. /workspace/group/...) to host paths
  * when agents call tracker_upload_attachment_from_path from inside containers.
  *
  * Container mount mapping:
- *   /workspace/group   → {LIZ_PROJECT_ROOT}/groups/{groupname}/
- *   /workspace/project → {LIZ_PROJECT_ROOT}/
- *   /workspace/ipc     → {LIZ_PROJECT_ROOT}/data/ipc/{groupname}/
+ *   /workspace/group   → {ASSISTANT_PROJECT_ROOT}/groups/{groupname}/
+ *   /workspace/project → {ASSISTANT_PROJECT_ROOT}/
+ *   /workspace/ipc     → {ASSISTANT_PROJECT_ROOT}/data/ipc/{groupname}/
  */
-export const LIZ_PROJECT_ROOT =
-  process.env.LIZ_PROJECT_ROOT || path.join(os.homedir(), "liz");
+export const ASSISTANT_PROJECT_ROOT =
+  process.env.ASSISTANT_PROJECT_ROOT || path.join(os.homedir(), "assistant");
 
 // ── Orchestrator config ──
 
@@ -152,15 +152,15 @@ export let AUTH_TOKEN_IS_NEW = false;
  *
  * Resolution order:
  *  1. TRACKER_API_TOKEN environment variable
- *  2. TRACKER_API_TOKEN in ~/.config/liz/.env
+ *  2. TRACKER_API_TOKEN in ~/.config/assistant/.env
  *  3. Token file at store/auth_token (auto-generated on first run)
  */
 function loadApiToken(): string {
   // 1. Check env var first
   if (process.env.TRACKER_API_TOKEN) return process.env.TRACKER_API_TOKEN;
 
-  // 2. Try to load from ~/.config/liz/.env
-  const envPath = path.join(os.homedir(), ".config", "liz", ".env");
+  // 2. Try to load from ~/.config/assistant/.env
+  const envPath = path.join(os.homedir(), ".config", "assistant", ".env");
   try {
     if (fs.existsSync(envPath)) {
       const content = fs.readFileSync(envPath, "utf-8");
@@ -205,7 +205,7 @@ export const TRACKER_API_TOKEN = loadApiToken();
  */
 export const BLOCKED_PATHS: string[] = [
   "~/.ssh/",
-  "~/.config/liz/",
+  "~/.config/assistant/",
   "~/.gnupg/",
   "*/LaunchAgents/*.plist",
   "*/LaunchDaemons/*.plist",

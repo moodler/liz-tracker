@@ -53,7 +53,7 @@ import fs from "fs";
 import path from "path";
 import { logger } from "./logger.js";
 import { dispatchItem, abortSession, getOrchestratorStatus, emergencyStop, requestSafeRestart, getRestartStatus, cancelRestart, isSafeToRestart, validateAgentConfig } from "./orchestrator.js";
-import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, STORE_DIR, LIZ_PROJECT_ROOT } from "./config.js";
+import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, STORE_DIR, ASSISTANT_PROJECT_ROOT } from "./config.js";
 
 /** Simple MIME type detection from file extension. */
 function detectMimeType(filename: string): string {
@@ -91,12 +91,12 @@ function formatBytes(bytes: number): string {
  * Translate a container-relative path to a host filesystem path.
  *
  * Agent containers mount host directories at /workspace/:
- *   /workspace/group   → {LIZ_PROJECT_ROOT}/groups/{groupname}/
- *   /workspace/project → {LIZ_PROJECT_ROOT}/
- *   /workspace/ipc     → {LIZ_PROJECT_ROOT}/data/ipc/{groupname}/
+ *   /workspace/group   → {ASSISTANT_PROJECT_ROOT}/groups/{groupname}/
+ *   /workspace/project → {ASSISTANT_PROJECT_ROOT}/
+ *   /workspace/ipc     → {ASSISTANT_PROJECT_ROOT}/data/ipc/{groupname}/
  *
  * Since the tracker server doesn't know which group the caller belongs to,
- * we try each group folder under {LIZ_PROJECT_ROOT}/groups/ and return the
+ * we try each group folder under {ASSISTANT_PROJECT_ROOT}/groups/ and return the
  * first path where the file actually exists. Falls back to 'main' if the
  * groups directory doesn't exist.
  *
@@ -107,7 +107,7 @@ function translateContainerPath(containerPath: string): { hostPath: string; tran
   // Only translate paths starting with /workspace/
   if (!containerPath.startsWith("/workspace/")) return null;
 
-  const groupsDir = path.join(LIZ_PROJECT_ROOT, "groups");
+  const groupsDir = path.join(ASSISTANT_PROJECT_ROOT, "groups");
 
   // /workspace/group/... → try each group folder
   if (containerPath.startsWith("/workspace/group/")) {
@@ -145,13 +145,13 @@ function translateContainerPath(containerPath: string): { hostPath: string; tran
   // /workspace/project/... → project root
   if (containerPath.startsWith("/workspace/project/")) {
     const relativePath = containerPath.slice("/workspace/project/".length);
-    return { hostPath: path.join(LIZ_PROJECT_ROOT, relativePath), translated: true };
+    return { hostPath: path.join(ASSISTANT_PROJECT_ROOT, relativePath), translated: true };
   }
 
   // /workspace/ipc/... → data/ipc/ (try each group folder)
   if (containerPath.startsWith("/workspace/ipc/")) {
     const relativePath = containerPath.slice("/workspace/ipc/".length);
-    const ipcDir = path.join(LIZ_PROJECT_ROOT, "data", "ipc");
+    const ipcDir = path.join(ASSISTANT_PROJECT_ROOT, "data", "ipc");
 
     try {
       const groupFolders = fs.readdirSync(ipcDir).filter((entry) => {
@@ -662,9 +662,9 @@ function createMcpServer(): McpServer {
               text: `Error: File not found after container path translation.\n` +
                 `  Container path: ${args.file_path}\n` +
                 `  Resolved to: ${resolvedPath}\n` +
-                `  Liz project root: ${LIZ_PROJECT_ROOT}\n\n` +
+                `  Liz project root: ${ASSISTANT_PROJECT_ROOT}\n\n` +
                 `Tip: The path was translated from container namespace to host filesystem. ` +
-                `Check that the file exists on the host and that LIZ_PROJECT_ROOT is set correctly.`,
+                `Check that the file exists on the host and that ASSISTANT_PROJECT_ROOT is set correctly.`,
             }],
           };
         }
