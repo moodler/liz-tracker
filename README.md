@@ -10,7 +10,7 @@ A lightweight, self-hosted project management tracker with a kanban UI, REST API
 
 It has a pretty UI in a desktop browser, and a completely different mobile and touch-optimised UI on phones and tablets.  
 
-Created by [Martin Dougiamas](https://github.com/moodler). I built this for myself, and development is VERY active.  I'm happy to take requests but I'm more focussed on my needs than yours right now!
+Created by [Martin Dougiamas](https://github.com/moodler). I am building this for myself, and development is VERY active.  I'm happy to take requests but I'm more focussed on my needs than yours right now!   That said, I'm trying to keep it useful for anyone.
 
 Built with TypeScript, SQLite, and vanilla JS. No frameworks, no build step for the frontend.
 
