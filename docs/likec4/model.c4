@@ -1,0 +1,125 @@
+specification {
+  element actor {
+    style {
+      shape person
+      color amber
+    }
+  }
+  element system {
+    style {
+      shape rectangle
+      color indigo
+    }
+  }
+  element component {
+    style {
+      shape rectangle
+      color sky
+    }
+  }
+  element database {
+    style {
+      shape storage
+      color slate
+    }
+  }
+  element service {
+    style {
+      shape rectangle
+      color green
+    }
+  }
+  element queue {
+    style {
+      shape queue
+      color secondary
+    }
+  }
+  element browser {
+    style {
+      shape browser
+      color muted
+    }
+  }
+
+}
+
+model {
+
+  human = actor 'Human' {
+    description 'Project owner — creates items, reviews specs, approves work'
+  }
+
+  agentWorker = actor 'Coder Bot' {
+    description 'Claude agent dispatched by orchestrator to implement work items'
+  }
+
+  tracker = system 'Liz Tracker' {
+    description 'Project management tracker with kanban UI, REST API, MCP tools, and automated orchestrator'
+
+    dashboard = browser 'Dashboard UI' {
+      description 'Kanban board — vanilla JS, dark theme, drag-and-drop (~13k lines)'
+    }
+
+    api = component 'REST API' {
+      description 'HTTP server on port 1000 — serves dashboard, REST endpoints, MCP routing'
+    }
+
+    mcpServer = component 'MCP Server' {
+      description 'Streamable HTTP MCP endpoint (/mcp) — stateless tool definitions for AI agents'
+    }
+
+    db = component 'Database Layer' {
+      description 'SQLite CRUD, schema migrations, events, actor classification, approval provenance'
+    }
+
+    sqlite = database 'SQLite DB' {
+      description 'store/tracker.db — WAL mode. Tables: projects, work_items, comments, transitions, watchers, dependencies, execution_audits'
+    }
+
+    orchestrator = component 'Orchestrator' {
+      description 'Polls for approved items, dispatches to OpenCode, monitors via SSE, circuit breaker, per-item retry limits'
+    }
+
+    security = component 'Security Layer' {
+      description 'Actor classification, approval provenance, description integrity (SHA-256), prompt hardening, blocked file patterns'
+    }
+
+    safeRestart = component 'Safe Restart' {
+      description 'Waits for active sessions before restarting — prevents interrupting running agents'
+    }
+  }
+
+  opencode = service 'OpenCode Server' {
+    description 'AI coding session server — creates sessions, runs agents, streams events via SSE'
+  }
+
+  launchd = service 'launchd' {
+    description 'macOS service manager — runs com.tracker.server and com.opencode.server'
+  }
+
+  // ── Relationships ──
+
+  human -> tracker.dashboard 'Manages work items, reviews, approves'
+  human -> tracker.mcpServer 'Uses MCP tools via Claude Desktop'
+
+  tracker.dashboard -> tracker.api 'fetch() API calls'
+  tracker.api -> tracker.db 'CRUD operations'
+  tracker.api -> tracker.mcpServer 'Routes /mcp requests'
+  tracker.mcpServer -> tracker.db 'Tool implementations'
+  tracker.db -> tracker.sqlite 'SQL queries (better-sqlite3)'
+  tracker.db -> tracker.security 'classifyActor(), checkApproval()'
+
+  tracker.orchestrator -> tracker.db 'getDispatchableItems(), update session status'
+  tracker.orchestrator -> tracker.security 'Verify approval provenance + description integrity'
+  tracker.orchestrator -> opencode 'Create sessions, send prompts via SDK'
+  tracker.orchestrator -> opencode 'Monitor progress via SSE'
+
+  agentWorker -> tracker.mcpServer 'State changes, comments, lock/unlock via MCP tools'
+  opencode -> agentWorker 'Spawns coder bot sessions'
+
+  launchd -> tracker.api 'Manages com.tracker.server process'
+  launchd -> opencode 'Manages com.opencode.server process'
+  tracker.safeRestart -> launchd 'launchctl kickstart (after sessions drain)'
+  tracker.safeRestart -> tracker.orchestrator 'Pause before restart, resume on cancel'
+}

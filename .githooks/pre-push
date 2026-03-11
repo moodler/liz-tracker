@@ -1,0 +1,28 @@
+#!/bin/sh
+# pre-push hook for ~/tracker
+#
+# Runs the full test suite before every git push.
+# If tests fail, the push is blocked.
+#
+# This hook is committed to the repo via .githooks/ so it's versioned
+# alongside the code. To activate it, run once per clone:
+#   git config core.hooksPath .githooks
+#
+# Note: Uses Node 25 (the version tracker is built with). If you get a
+# "node not found" error, adjust the PATH below to match your setup.
+
+export PATH="/opt/homebrew/opt/node@25/bin:$PATH"
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo "Running tests before push..."
+npm test
+
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ Tests failed — push blocked. Fix the failures above and try again."
+  echo "   To skip tests (not recommended): git push --no-verify"
+  exit 1
+fi
+
+echo "✅ All tests passed."

@@ -1,0 +1,86 @@
+views {
+
+  view index of tracker {
+    title 'Liz Tracker — System Architecture'
+
+    include *
+
+    include
+      human,
+      agentWorker,
+      opencode,
+      launchd
+
+    include
+      human -> tracker,
+      agentWorker -> tracker.mcpServer,
+      tracker.orchestrator -> opencode,
+      opencode -> agentWorker,
+      launchd -> tracker.api,
+      launchd -> opencode
+  }
+
+  view landscape {
+    title 'Liz Tracker — Landscape'
+
+    include
+      human,
+      agentWorker,
+      tracker,
+      opencode,
+      launchd
+
+    include
+      human -> tracker,
+      agentWorker -> tracker,
+      tracker -> opencode,
+      opencode -> agentWorker,
+      launchd -> tracker,
+      launchd -> opencode
+  }
+
+  view orchestratorFlow of tracker.orchestrator {
+    title 'Orchestrator — Dispatch Flow'
+
+    include *
+    include
+      tracker.orchestrator,
+      tracker.db,
+      tracker.security,
+      tracker.sqlite,
+      opencode,
+      agentWorker,
+      tracker.mcpServer,
+      tracker.safeRestart
+
+    include
+      tracker.orchestrator -> *,
+      * -> tracker.orchestrator,
+      agentWorker -> tracker.mcpServer,
+      opencode -> agentWorker,
+      tracker.db -> tracker.sqlite,
+      tracker.db -> tracker.security,
+      tracker.safeRestart -> tracker.orchestrator
+  }
+
+  view securityView of tracker.security {
+    title 'Security — Approval & Dispatch Integrity'
+
+    include *
+    include
+      human,
+      agentWorker,
+      tracker.security,
+      tracker.db,
+      tracker.orchestrator,
+      tracker.mcpServer,
+      opencode
+
+    include
+      tracker.db -> tracker.security,
+      tracker.orchestrator -> tracker.security,
+      human -> tracker,
+      agentWorker -> tracker.mcpServer
+  }
+
+}

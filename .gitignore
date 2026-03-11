@@ -1,0 +1,12 @@
+.env
+node_modules/
+dist/
+store/*.db
+store/*.db-shm
+store/*.db-wal
+store/auth_token
+store/attachments/
+logs/
+*.log
+.DS_Store
+.tracker_lock
