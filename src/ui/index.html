@@ -6396,6 +6396,31 @@
       .song-lyrics-toolbar .toolbar-spacer {
         flex: 1;
       }
+      .copy-btn-wrap {
+        position: relative;
+        display: inline-block;
+      }
+      .copy-popup {
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-top: 6px;
+        padding: 4px 10px;
+        background: var(--bg-accent, #1e293b);
+        border: 1px solid var(--highlight, #6366f1);
+        color: var(--highlight, #6366f1);
+        font-size: 0.72rem;
+        border-radius: var(--radius-sm, 4px);
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s;
+        z-index: 10;
+      }
+      .copy-popup.show {
+        opacity: 1;
+      }
       .song-lyrics-editor {
         flex: 1;
         overflow-y: auto;
@@ -11107,7 +11132,7 @@
                   </div>
                   <button class="space-btn song-revert-btn" id="songRevertBtn" title="Revert to this version" style="display:none;">Revert</button>
                   <div class="toolbar-spacer"></div>
-                  <button class="space-btn" id="songCopyBtn" title="Copy lyrics to clipboard">Copy</button>
+                  <span class="copy-btn-wrap"><button class="space-btn" id="songCopyBtn" title="Copy lyrics to clipboard">Copy</button><span class="copy-popup" id="songCopyPopup">Copied!</span></span>
                   <button class="space-btn" id="songPreviewToggle" title="Toggle preview">Preview</button>
                   <span class="song-save-indicator" id="songSaveIndicator"></span>
                 </div>
@@ -11217,10 +11242,11 @@
             }
           });
 
-          // Copy button
+          // Copy button — copies full description/artifact to clipboard
           $("#songCopyBtn").addEventListener("click", () => {
             navigator.clipboard.writeText(textarea.value).then(() => {
-              toast("Lyrics copied to clipboard", "success");
+              const popup = $("#songCopyPopup");
+              if (popup) { popup.classList.add("show"); setTimeout(() => popup.classList.remove("show"), 1800); }
             }).catch(() => {
               toast("Failed to copy", "error");
             });
@@ -11743,7 +11769,7 @@
                   <button class="space-btn song-revert-btn" id="textRevertBtn" title="Revert to this version" style="display:none;">Revert</button>
                   <div class="toolbar-spacer"></div>
                   <span class="text-word-count" id="textWordCount"></span>
-                  <button class="space-btn" id="textCopyBtn" title="Copy text to clipboard">Copy</button>
+                  <span class="copy-btn-wrap"><button class="space-btn" id="textCopyBtn" title="Copy text to clipboard">Copy</button><span class="copy-popup" id="textCopyPopup">Copied!</span></span>
                   <button class="space-btn" id="textPreviewToggle" title="Toggle preview">Preview</button>
                   <span class="text-save-indicator" id="textSaveIndicator"></span>
                 </div>
@@ -11813,10 +11839,11 @@
             }
           });
 
-          // Copy button
+          // Copy button — copies full description/artifact to clipboard
           $("#textCopyBtn").addEventListener("click", () => {
             navigator.clipboard.writeText(textarea.value).then(() => {
-              toast("Text copied to clipboard", "success");
+              const popup = $("#textCopyPopup");
+              if (popup) { popup.classList.add("show"); setTimeout(() => popup.classList.remove("show"), 1800); }
             }).catch(() => {
               toast("Failed to copy", "error");
             });
