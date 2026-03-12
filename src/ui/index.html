@@ -1604,6 +1604,31 @@
       }
 
       /* ── Comments ── */
+      .comment-sort-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .comment-sort-header h3 {
+        margin-bottom: 0 !important;
+      }
+      .comment-sort-btn {
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--text-dim);
+        font-size: 0.7rem;
+        padding: 2px 7px;
+        border-radius: 4px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        transition: color 0.15s, border-color 0.15s;
+      }
+      .comment-sort-btn:hover {
+        color: var(--text);
+        border-color: var(--text-dim);
+      }
       .comment-thread {
         display: flex;
         flex-direction: column;
@@ -8084,7 +8109,12 @@
           </div>
         </div>
         <div class="detail-section">
-          <h3>Comments</h3>
+          <div class="comment-sort-header">
+            <h3>Comments</h3>
+            <button class="comment-sort-btn" id="commentSortBtn" title="Toggle comment sort order">
+              <span id="commentSortLabel">oldest first</span> ↕
+            </button>
+          </div>
           <div class="comment-thread" id="detailComments"></div>
           <div class="comment-form">
             <textarea
@@ -8312,6 +8342,7 @@
         const DEFAULT_AUTHOR = "dashboard";
         const STORAGE_TOKEN_KEY = "tracker_auth_token";
         const STORAGE_SORT_KEY = "tracker_sort_mode";
+        const STORAGE_COMMENT_SORT_KEY = "tracker_comment_sort";
         const THEMES = ["midnight", "ocean", "forest", "sunset", "lavender", "crimson", "amber", "teal", "rose", "slate"];
         const THEME_HIGHLIGHT = {
           midnight: "#e94560",
@@ -13885,12 +13916,15 @@
             if (detailItemKey) {
               history.replaceState(null, "", `#/item/${detailItemKey}`);
             }
-            // Scroll to last comment if comments exist
+            // Scroll to newest comment if comments exist
             if (item.comments && item.comments.length) {
+              const commentSort = localStorage.getItem(STORAGE_COMMENT_SORT_KEY) || "asc";
               requestAnimationFrame(() => {
-                const lastComment = $("#detailComments").lastElementChild;
-                if (lastComment) {
-                  lastComment.scrollIntoView({ block: "end", behavior: "instant" });
+                const target = commentSort === "desc"
+                  ? $("#detailComments").firstElementChild
+                  : $("#detailComments").lastElementChild;
+                if (target) {
+                  target.scrollIntoView({ block: "end", behavior: "instant" });
                 }
               });
             }
@@ -14139,10 +14173,14 @@
           approveBtn.style.display = showApprove ? "" : "none";
 
           // Comments
+          const commentSortOrder = localStorage.getItem(STORAGE_COMMENT_SORT_KEY) || "asc";
+          const sortLabel = $("#commentSortLabel");
+          if (sortLabel) sortLabel.textContent = commentSortOrder === "asc" ? "oldest first" : "newest first";
           const commentsEl = $("#detailComments");
           commentsEl.innerHTML = "";
           if (item.comments && item.comments.length) {
-            item.comments.forEach((c) => {
+            const sortedComments = commentSortOrder === "desc" ? [...item.comments].reverse() : item.comments;
+            sortedComments.forEach((c) => {
               const div = document.createElement("div");
               div.className = "comment-item";
               div.innerHTML = `
@@ -14881,6 +14919,19 @@
             loadTracker();
           } catch (e) {
             toast("Failed to delete: " + e.message, "error");
+          }
+        });
+
+        // Toggle comment sort order
+        $("#commentSortBtn").addEventListener("click", async () => {
+          const current = localStorage.getItem(STORAGE_COMMENT_SORT_KEY) || "asc";
+          const next = current === "asc" ? "desc" : "asc";
+          try { localStorage.setItem(STORAGE_COMMENT_SORT_KEY, next); } catch {}
+          if (detailItemId) {
+            try {
+              const item = await apiGet(`/items/${detailItemId}`);
+              populateDetail(item);
+            } catch {}
           }
         });
 
