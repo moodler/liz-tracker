@@ -8,7 +8,7 @@
  * - OpenCode orchestrator (optional, ORCHESTRATOR_ENABLED=true)
  */
 
-import { initTrackerDatabase, onTrackerEvent, getWorkItem, getWorkItemKey, getProject, classifyActor, listWatchers } from "./db.js";
+import { initTrackerDatabase, onTrackerEvent, getWorkItem, getWorkItemKey, getProject, classifyActor } from "./db.js";
 import { startTrackerServer } from "./api.js";
 import { PORT, ORCHESTRATOR_ENABLED, TRACKER_API_TOKEN, AUTH_TOKEN_IS_NEW, WEBHOOK_URL, WEBHOOK_SECRET } from "./config.js";
 import { startOrchestrator, stopOrchestrator } from "./orchestrator.js";
@@ -51,7 +51,7 @@ if (WEBHOOK_URL) {
  * Qualifying criteria (any of):
  * 1. Any comment by a human on a NON-ORCHESTRATION project (e.g. Writing, Martin, Harmoni)
  * 2. Any comment containing @harmoni mention
- * 3. Any human comment on an item where Harmoni is creator, assignee, or watcher
+ * 3. Any human comment on an item where Harmoni is the creator or assignee
  *    (ensures orchestration projects like App still route to Harmoni when she's involved)
  *
  * Bot/agent/system comments are always excluded (loop prevention).
@@ -81,17 +81,14 @@ function startCommentWebhook(): void {
     // Check qualifying criteria:
     // 1. Any human comment on a non-orchestration project (e.g. Writing, Martin, Harmoni)
     // 2. Any comment containing @harmoni mention
-    // 3. Any human comment on an item where Harmoni is creator, assignee, or watcher
+    // 3. Any human comment on an item where Harmoni is the creator or assignee
     //    (ensures comments on orchestration projects like App still reach Harmoni
     //     when she has a stake in the item — fixes TRACK-175)
     const isNonOrchestrationProject = project.orchestration === 0;
     const hasMention = /@harmoni\b/i.test(body);
-    const harmoniInvolved = (() => {
-      if (item.created_by?.toLowerCase() === "harmoni") return true;
-      if (item.assignee?.toLowerCase() === "harmoni") return true;
-      const watchers = listWatchers(work_item_id);
-      return watchers.some((w) => w.entity.toLowerCase() === "harmoni");
-    })();
+    const harmoniInvolved =
+      item.created_by?.toLowerCase() === "harmoni" ||
+      item.assignee?.toLowerCase() === "harmoni";
 
     if (!isNonOrchestrationProject && !hasMention && !harmoniInvolved) return;
 
