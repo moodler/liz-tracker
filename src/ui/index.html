@@ -7379,13 +7379,14 @@
           flex-direction: column;
         }
         .scheduled-dashboard {
-          flex: 0 0 55%;
+          flex: 0 0 50%;
           border-right: none;
           border-bottom: 1px solid var(--border);
           padding: 12px;
+          -webkit-overflow-scrolling: touch;
         }
         .scheduled-sidebar {
-          flex: 0 0 45%;
+          flex: 0 0 50%;
         }
       }
 
@@ -13691,14 +13692,20 @@
         /** Submit a comment on a scheduled item. */
         async function submitScheduledComment() {
           const input = $("#scheduledCommentInput");
-          if (!input || !input.value.trim() || !spaceItemId) return;
+          if (!input) return;
           const body = input.value.trim();
-          input.value = "";
+          if (!body || !spaceItemId) return;
+          const author = (() => {
+            try { return localStorage.getItem(STORAGE_AUTHOR_KEY) || DEFAULT_AUTHOR; }
+            catch { return DEFAULT_AUTHOR; }
+          })();
           try {
-            await apiPost(`/items/${spaceItemId}/comments`, { author: DEFAULT_AUTHOR, body });
+            await apiPost(`/items/${spaceItemId}/comments`, { author, body });
+            input.value = "";
             const item = await apiGet(`/items/${spaceItemId}`);
             spaceItemData = item;
             renderScheduledDiscussion(item.comments || []);
+            toast("Comment posted");
           } catch (e) {
             toast("Failed to post comment: " + e.message, "error");
           }
