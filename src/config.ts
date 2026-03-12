@@ -56,8 +56,13 @@ export const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "";
  *   /workspace/project → {ASSISTANT_PROJECT_ROOT}/
  *   /workspace/ipc     → {ASSISTANT_PROJECT_ROOT}/data/ipc/{groupname}/
  */
-export const ASSISTANT_PROJECT_ROOT =
-  process.env.ASSISTANT_PROJECT_ROOT || path.join(os.homedir(), "assistant");
+export const ASSISTANT_PROJECT_ROOT = (() => {
+  const raw = process.env.ASSISTANT_PROJECT_ROOT || path.join(os.homedir(), "assistant");
+  // Expand leading ~ to the user's home directory (shells expand ~ but Node.js does not)
+  if (raw.startsWith("~/")) return path.join(os.homedir(), raw.slice(2));
+  if (raw === "~") return os.homedir();
+  return raw;
+})();
 
 // ── Orchestrator config ──
 

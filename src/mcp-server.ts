@@ -9,6 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import http from "http";
+import os from "os";
 
 import {
   createProject,
@@ -698,19 +699,24 @@ function createMcpServer(): McpServer {
       const item = getWorkItemByKey(args.item_id) || getWorkItem(args.item_id);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
 
+      // Expand leading ~ to the user's home directory (shells expand ~ but Node.js does not)
+      const filePath = args.file_path.startsWith("~/")
+        ? path.join(os.homedir(), args.file_path.slice(2))
+        : args.file_path;
+
       // Validate file_path is absolute
-      if (!path.isAbsolute(args.file_path)) {
+      if (!path.isAbsolute(filePath)) {
         return { content: [{ type: "text", text: "Error: file_path must be an absolute path" }] };
       }
 
       // Translate container paths (/workspace/...) to host paths
-      let resolvedPath = args.file_path;
+      let resolvedPath = filePath;
       let wasTranslated = false;
-      const translation = translateContainerPath(args.file_path);
+      const translation = translateContainerPath(filePath);
       if (translation) {
         resolvedPath = translation.hostPath;
         wasTranslated = true;
-        logger.info({ containerPath: args.file_path, hostPath: resolvedPath }, "Translated container path to host path");
+        logger.info({ containerPath: filePath, hostPath: resolvedPath }, "Translated container path to host path");
       }
 
       if (!fs.existsSync(resolvedPath)) {
@@ -718,8 +724,8 @@ function createMcpServer(): McpServer {
           return {
             content: [{
               type: "text",
-              text: `Error: File not found after container path translation.\n` +
-                `  Container path: ${args.file_path}\n` +
+               text: `Error: File not found after container path translation.\n` +
+                `  Container path: ${filePath}\n` +
                 `  Resolved to: ${resolvedPath}\n` +
                 `  Liz project root: ${ASSISTANT_PROJECT_ROOT}\n\n` +
                 `Tip: The path was translated from container namespace to host filesystem. ` +
@@ -727,7 +733,7 @@ function createMcpServer(): McpServer {
             }],
           };
         }
-        return { content: [{ type: "text", text: `Error: File not found: ${args.file_path}` }] };
+        return { content: [{ type: "text", text: `Error: File not found: ${filePath}` }] };
       }
 
       const stat = fs.statSync(resolvedPath);
@@ -761,7 +767,7 @@ function createMcpServer(): McpServer {
         uploaded_by: args.uploaded_by || "Coder",
       });
 
-      const translationNote = wasTranslated ? ` (translated from container path: ${args.file_path})` : "";
+      const translationNote = wasTranslated ? ` (translated from container path: ${filePath})` : "";
       return {
         content: [{
           type: "text",
