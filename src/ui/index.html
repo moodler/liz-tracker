@@ -6519,8 +6519,14 @@
         border-left: 3px solid var(--highlight);
       }
       .text-comment[data-author="Coder"],
-      .text-comment[data-author="coder"] {
+      .text-comment[data-author="coder"],
+      .text-comment[data-author="Claude"],
+      .text-comment[data-author="claude"] {
         border-left: 3px solid #667eea;
+      }
+      .text-comment[data-author="orchestrator"],
+      .text-comment[data-author="System"] {
+        border-left: 3px solid #636e72;
       }
       .text-comment-header {
         display: flex;
@@ -7312,6 +7318,59 @@
       .scheduled-edit-actions .cancel-btn {
         background: none;
         color: var(--text-dim);
+      }
+
+      /* Scheduled: edit mode toggle (form vs cron) */
+      .scheduled-mode-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      .scheduled-mode-toggle-label {
+        font-size: 0.78rem;
+        color: var(--text-dim);
+        font-weight: 500;
+      }
+      .scheduled-mode-toggle-switch {
+        position: relative;
+        width: 36px;
+        height: 20px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        cursor: pointer;
+        transition: background 0.2s;
+        flex-shrink: 0;
+      }
+      .scheduled-mode-toggle-switch.active {
+        background: var(--highlight);
+      }
+      .scheduled-mode-toggle-switch::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        background: #fff;
+        border-radius: 50%;
+        transition: transform 0.2s;
+      }
+      .scheduled-mode-toggle-switch.active::after {
+        transform: translateX(16px);
+      }
+      .scheduled-cron-input-help {
+        font-size: 0.75rem;
+        color: var(--text-dim);
+        margin-top: 2px;
+        line-height: 1.4;
+      }
+      .scheduled-cron-input-help code {
+        background: rgba(99, 110, 114, 0.2);
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        font-size: 0.85em;
       }
 
       /* Mobile: scheduled space responsive */
@@ -13608,22 +13667,24 @@
         function renderScheduledDiscussion(comments) {
           const thread = $("#scheduledDiscussionThread");
           if (!thread) return;
+          thread.innerHTML = "";
           if (!comments || !comments.length) {
-            thread.innerHTML = '<div class="engagement-empty">No run history yet.</div>';
+            thread.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:40px 20px;font-size:0.85rem;">No run history yet.</div>';
             return;
           }
-          thread.innerHTML = comments.map(c => {
-            const date = new Date(c.created_at);
-            const timeStr = date.toLocaleString("en-AU", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Australia/Perth" });
-            const isRunLog = c.author === "Scheduler" || c.author === "scheduler";
-            return `<div class="text-discussion-msg ${isRunLog ? "system-msg" : ""}">
-              <div class="text-discussion-meta">
-                <span class="text-discussion-author">${esc(c.author || "System")}</span>
-                <span class="text-discussion-time">${timeStr}</span>
+          comments.forEach(c => {
+            const div = document.createElement("div");
+            div.className = "text-comment";
+            div.dataset.author = c.author || "System";
+            div.innerHTML = `
+              <div class="text-comment-header">
+                <span class="text-comment-author">${esc(c.author || "System")}</span>
+                <span class="text-comment-time">${formatTime(c.created_at)}</span>
               </div>
-              <div class="text-discussion-body">${renderMarkdown(c.body || "")}</div>
-            </div>`;
-          }).join("");
+              <div class="text-comment-body">${renderMarkdown(c.body || "")}</div>
+            `;
+            thread.appendChild(div);
+          });
           thread.scrollTop = thread.scrollHeight;
         }
 
@@ -13682,38 +13743,51 @@
           const sched = sd.schedule;
           const allDays = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
           const selectedDays = sched.days_of_week || [];
+          const hasCronOverride = !!sched.cron_override;
 
           body.innerHTML = `
             <div class="scheduled-edit-form">
-              <div>
-                <label>Frequency</label>
-                <select id="schedEditFrequency">
-                  <option value="once" ${sched.frequency === "once" ? "selected" : ""}>Once</option>
-                  <option value="hourly" ${sched.frequency === "hourly" ? "selected" : ""}>Hourly</option>
-                  <option value="daily" ${sched.frequency === "daily" ? "selected" : ""}>Daily</option>
-                  <option value="weekly" ${sched.frequency === "weekly" ? "selected" : ""}>Weekly</option>
-                  <option value="monthly" ${sched.frequency === "monthly" ? "selected" : ""}>Monthly</option>
-                  <option value="manual" ${sched.frequency === "manual" ? "selected" : ""}>Manual</option>
-                  <option value="custom" ${sched.frequency === "custom" ? "selected" : ""}>Custom (cron)</option>
-                </select>
+              <div class="scheduled-mode-toggle">
+                <span class="scheduled-mode-toggle-label">Form</span>
+                <div class="scheduled-mode-toggle-switch ${hasCronOverride ? "active" : ""}" id="schedEditModeToggle"></div>
+                <span class="scheduled-mode-toggle-label">Cron</span>
               </div>
-              <div id="schedEditTimeRow">
-                <label>Time</label>
-                <input type="time" id="schedEditTime" value="${sched.time || "07:00"}" />
-              </div>
-              <div id="schedEditDaysRow" style="display:${sched.frequency === "weekly" ? "block" : "none"}">
-                <label>Days of week</label>
-                <div class="scheduled-days-row">
-                  ${allDays.map(d => `
-                    <label class="scheduled-day-check">
-                      <input type="checkbox" value="${d}" ${selectedDays.includes(d) ? "checked" : ""}> ${d.charAt(0).toUpperCase() + d.slice(1, 3)}
-                    </label>
-                  `).join("")}
+              <div id="schedEditFormFields" style="display:${hasCronOverride ? "none" : "block"}">
+                <div>
+                  <label>Frequency</label>
+                  <select id="schedEditFrequency">
+                    <option value="once" ${sched.frequency === "once" ? "selected" : ""}>Once</option>
+                    <option value="hourly" ${sched.frequency === "hourly" ? "selected" : ""}>Hourly</option>
+                    <option value="daily" ${sched.frequency === "daily" ? "selected" : ""}>Daily</option>
+                    <option value="weekly" ${sched.frequency === "weekly" ? "selected" : ""}>Weekly</option>
+                    <option value="monthly" ${sched.frequency === "monthly" ? "selected" : ""}>Monthly</option>
+                    <option value="manual" ${sched.frequency === "manual" ? "selected" : ""}>Manual</option>
+                  </select>
+                </div>
+                <div id="schedEditTimeRow">
+                  <label>Time</label>
+                  <input type="time" id="schedEditTime" value="${sched.time || "07:00"}" />
+                </div>
+                <div id="schedEditDaysRow" style="display:${sched.frequency === "weekly" ? "block" : "none"}">
+                  <label>Days of week</label>
+                  <div class="scheduled-days-row">
+                    ${allDays.map(d => `
+                      <label class="scheduled-day-check">
+                        <input type="checkbox" value="${d}" ${selectedDays.includes(d) ? "checked" : ""}> ${d.charAt(0).toUpperCase() + d.slice(1, 3)}
+                      </label>
+                    `).join("")}
+                  </div>
                 </div>
               </div>
-              <div id="schedEditCronRow" style="display:${sched.frequency === "custom" ? "block" : "none"}">
-                <label>Cron expression</label>
-                <input type="text" id="schedEditCron" value="${esc(sched.cron_override || "")}" placeholder="*/30 * * * *" />
+              <div id="schedEditCronFields" style="display:${hasCronOverride ? "block" : "none"}">
+                <div>
+                  <label>Cron expression</label>
+                  <input type="text" id="schedEditCron" value="${esc(sched.cron_override || "")}" placeholder="0 4 1-3 * *" />
+                  <div class="scheduled-cron-input-help">
+                    Format: <code>min hour day month weekday</code><br>
+                    Examples: <code>0 4 1-3 * *</code> &nbsp; <code>*/30 * * * *</code> &nbsp; <code>0 9 * * 1-5</code>
+                  </div>
+                </div>
               </div>
               <div id="schedEditTimezoneRow">
                 <label>Timezone</label>
@@ -13726,33 +13800,72 @@
             </div>
           `;
 
-          // Show/hide fields based on frequency
+          let cronMode = hasCronOverride;
+          const modeToggle = $("#schedEditModeToggle");
+          const formFields = $("#schedEditFormFields");
+          const cronFields = $("#schedEditCronFields");
+
+          // Toggle between form and cron mode
+          modeToggle.addEventListener("click", () => {
+            cronMode = !cronMode;
+            modeToggle.classList.toggle("active", cronMode);
+            formFields.style.display = cronMode ? "none" : "block";
+            cronFields.style.display = cronMode ? "block" : "none";
+            // When switching to cron mode, pre-fill with effective cron from form fields
+            if (cronMode) {
+              const cronInput = $("#schedEditCron");
+              if (!cronInput.value) {
+                const f = $("#schedEditFrequency").value;
+                const t = $("#schedEditTime").value || "07:00";
+                const [h, m] = t.split(":").map(Number);
+                let autoCron = "";
+                if (f === "hourly") autoCron = "0 * * * *";
+                else if (f === "daily") autoCron = m + " " + h + " * * *";
+                else if (f === "weekly") {
+                  const dayMap = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+                  const checked = [];
+                  $$("#schedEditDaysRow input[type=checkbox]:checked").forEach(cb => checked.push(dayMap[cb.value]));
+                  autoCron = m + " " + h + " * * " + (checked.length ? checked.join(",") : "*");
+                } else if (f === "monthly") autoCron = m + " " + h + " 1 * *";
+                if (autoCron) cronInput.value = autoCron;
+              }
+            }
+          });
+
+          // Show/hide form fields based on frequency
           const freqSelect = $("#schedEditFrequency");
           freqSelect.addEventListener("change", () => {
             const f = freqSelect.value;
-            $("#schedEditTimeRow").style.display = (f === "manual" || f === "custom" || f === "hourly") ? "none" : "block";
+            $("#schedEditTimeRow").style.display = (f === "manual" || f === "hourly") ? "none" : "block";
             $("#schedEditDaysRow").style.display = f === "weekly" ? "block" : "none";
-            $("#schedEditCronRow").style.display = f === "custom" ? "block" : "none";
           });
           // Trigger initial visibility
           freqSelect.dispatchEvent(new Event("change"));
 
           // Save
           $("#schedEditSave").addEventListener("click", () => {
-            const frequency = freqSelect.value;
-            const time = $("#schedEditTime").value || "07:00";
             const timezone = $("#schedEditTimezone").value || "Australia/Perth";
-            const cronOverride = frequency === "custom" ? ($("#schedEditCron").value || null) : null;
-            let daysOfWeek = null;
-            if (frequency === "weekly") {
-              daysOfWeek = [];
-              $$("#schedEditDaysRow input[type=checkbox]:checked").forEach(cb => daysOfWeek.push(cb.value));
-            }
             const currentData = parseScheduledData(spaceItemData);
-            const newData = {
-              schedule: { frequency, time, days_of_week: daysOfWeek, timezone, cron_override: cronOverride },
-              status: currentData.status,
-            };
+            let newData;
+            if (cronMode) {
+              const cronExpr = ($("#schedEditCron").value || "").trim();
+              newData = {
+                schedule: { frequency: "custom", time: sched.time || "07:00", days_of_week: null, timezone, cron_override: cronExpr || null },
+                status: currentData.status,
+              };
+            } else {
+              const frequency = freqSelect.value;
+              const time = $("#schedEditTime").value || "07:00";
+              let daysOfWeek = null;
+              if (frequency === "weekly") {
+                daysOfWeek = [];
+                $$("#schedEditDaysRow input[type=checkbox]:checked").forEach(cb => daysOfWeek.push(cb.value));
+              }
+              newData = {
+                schedule: { frequency, time, days_of_week: daysOfWeek, timezone, cron_override: null },
+                status: currentData.status,
+              };
+            }
             saveScheduledSpaceData(newData);
           });
 
