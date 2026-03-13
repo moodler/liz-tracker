@@ -14899,6 +14899,20 @@
           const sortLabel = $("#commentSortLabel");
           if (sortLabel) sortLabel.textContent = commentSortOrder === "asc" ? "oldest first" : "newest first";
           const commentsEl = $("#detailComments");
+          // Move comment form above or below the thread based on sort order
+          const commentFormEl = commentsEl?.parentElement?.querySelector(".comment-form");
+          if (commentFormEl && commentsEl) {
+            const parent = commentsEl.parentElement;
+            if (commentSortOrder === "desc") {
+              // Newest first: form at top (before the thread)
+              parent.insertBefore(commentFormEl, commentsEl);
+            } else {
+              // Oldest first: form at bottom (after the thread)
+              if (commentsEl.nextSibling !== commentFormEl) {
+                commentsEl.after(commentFormEl);
+              }
+            }
+          }
           commentsEl.innerHTML = "";
           if (item.comments && item.comments.length) {
             const sortedComments = commentSortOrder === "desc" ? [...item.comments].reverse() : item.comments;
