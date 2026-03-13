@@ -1128,6 +1128,18 @@
         text-decoration: underline;
         color: #a0d4ff;
       }
+      .card-schedule {
+        font-size: 0.72rem;
+        color: var(--text-dim);
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .card-schedule .schedule-freq {
+        color: #74b9ff;
+        font-weight: 600;
+      }
 
       /* ── Detail Panel ── */
       .overlay {
@@ -5935,6 +5947,9 @@
         line-height: 1.4;
       }
       .density-compact .card-description {
+        display: none;
+      }
+      .density-compact .card-schedule {
         display: none;
       }
       .density-compact .card-meta {
@@ -10888,6 +10903,14 @@
     ${badgeHtml}
     ${keyHtml || spaceIcon ? `<div class="card-key-row">${keyHtml}${spaceIcon}</div>` : ""}
     <div class="card-title">${esc(item.title)}</div>
+    ${item.space_type === "scheduled" && item.space_data ? (() => {
+      try {
+        const sd = parseScheduledData(item);
+        const info = describeSchedule(sd.schedule);
+        if (info.title === "Manual") return '<div class="card-schedule">\u23f0 <span class="schedule-freq">Manual</span></div>';
+        return '<div class="card-schedule">\u23f0 <span class="schedule-freq">' + esc(info.title) + '</span> ' + esc(info.detail) + '</div>';
+      } catch { return ""; }
+    })() : ""}
     ${desc}
     <div class="card-meta">
       <span class="priority-badge priority-${item.priority}">${item.priority}</span>
@@ -11524,6 +11547,14 @@
             ${badgeHtml}
             ${keyHtml}
             <div class="card-title">${esc(item.title)}</div>
+            ${item.space_type === "scheduled" && item.space_data ? (() => {
+              try {
+                const sd = parseScheduledData(item);
+                const info = describeSchedule(sd.schedule);
+                if (info.title === "Manual") return '<div class="card-schedule">\u23f0 <span class="schedule-freq">Manual</span></div>';
+                return '<div class="card-schedule">\u23f0 <span class="schedule-freq">' + esc(info.title) + '</span> ' + esc(info.detail) + '</div>';
+              } catch { return ""; }
+            })() : ""}
             ${desc}
             <div class="card-meta">
               ${projectIndicator}
@@ -11821,6 +11852,14 @@
               ${sessionBadgeHtml}
             </div>
             <div class="today-card-title">${esc(item.title)}</div>
+            ${item.space_type === "scheduled" && item.space_data ? (() => {
+              try {
+                const sd = parseScheduledData(item);
+                const info = describeSchedule(sd.schedule);
+                if (info.title === "Manual") return '<div class="card-schedule">\u23f0 <span class="schedule-freq">Manual</span></div>';
+                return '<div class="card-schedule">\u23f0 <span class="schedule-freq">' + esc(info.title) + '</span> ' + esc(info.detail) + '</div>';
+              } catch { return ""; }
+            })() : ""}
             <div class="today-card-meta">
               ${projectIndicator}
               <span class="priority-badge priority-${item.priority}">${item.priority}</span>
