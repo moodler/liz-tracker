@@ -7679,6 +7679,103 @@
         font-size: 0.85em;
       }
 
+      /* Scheduled space: TODO and IGNORE list sections */
+      .scheduled-list-items {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .scheduled-list-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 6px 8px;
+        background: rgba(255, 255, 255, 0.04);
+        border-radius: var(--radius-sm);
+        font-size: 0.83rem;
+        color: var(--text);
+        line-height: 1.4;
+      }
+      .scheduled-list-item:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .scheduled-list-item-text {
+        flex: 1;
+        word-break: break-word;
+      }
+      .scheduled-list-item-actions {
+        display: flex;
+        gap: 2px;
+        flex-shrink: 0;
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+      .scheduled-list-item:hover .scheduled-list-item-actions {
+        opacity: 1;
+      }
+      .scheduled-list-item-actions button {
+        background: none;
+        border: none;
+        color: var(--text-dim);
+        cursor: pointer;
+        padding: 2px 4px;
+        font-size: 0.75rem;
+        border-radius: 3px;
+      }
+      .scheduled-list-item-actions button:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text);
+      }
+      .scheduled-list-add {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .scheduled-list-add input {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--text);
+        padding: 5px 8px;
+        font-size: 0.83rem;
+        outline: none;
+        font-family: inherit;
+      }
+      .scheduled-list-add input:focus {
+        border-color: var(--accent);
+      }
+      .scheduled-list-add button {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: var(--radius-sm);
+        padding: 5px 12px;
+        font-size: 0.78rem;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .scheduled-list-add button:hover {
+        filter: brightness(1.1);
+      }
+      .scheduled-list-empty {
+        color: var(--text-dim);
+        font-size: 0.8rem;
+        font-style: italic;
+        padding: 4px 0;
+      }
+      .scheduled-list-edit-input {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--accent);
+        border-radius: var(--radius-sm);
+        color: var(--text);
+        padding: 4px 6px;
+        font-size: 0.83rem;
+        outline: none;
+        font-family: inherit;
+      }
+
       /* Mobile: scheduled space responsive */
       @media (max-width: 768px) {
         .scheduled-space {
@@ -13999,6 +14096,8 @@
               last_duration_ms: null,
               run_count: 0,
             },
+            todo: [],
+            ignore: [],
           };
           if (!item.space_data) return defaults;
           try {
@@ -14018,11 +14117,15 @@
                   last_duration_ms: parsed.last_duration_ms || null,
                   run_count: parsed.run_count || 0,
                 },
+                todo: Array.isArray(parsed.todo) ? parsed.todo : [],
+                ignore: Array.isArray(parsed.ignore) ? parsed.ignore : [],
               };
             }
             return {
               schedule: { ...defaults.schedule, ...(parsed.schedule || {}) },
               status: { ...defaults.status, ...(parsed.status || {}) },
+              todo: Array.isArray(parsed.todo) ? parsed.todo : [],
+              ignore: Array.isArray(parsed.ignore) ? parsed.ignore : [],
             };
           } catch { return defaults; }
         }
@@ -14089,6 +14192,109 @@
           if (freq === "once") return null;
           if (freq === "manual") return null;
           return null;
+        }
+
+        /** Render a scheduled list section (TODO or IGNORE) as HTML. */
+        function renderScheduledListHtml(items, fieldName, icon, emptyText) {
+          const listHtml = items.length
+            ? items.map((text, i) => `
+                <div class="scheduled-list-item" data-field="${fieldName}" data-index="${i}">
+                  <span class="scheduled-list-item-text">${esc(text)}</span>
+                  <span class="scheduled-list-item-actions">
+                    <button class="scheduled-list-edit-btn" title="Edit">&#x270E;</button>
+                    <button class="scheduled-list-delete-btn" title="Delete">&#x2715;</button>
+                  </span>
+                </div>
+              `).join("")
+            : `<div class="scheduled-list-empty">${esc(emptyText)}</div>`;
+
+          return `
+            <div class="engagement-section">
+              <div class="engagement-section-header">
+                <span class="section-icon">${icon}</span>
+                <span class="section-title">${fieldName === "todo" ? "TODO" : "IGNORE"}</span>
+                <span class="section-toggle">&#x25BC;</span>
+              </div>
+              <div class="engagement-section-body">
+                <div class="scheduled-list-items" id="scheduledList_${fieldName}">
+                  ${listHtml}
+                </div>
+                <div class="scheduled-list-add">
+                  <input type="text" id="scheduledListInput_${fieldName}" placeholder="Add ${fieldName === "todo" ? "a task" : "an ignore rule"}..." />
+                  <button id="scheduledListAdd_${fieldName}">Add</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        /** Bind event listeners for a scheduled list section (TODO or IGNORE). */
+        function bindScheduledListEvents(fieldName) {
+          const addBtn = $(`#scheduledListAdd_${fieldName}`);
+          const addInput = $(`#scheduledListInput_${fieldName}`);
+
+          if (addBtn && addInput) {
+            const doAdd = async () => {
+              const text = addInput.value.trim();
+              if (!text || !spaceItemId) return;
+              const sd = parseScheduledData(spaceItemData);
+              sd[fieldName].push(text);
+              addInput.value = "";
+              await saveScheduledSpaceData(sd);
+            };
+            addBtn.addEventListener("click", doAdd);
+            addInput.addEventListener("keydown", (e) => {
+              if (e.key === "Enter") { e.preventDefault(); doAdd(); }
+            });
+          }
+
+          // Delegate edit/delete on list items
+          const listContainer = $(`#scheduledList_${fieldName}`);
+          if (listContainer) {
+            listContainer.addEventListener("click", async (e) => {
+              const btn = e.target.closest("button");
+              if (!btn) return;
+              const itemEl = btn.closest(".scheduled-list-item");
+              if (!itemEl) return;
+              const idx = parseInt(itemEl.dataset.index, 10);
+              const sd = parseScheduledData(spaceItemData);
+
+              if (btn.classList.contains("scheduled-list-delete-btn")) {
+                sd[fieldName].splice(idx, 1);
+                await saveScheduledSpaceData(sd);
+              } else if (btn.classList.contains("scheduled-list-edit-btn")) {
+                const textEl = itemEl.querySelector(".scheduled-list-item-text");
+                const currentText = sd[fieldName][idx];
+                const input = document.createElement("input");
+                input.type = "text";
+                input.className = "scheduled-list-edit-input";
+                input.value = currentText;
+                textEl.replaceWith(input);
+                input.focus();
+                input.select();
+
+                const commitEdit = async () => {
+                  const newText = input.value.trim();
+                  if (newText && newText !== currentText) {
+                    const freshSd = parseScheduledData(spaceItemData);
+                    freshSd[fieldName][idx] = newText;
+                    await saveScheduledSpaceData(freshSd);
+                  } else {
+                    // Revert — just re-render
+                    refreshScheduledDashboard(spaceItemData);
+                  }
+                };
+                input.addEventListener("blur", commitEdit);
+                input.addEventListener("keydown", (ev) => {
+                  if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+                  if (ev.key === "Escape") {
+                    input.removeEventListener("blur", commitEdit);
+                    refreshScheduledDashboard(spaceItemData);
+                  }
+                });
+              }
+            });
+          }
         }
 
         function renderSpaceScheduled(item) {
@@ -14173,6 +14379,9 @@
                     <span class="engagement-save-indicator" id="scheduledDescSaveIndicator"></span>
                   </div>
                 </div>
+
+                ${renderScheduledListHtml(sd.todo, "todo", "&#x2611;", "No tasks defined yet.")}
+                ${renderScheduledListHtml(sd.ignore, "ignore", "&#x1F6AB;", "No ignore rules defined yet.")}
               </div>
               <div class="scheduled-sidebar">
                 <div class="text-sidebar-tabs">
@@ -14263,6 +14472,10 @@
               scheduledSaveTimer = setTimeout(() => saveScheduledDescription(), 2000);
             });
           }
+
+          // Bind TODO and IGNORE list events
+          bindScheduledListEvents("todo");
+          bindScheduledListEvents("ignore");
         }
 
         /** Render discussion/run history thread. */
@@ -14460,6 +14673,8 @@
               newData = {
                 schedule: { frequency: "custom", time: sched.time || "07:00", days_of_week: null, timezone, cron_override: cronExpr || null },
                 status: currentData.status,
+                todo: currentData.todo,
+                ignore: currentData.ignore,
               };
             } else {
               const frequency = freqSelect.value;
@@ -14472,6 +14687,8 @@
               newData = {
                 schedule: { frequency, time, days_of_week: daysOfWeek, timezone, cron_override: null },
                 status: currentData.status,
+                todo: currentData.todo,
+                ignore: currentData.ignore,
               };
             }
             saveScheduledSpaceData(newData);
@@ -14566,6 +14783,9 @@
                 <span class="engagement-save-indicator" id="scheduledDescSaveIndicator"></span>
               </div>
             </div>
+
+            ${renderScheduledListHtml(sd.todo, "todo", "&#x2611;", "No tasks defined yet.")}
+            ${renderScheduledListHtml(sd.ignore, "ignore", "&#x1F6AB;", "No ignore rules defined yet.")}
           `;
 
           // Re-bind section collapse toggles
@@ -14592,6 +14812,10 @@
               scheduledSaveTimer = setTimeout(() => saveScheduledDescription(), 2000);
             });
           }
+
+          // Re-bind TODO and IGNORE list events
+          bindScheduledListEvents("todo");
+          bindScheduledListEvents("ignore");
         }
 
         // ── Detail Panel ──
