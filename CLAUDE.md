@@ -16,7 +16,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | File | Description |
 | --- | --- |
 | `src/index.ts` | Entry point — init DB, start server, optionally start orchestrator |
-| `src/config.ts` | Config from env vars / `.env` file: PORT, STORE_DIR, OPENCODE_SERVER_URL, OPENCODE_PUBLIC_URL, ORCHESTRATOR_ENABLED, ORCHESTRATOR_INTERVAL, OPENCODE_MAX_CONCURRENT, OPENCODE_MAX_PER_PROJECT |
+| `src/config.ts` | Config from env vars / `.env` file: PORT, STORE_DIR, TRACKER_PUBLIC_URL, OPENCODE_SERVER_URL, OPENCODE_PUBLIC_URL, ORCHESTRATOR_ENABLED, ORCHESTRATOR_INTERVAL, OPENCODE_MAX_CONCURRENT, OPENCODE_MAX_PER_PROJECT |
 | `src/logger.ts` | Pino logger with pino-pretty |
 | `src/db.ts` | SQLite database layer — schema, CRUD, events, migrations |
 | `src/api.ts` | HTTP server — REST API + static file serving + MCP routing |
@@ -82,6 +82,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 
 | Variable | Default | Description |
 | --- | --- | --- |
+| `TRACKER_PUBLIC_URL` | `http://localhost:{PORT}` | Tracker dashboard URL for **shareable item links** in MCP responses. `buildItemUrl(key)` helper constructs `{TRACKER_PUBLIC_URL}/#/item/{KEY}` |
 | `ORCHESTRATOR_ENABLED` | `false` | Master switch — must be `true` to enable |
 | `OPENCODE_SERVER_URL` | `http://localhost:3000` | OpenCode server URL for **orchestrator API calls** |
 | `OPENCODE_PUBLIC_URL` | (same as server URL) | OpenCode URL for **browser deeplinks** in the dashboard (can differ from `OPENCODE_SERVER_URL` when browsers reach the server via a different network) |
@@ -273,6 +274,7 @@ OpenCode session URLs use the format `{OPENCODE_PUBLIC_URL}/{base64url(directory
 
 | Helper | Format | Purpose |
 | --- | --- | --- |
+| `buildItemUrl(key)` | `{TRACKER_PUBLIC_URL}/#/item/{KEY}` | Link to a tracker work item |
 | `buildOpencodeSessionUrl(id, dir)` | `{PUBLIC_URL}/{b64dir}/session/{id}` | Link to a specific session |
 | `buildOpencodeDirectoryUrl(dir)` | `{PUBLIC_URL}/{b64dir}/session` | Link to project session list |
 | `buildOpencodeApiSessionUrl(dir)` | `{SERVER_URL}/session?directory={dir}` | Server-side API endpoint |

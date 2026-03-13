@@ -64,6 +64,26 @@ export const ASSISTANT_PROJECT_ROOT = (() => {
   return raw;
 })();
 
+// ── Tracker public URL (for shareable links in MCP responses) ──
+
+/**
+ * Public-facing URL for the tracker dashboard.
+ * Used by MCP tool responses to include clickable links to work items.
+ * Defaults to http://localhost:{PORT} for local development.
+ * Override via env var for LAN/VPN/production scenarios.
+ */
+export const TRACKER_PUBLIC_URL = (
+  process.env.TRACKER_PUBLIC_URL || `http://localhost:${PORT}`
+).replace(/\/+$/, ""); // Strip trailing slash to avoid double-slash in URLs
+
+/**
+ * Build a browser-facing deep link URL to a work item in the tracker dashboard.
+ * Format: {TRACKER_PUBLIC_URL}/#/item/{KEY}
+ */
+export function buildItemUrl(key: string): string {
+  return `${TRACKER_PUBLIC_URL}/#/item/${encodeURIComponent(key)}`;
+}
+
 // ── Orchestrator config ──
 
 /**

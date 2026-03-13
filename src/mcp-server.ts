@@ -55,7 +55,7 @@ import fs from "fs";
 import path from "path";
 import { logger } from "./logger.js";
 import { dispatchItem, abortSession, getOrchestratorStatus, emergencyStop, requestSafeRestart, getRestartStatus, cancelRestart, isSafeToRestart, validateAgentConfig } from "./orchestrator.js";
-import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, STORE_DIR, ASSISTANT_PROJECT_ROOT } from "./config.js";
+import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, STORE_DIR, ASSISTANT_PROJECT_ROOT, buildItemUrl } from "./config.js";
 
 /** Simple MIME type detection from file extension. */
 function detectMimeType(filename: string): string {
@@ -362,8 +362,9 @@ function createMcpServer(): McpServer {
       }
 
       const key = getWorkItemKey(item);
+      const url = buildItemUrl(key);
       const dependencies = getDependencies(item.id).map((dep) => ({ ...dep, key: getWorkItemKey(dep) }));
-      const result: Record<string, unknown> = { ...item, key, dependencies };
+      const result: Record<string, unknown> = { ...item, key, url, dependencies };
       if (dependencyErrors.length > 0) {
         result.dependency_errors = dependencyErrors;
       }
@@ -389,7 +390,8 @@ function createMcpServer(): McpServer {
         id: dep.id, key: getWorkItemKey(dep), title: dep.title, state: dep.state,
       }));
       const blocked = isBlocked(item.id);
-      return { content: [{ type: "text", text: JSON.stringify({ ...item, key, blocked, dependencies, dependents, comments, transitions, attachments }, null, 2) }] };
+      const url = buildItemUrl(key);
+      return { content: [{ type: "text", text: JSON.stringify({ ...item, key, url, blocked, dependencies, dependents, comments, transitions, attachments }, null, 2) }] };
     },
   );
 
@@ -413,10 +415,13 @@ function createMcpServer(): McpServer {
       const items = listWorkItems(filters);
       if (items.length === 0)
         return { content: [{ type: "text", text: "No work items found matching filters." }] };
-      const summary = items.map((i) => ({
-        id: i.id, key: getWorkItemKey(i), title: i.title, state: i.state,
-        priority: i.priority, assignee: i.assignee, date_due: i.date_due, updated_at: i.updated_at,
-      }));
+      const summary = items.map((i) => {
+        const key = getWorkItemKey(i);
+        return {
+          id: i.id, key, url: buildItemUrl(key), title: i.title, state: i.state,
+          priority: i.priority, assignee: i.assignee, date_due: i.date_due, updated_at: i.updated_at,
+        };
+      });
       return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
     },
   );
@@ -467,7 +472,8 @@ function createMcpServer(): McpServer {
         actor: args.actor,
       });
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      return { content: [{ type: "text", text: JSON.stringify({ ...item, key: getWorkItemKey(item) }, null, 2) }] };
+      const key = getWorkItemKey(item);
+      return { content: [{ type: "text", text: JSON.stringify({ ...item, key, url: buildItemUrl(key) }, null, 2) }] };
     },
   );
 
@@ -490,7 +496,8 @@ function createMcpServer(): McpServer {
       if (!targetProject) return { content: [{ type: "text", text: "Error: Target project not found" }] };
       const item = moveWorkItem(itemId, args.target_project_id, args.actor);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      return { content: [{ type: "text", text: JSON.stringify({ ...item, key: getWorkItemKey(item) }, null, 2) }] };
+      const key = getWorkItemKey(item);
+      return { content: [{ type: "text", text: JSON.stringify({ ...item, key, url: buildItemUrl(key) }, null, 2) }] };
     },
   );
 
@@ -515,7 +522,8 @@ function createMcpServer(): McpServer {
         const itemId = resolveId(args.item_id);
         const item = changeWorkItemState(itemId, args.state as WorkItemState, args.actor || "Coder", args.comment, MCP_ACTOR_CLASS);
         if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-        return { content: [{ type: "text", text: JSON.stringify(item, null, 2) }] };
+        const key = getWorkItemKey(item);
+        return { content: [{ type: "text", text: JSON.stringify({ ...item, key, url: buildItemUrl(key) }, null, 2) }] };
       } catch (e) {
         const msg = e instanceof Error ? e.message : "State change rejected";
         return { content: [{ type: "text", text: `Error: ${msg}` }] };
@@ -609,7 +617,8 @@ function createMcpServer(): McpServer {
       const itemId = resolveId(args.item_id);
       const item = lockWorkItem(itemId, args.agent);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      return { content: [{ type: "text", text: JSON.stringify(item, null, 2) }] };
+      const key = getWorkItemKey(item);
+      return { content: [{ type: "text", text: JSON.stringify({ ...item, key, url: buildItemUrl(key) }, null, 2) }] };
     },
   );
 
@@ -621,7 +630,8 @@ function createMcpServer(): McpServer {
       const itemId = resolveId(args.item_id);
       const item = unlockWorkItem(itemId);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      return { content: [{ type: "text", text: JSON.stringify(item, null, 2) }] };
+      const key = getWorkItemKey(item);
+      return { content: [{ type: "text", text: JSON.stringify({ ...item, key, url: buildItemUrl(key) }, null, 2) }] };
     },
   );
 
