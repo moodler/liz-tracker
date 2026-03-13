@@ -90,6 +90,58 @@ function formatBytes(bytes: number): string {
 }
 
 /**
+ * Sanitize space_data JSON for scheduled tasks.
+ * Ensures todo and ignore arrays contain only plain strings (not objects).
+ * This prevents "[object Object]" from appearing in the UI when agents
+ * accidentally pass objects instead of strings in these arrays.
+ */
+function sanitizeScheduledSpaceData(spaceDataJson: string, spaceType?: string | null): string {
+  // Only sanitize scheduled space data
+  if (!spaceDataJson) return spaceDataJson;
+
+  try {
+    const parsed = JSON.parse(spaceDataJson);
+
+    // Detect scheduled data by checking for scheduled-specific keys or explicit space_type
+    const isScheduled = spaceType === "scheduled" ||
+      (parsed.schedule && typeof parsed.schedule === "object") ||
+      Array.isArray(parsed.todo) || Array.isArray(parsed.ignore);
+
+    if (!isScheduled) return spaceDataJson;
+
+    // Coerce todo items to plain strings
+    if (Array.isArray(parsed.todo)) {
+      parsed.todo = parsed.todo.map((item: unknown) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          // Try common keys agents might use: text, title, name, content, description, value
+          const obj = item as Record<string, unknown>;
+          return String(obj.text || obj.title || obj.name || obj.content || obj.description || obj.value || JSON.stringify(item));
+        }
+        return String(item);
+      });
+    }
+
+    // Coerce ignore items to plain strings
+    if (Array.isArray(parsed.ignore)) {
+      parsed.ignore = parsed.ignore.map((item: unknown) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const obj = item as Record<string, unknown>;
+          return String(obj.text || obj.title || obj.name || obj.content || obj.description || obj.value || JSON.stringify(item));
+        }
+        return String(item);
+      });
+    }
+
+    return JSON.stringify(parsed);
+  } catch {
+    // If JSON parsing fails, return as-is — the DB layer will handle it
+    return spaceDataJson;
+  }
+}
+
+/**
  * Translate a container-relative path to a host filesystem path.
  *
  * Agent containers mount host directories at /workspace/:
@@ -267,7 +319,7 @@ function createMcpServer(): McpServer {
       date_due: z.string().optional().describe("Due date in YYYY-MM-DD format (optional)"),
       link: z.string().optional().describe("Optional URL link associated with this item"),
       space_type: z.string().optional().describe('Space type for specialized UI (e.g. "standard", "song", "engagement", "scheduled"). Default: "standard"'),
-      space_data: z.string().optional().describe("JSON blob for space-specific custom fields"),
+      space_data: z.string().optional().describe('JSON string for space-specific custom fields. For scheduled tasks (space_type="scheduled"), the JSON must have this exact structure: {"schedule": {"frequency": "daily", "time": "07:00", "days_of_week": null, "timezone": "Australia/Perth", "cron_override": null}, "status": {"next_run": null, "last_run": null, "last_status": null, "last_duration_ms": null, "run_count": 0}, "todo": ["plain string task 1", "plain string task 2"], "ignore": ["plain string rule 1"]}. IMPORTANT: "todo" and "ignore" must be arrays of plain strings (NOT objects). Always include ALL four top-level keys (schedule, status, todo, ignore) — the entire space_data is replaced on update, not merged.'),
       created_by: z.string().optional().describe("Who created this"),
       blocked_by: z.array(z.string()).optional().describe('Item IDs or display keys (e.g. "TRACK-5") that block this item. The blocked item cannot be worked on until all blockers are done/testing/cancelled.'),
     },
@@ -288,7 +340,7 @@ function createMcpServer(): McpServer {
         date_due: args.date_due || null,
         link: args.link || null,
         space_type: args.space_type,
-        space_data: args.space_data || null,
+        space_data: args.space_data ? sanitizeScheduledSpaceData(args.space_data, args.space_type) : null,
         created_by: args.created_by,
       });
 
@@ -384,11 +436,22 @@ function createMcpServer(): McpServer {
       date_due: z.string().optional().describe("Due date in YYYY-MM-DD format. Pass empty string to clear."),
       link: z.string().optional().describe("Optional URL link associated with this item. Pass empty string to clear."),
       space_type: z.string().optional().describe('Space type for specialized UI (e.g. "standard", "song", "engagement", "scheduled")'),
-      space_data: z.string().optional().describe("JSON blob for space-specific custom fields"),
+      space_data: z.string().optional().describe('JSON string for space-specific custom fields. For scheduled tasks (space_type="scheduled"), the JSON must have this exact structure: {"schedule": {"frequency": "daily", "time": "07:00", "days_of_week": null, "timezone": "Australia/Perth", "cron_override": null}, "status": {"next_run": null, "last_run": null, "last_status": null, "last_duration_ms": null, "run_count": 0}, "todo": ["plain string task 1", "plain string task 2"], "ignore": ["plain string rule 1"]}. IMPORTANT: "todo" and "ignore" must be arrays of plain strings (NOT objects). Always include ALL four top-level keys (schedule, status, todo, ignore) — the entire space_data is replaced on update, not merged. To update just the todo list, first GET the item to read current space_data, modify the todo array, then PUT back the full JSON string.'),
       actor: z.string().optional().describe("Who made this change"),
     },
     async (args) => {
       const itemId = resolveId(args.item_id);
+      // Sanitize space_data for scheduled tasks to prevent [object Object] in todo/ignore
+      let sanitizedSpaceData: string | null | undefined = undefined;
+      if (args.space_data !== undefined) {
+        if (args.space_data) {
+          const existingItem = getWorkItem(itemId);
+          const effectiveSpaceType = args.space_type || existingItem?.space_type;
+          sanitizedSpaceData = sanitizeScheduledSpaceData(args.space_data, effectiveSpaceType);
+        } else {
+          sanitizedSpaceData = null;
+        }
+      }
       const item = updateWorkItem(itemId, {
         title: args.title,
         description: args.description,
@@ -400,7 +463,7 @@ function createMcpServer(): McpServer {
         date_due: args.date_due !== undefined ? (args.date_due || null) : undefined,
         link: args.link !== undefined ? (args.link || null) : undefined,
         space_type: args.space_type,
-        space_data: args.space_data !== undefined ? (args.space_data || null) : undefined,
+        space_data: sanitizedSpaceData,
         actor: args.actor,
       });
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };

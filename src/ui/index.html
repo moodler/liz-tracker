@@ -14176,6 +14176,13 @@
             todo: [],
             ignore: [],
           };
+          // Coerce array items to plain strings — prevents [object Object] when agents
+          // accidentally pass objects instead of strings in todo/ignore arrays
+          const coerceStrings = (arr) => arr.map(v => {
+            if (typeof v === "string") return v;
+            if (v && typeof v === "object") return String(v.text || v.title || v.name || v.content || v.description || v.value || JSON.stringify(v));
+            return String(v);
+          });
           if (!item.space_data) return defaults;
           try {
             const parsed = typeof item.space_data === "string" ? JSON.parse(item.space_data) : item.space_data;
@@ -14194,15 +14201,15 @@
                   last_duration_ms: parsed.last_duration_ms || null,
                   run_count: parsed.run_count || 0,
                 },
-                todo: Array.isArray(parsed.todo) ? parsed.todo : [],
-                ignore: Array.isArray(parsed.ignore) ? parsed.ignore : [],
+                todo: Array.isArray(parsed.todo) ? coerceStrings(parsed.todo) : [],
+                ignore: Array.isArray(parsed.ignore) ? coerceStrings(parsed.ignore) : [],
               };
             }
             return {
               schedule: { ...defaults.schedule, ...(parsed.schedule || {}) },
               status: { ...defaults.status, ...(parsed.status || {}) },
-              todo: Array.isArray(parsed.todo) ? parsed.todo : [],
-              ignore: Array.isArray(parsed.ignore) ? parsed.ignore : [],
+              todo: Array.isArray(parsed.todo) ? coerceStrings(parsed.todo) : [],
+              ignore: Array.isArray(parsed.ignore) ? coerceStrings(parsed.ignore) : [],
             };
           } catch { return defaults; }
         }

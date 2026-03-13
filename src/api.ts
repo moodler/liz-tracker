@@ -108,6 +108,35 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Helpers ──
 
+/**
+ * Sanitize space_data JSON for scheduled tasks.
+ * Coerces todo/ignore array items to plain strings to prevent "[object Object]".
+ */
+function sanitizeScheduledSpaceData(spaceDataStr: string, spaceType?: string | null): string {
+  try {
+    const parsed = JSON.parse(spaceDataStr);
+    const isScheduled = spaceType === "scheduled" ||
+      (parsed.schedule && typeof parsed.schedule === "object") ||
+      Array.isArray(parsed.todo) || Array.isArray(parsed.ignore);
+    if (!isScheduled) return spaceDataStr;
+
+    const coerceToStrings = (arr: unknown[]): string[] => arr.map((item: unknown) => {
+      if (typeof item === "string") return item;
+      if (item && typeof item === "object") {
+        const obj = item as Record<string, unknown>;
+        return String(obj.text || obj.title || obj.name || obj.content || obj.description || obj.value || JSON.stringify(item));
+      }
+      return String(item);
+    });
+
+    if (Array.isArray(parsed.todo)) parsed.todo = coerceToStrings(parsed.todo);
+    if (Array.isArray(parsed.ignore)) parsed.ignore = coerceToStrings(parsed.ignore);
+    return JSON.stringify(parsed);
+  } catch {
+    return spaceDataStr;
+  }
+}
+
 function json(res: http.ServerResponse, data: unknown, status = 200): void {
   res.writeHead(status, {
     "Content-Type": "application/json",
@@ -555,7 +584,10 @@ async function handleApiRequest(
                 : undefined,
             space_type: body.space_type ? String(body.space_type) : undefined,
             space_data: body.space_data !== undefined
-              ? (typeof body.space_data === "string" ? body.space_data : JSON.stringify(body.space_data))
+              ? sanitizeScheduledSpaceData(
+                  typeof body.space_data === "string" ? body.space_data : JSON.stringify(body.space_data),
+                  body.space_type ? String(body.space_type) : undefined,
+                )
               : undefined,
             created_by: body.created_by ? String(body.created_by) : undefined,
           });
@@ -1088,7 +1120,12 @@ async function handleApiRequest(
                 : undefined,
             space_data:
               body.space_data !== undefined
-                ? (typeof body.space_data === "string" ? body.space_data : JSON.stringify(body.space_data))
+                ? (() => {
+                    const raw = typeof body.space_data === "string" ? body.space_data : JSON.stringify(body.space_data);
+                    const existingItem = getWorkItem(itemId);
+                    const effectiveSpaceType = body.space_type ? String(body.space_type) : existingItem?.space_type;
+                    return sanitizeScheduledSpaceData(raw, effectiveSpaceType);
+                  })()
                 : undefined,
             actor: body.actor ? String(body.actor) : undefined,
           });

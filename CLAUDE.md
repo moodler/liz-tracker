@@ -323,7 +323,39 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 | `song` | music note (SVG) | Songwriting workspace — split-pane lyrics editor + conversation + metadata bar |
 | `text` | text lines (SVG) | Writing workspace — markdown editor + conversation for articles, blogs, long-form text |
 | `engagement` | briefcase (SVG) | Coordination workspace for contractors, services, and external engagements — structured dashboard (contact, quote, milestones, documents, comms log) + discussion sidebar. Uses `space_data` JSON for all structured content. |
-| `scheduled` | clock (SVG) | Scheduled task workspace — schedule config (frequency, time, days), live status panel (next/last run, run count), task instructions editor, TODO list, IGNORE list + run history sidebar. Used by the HARMONI project for recurring automated tasks. `space_data` stores `{ schedule: { frequency, time, days_of_week, timezone, cron_override }, status: { next_run, last_run, last_status, last_duration_ms, run_count }, todo: ["task1", "task2"], ignore: ["ignore rule 1"] }`. |
+| `scheduled` | clock (SVG) | Scheduled task workspace — schedule config (frequency, time, days), live status panel (next/last run, run count), task instructions editor, TODO list, IGNORE list + run history sidebar. Used by the HARMONI project for recurring automated tasks. `space_data` stores a JSON string (see format below). |
+
+#### Scheduled Task `space_data` Format
+
+When updating a scheduled task's `space_data` via MCP tools or the API, the value must be a **JSON string** with this exact structure:
+
+```json
+{
+  "schedule": {
+    "frequency": "daily",
+    "time": "07:00",
+    "days_of_week": null,
+    "timezone": "Australia/Perth",
+    "cron_override": null
+  },
+  "status": {
+    "next_run": null,
+    "last_run": null,
+    "last_status": null,
+    "last_duration_ms": null,
+    "run_count": 0
+  },
+  "todo": ["plain string task 1", "plain string task 2"],
+  "ignore": ["plain string rule 1", "plain string rule 2"]
+}
+```
+
+**Critical rules:**
+- `todo` and `ignore` must be arrays of **plain strings** — never objects. Using objects like `{"text": "task"}` will cause `[object Object]` to display in the UI.
+- Always include **all four top-level keys** (`schedule`, `status`, `todo`, `ignore`). The entire `space_data` is replaced on update, not merged.
+- To update just the `todo` list: first GET the item to read the current `space_data`, parse it, modify the `todo` array, then PUT/PATCH back the full JSON string.
+- `frequency` options: `"once"`, `"hourly"`, `"daily"`, `"weekly"`, `"monthly"`, `"manual"`, `"custom"` (with `cron_override`).
+- `days_of_week` is only used when `frequency` is `"weekly"`: an array of lowercase day names like `["monday", "wednesday", "friday"]`.
 
 ### API Endpoints
 
