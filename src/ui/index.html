@@ -18814,18 +18814,36 @@
           // Poll orchestrator status every 10s
           pollOrchestratorStatus();
           setInterval(pollOrchestratorStatus, 10000);
-          // Handle deep link hash (e.g. #/item/TRACK-42)
-          handleInitialHash();
+          // Handle deep link: hash route (e.g. #/item/TRACK-42) or path route (e.g. /TRACK-42)
+          handleInitialDeepLink();
         }
 
-        /** Parse the URL hash on page load and open the referenced item if present. */
-        function handleInitialHash() {
+        /**
+         * Parse the URL on page load to detect a deep link to a work item.
+         * Supports two formats:
+         *   1. Hash route:  /#/item/TRACK-42  (from internal navigation)
+         *   2. Path route:  /TRACK-42         (from short deep links — SPA fallback serves index.html)
+         * For path routes, replaces the URL with the hash format so subsequent
+         * navigation uses hash routing without triggering full page reloads.
+         */
+        function handleInitialDeepLink() {
+          // 1. Check hash route first (e.g. #/item/TRACK-42)
           const hash = location.hash;
           if (hash.startsWith("#/item/")) {
             const itemKey = decodeURIComponent(hash.substring(7));
             if (itemKey) {
               openItemByKeyOrId(itemKey);
+              return;
             }
+          }
+
+          // 2. Check URL pathname for a key pattern (e.g. /TRACK-42, /LIZ-123)
+          const pathKey = location.pathname.match(/^\/([A-Za-z]+-\d+)$/);
+          if (pathKey) {
+            const itemKey = pathKey[1].toUpperCase();
+            // Rewrite URL to hash format so back/forward navigation works correctly
+            history.replaceState(null, "", "/#/item/" + itemKey);
+            openItemByKeyOrId(itemKey);
           }
         }
 

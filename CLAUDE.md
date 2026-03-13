@@ -83,7 +83,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 | Variable | Default | Description |
 | --- | --- | --- |
 | `TRACKER_PUBLIC_URL` | `http://localhost:{PORT}` | Tracker dashboard URL for the dashboard and fallback base for item links |
-| `TRACKER_SHORT_URL` | (same as `TRACKER_PUBLIC_URL`) | Short base URL for **item deep links**. Set to a short hostname (e.g. `http://t`) for the shortest possible links. `buildItemUrl(key)` constructs `{TRACKER_SHORT_URL}/{KEY}` (e.g. `http://t/TRACK-187`). The server handles `/{KEY}` paths by redirecting to `/#/item/{KEY}` |
+| `TRACKER_SHORT_URL` | (same as `TRACKER_PUBLIC_URL`) | Short base URL for **item deep links**. Set to a short hostname (e.g. `http://t`) for the shortest possible links. `buildItemUrl(key)` constructs `{TRACKER_SHORT_URL}/{KEY}` (e.g. `http://t/TRACK-187`). The SPA fallback serves index.html for `/{KEY}` paths, and `handleInitialDeepLink()` in the client JS detects the key in the pathname and opens the item |
 | `ORCHESTRATOR_ENABLED` | `false` | Master switch — must be `true` to enable |
 | `OPENCODE_SERVER_URL` | `http://localhost:3000` | OpenCode server URL for **orchestrator API calls** |
 | `OPENCODE_PUBLIC_URL` | (same as server URL) | OpenCode URL for **browser deeplinks** in the dashboard (can differ from `OPENCODE_SERVER_URL` when browsers reach the server via a different network) |
@@ -275,7 +275,7 @@ OpenCode session URLs use the format `{OPENCODE_PUBLIC_URL}/{base64url(directory
 
 | Helper | Format | Purpose |
 | --- | --- | --- |
-| `buildItemUrl(key)` | `{TRACKER_SHORT_URL}/{KEY}` | Shortest deep link to a tracker work item (server redirects `/{KEY}` → `/#/item/{KEY}`) |
+| `buildItemUrl(key)` | `{TRACKER_SHORT_URL}/{KEY}` | Shortest deep link to a tracker work item (SPA fallback serves index.html, client-side `handleInitialDeepLink()` opens the item) |
 | `buildOpencodeSessionUrl(id, dir)` | `{PUBLIC_URL}/{b64dir}/session/{id}` | Link to a specific session |
 | `buildOpencodeDirectoryUrl(dir)` | `{PUBLIC_URL}/{b64dir}/session` | Link to project session list |
 | `buildOpencodeApiSessionUrl(dir)` | `{SERVER_URL}/session?directory={dir}` | Server-side API endpoint |

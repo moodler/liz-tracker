@@ -1567,18 +1567,13 @@ export function startTrackerServer(port: number): http.Server {
       return handleApiRequest(req, res);
     }
 
-    // ── Short deep-link redirect: /TRACK-187 → /#/item/TRACK-187 ──
-    // Matches paths like /TRACK-187, /LIZ-42, etc. (uppercase or mixed-case
-    // project prefix, dash, sequence number). Redirects to the hash-routed
-    // dashboard URL so the SPA opens the item detail panel.
+    // ── Static file serving + SPA fallback ──
+    // Short deep-link URLs like /TRACK-187 are handled entirely client-side:
+    // the SPA fallback serves index.html, then handleInitialDeepLink() in
+    // the JS detects the key pattern in the URL pathname and opens the item.
+    // No server-side redirect needed — avoids service worker interference.
     if (method === "GET") {
       const pathname = new URL(url, "http://localhost").pathname;
-      const keyMatch = pathname.match(/^\/([A-Za-z]+-\d+)$/);
-      if (keyMatch) {
-        const itemKey = keyMatch[1].toUpperCase();
-        res.writeHead(302, { Location: `/#/item/${itemKey}` });
-        return res.end();
-      }
 
       // Static files for dashboard
       let filePath: string;

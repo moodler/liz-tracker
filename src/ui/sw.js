@@ -7,7 +7,7 @@
  * - Background sync for queued offline items
  */
 
-const CACHE_NAME = "tracker-v5";
+const CACHE_NAME = "tracker-v6";
 
 // App shell files to precache
 const APP_SHELL = [
@@ -54,6 +54,12 @@ self.addEventListener("fetch", (event) => {
 
   // Skip MCP endpoint
   if (url.pathname.startsWith("/mcp")) return;
+
+  // Deep-link URLs (e.g. /TRACK-42, /LIZ-123): let the browser handle these
+  // as navigation to index.html. The SPA's handleInitialDeepLink() will detect
+  // the key in the pathname and open the item. Don't cache these — they're
+  // all the same index.html content with different paths.
+  if (/^\/[A-Za-z]+-\d+$/.test(url.pathname)) return;
 
   // API calls: network-first with no cache fallback
   // (API data is dynamic; stale cached API data would be misleading)
