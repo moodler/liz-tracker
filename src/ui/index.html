@@ -9878,9 +9878,16 @@
           }
         });
 
-        // Close context edit modal on overlay click
+        // Close context edit modal on overlay click.
+        // Track mousedown origin to prevent closing when user drags a text
+        // selection outside the modal (mousedown inside, mouseup outside).
+        let contextMouseDownTarget = null;
+        contextEditModal.addEventListener("mousedown", (e) => {
+          contextMouseDownTarget = e.target;
+        });
         contextEditModal.addEventListener("click", (e) => {
-          if (e.target === contextEditModal) contextEditModal.classList.remove("open");
+          if (e.target === contextEditModal && contextMouseDownTarget === contextEditModal) contextEditModal.classList.remove("open");
+          contextMouseDownTarget = null;
         });
 
         // ── Search ──
@@ -12334,8 +12341,15 @@
 
         $("#spaceCloseBtn").addEventListener("click", closeSpaceOverlay);
         // Click backdrop to close (clicks on overlay outside the modal)
+        // Track mousedown origin to prevent closing when user drags a text
+        // selection outside the modal (mousedown inside, mouseup outside).
+        let spaceMouseDownTarget = null;
+        spaceOverlay.addEventListener("mousedown", (e) => {
+          spaceMouseDownTarget = e.target;
+        });
         spaceOverlay.addEventListener("click", (e) => {
-          if (e.target === spaceOverlay) closeSpaceOverlay();
+          if (e.target === spaceOverlay && spaceMouseDownTarget === spaceOverlay) closeSpaceOverlay();
+          spaceMouseDownTarget = null;
         });
         // Escape key
         document.addEventListener("keydown", (e) => {
@@ -15411,8 +15425,16 @@
         }
 
         detailOverlay.addEventListener("click", closeDetail);
+        // Track where mousedown started so we don't close the detail panel
+        // when user drags a text selection outside the modal (mousedown inside,
+        // mouseup outside → click target becomes detailPanel itself).
+        let detailMouseDownTarget = null;
+        detailPanel.addEventListener("mousedown", (e) => {
+          detailMouseDownTarget = e.target;
+        });
         detailPanel.addEventListener("click", (e) => {
-          if (e.target === detailPanel) closeDetail();
+          if (e.target === detailPanel && detailMouseDownTarget === detailPanel) closeDetail();
+          detailMouseDownTarget = null;
         });
         $("#detailClose").addEventListener("click", closeDetail);
 
@@ -16054,9 +16076,16 @@
         $("#createModalClose").addEventListener("click", closeCreateModal);
         $("#createCancel").addEventListener("click", closeCreateModal);
 
-        // Outside click only closes when form hasn't been modified
+        // Outside click only closes when form hasn't been modified.
+        // Track mousedown origin to prevent closing when user drags a text
+        // selection outside the modal (mousedown inside, mouseup outside).
+        let createMouseDownTarget = null;
+        createModal.addEventListener("mousedown", (e) => {
+          createMouseDownTarget = e.target;
+        });
         createModal.addEventListener("click", (e) => {
-          if (e.target === createModal && !createModalDirty) closeCreateModal();
+          if (e.target === createModal && createMouseDownTarget === createModal && !createModalDirty) closeCreateModal();
+          createMouseDownTarget = null;
         });
 
         $("#createSubmit").addEventListener("click", async () => {
