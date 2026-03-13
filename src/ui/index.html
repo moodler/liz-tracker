@@ -6129,20 +6129,7 @@
         gap: 8px;
         flex-shrink: 0;
       }
-      .space-back-btn {
-        background: none;
-        border: 1px solid var(--border);
-        color: var(--text-muted);
-        font-size: 1.1rem;
-        cursor: pointer;
-        padding: 4px 10px;
-        border-radius: var(--radius-sm);
-        transition: background 0.15s, color 0.15s;
-      }
-      .space-back-btn:hover {
-        background: var(--bg-accent);
-        color: var(--text);
-      }
+
       .space-title {
         font-size: 1.1rem;
         font-weight: 600;
@@ -8235,8 +8222,8 @@
       <div class="triage-overlay" id="triageOverlay">
         <div class="triage-modal">
           <div class="triage-header">
-            <button class="triage-close-btn" id="triageCloseBtn" title="Exit Triage">&#10005;</button>
             <div class="triage-header-title">Triage Mode</div>
+            <button class="triage-close-btn" id="triageCloseBtn" title="Exit Triage">&#10005;</button>
           </div>
           <div class="triage-progress">
             <div class="triage-progress-bar">
@@ -8336,9 +8323,6 @@
     <div class="detail-panel" id="detailPanel">
       <div class="detail-panel-inner">
       <div class="detail-header">
-        <button class="detail-close" id="detailClose" title="Close">
-          &times;
-        </button>
         <span class="detail-id" id="detailId"></span>
         <div class="detail-actions">
           <button class="btn btn-ghost btn-sm" id="detailSpaceViewBtn" title="Switch to space view"></button>
@@ -8357,6 +8341,9 @@
             style="color: var(--highlight)"
           >
             Delete
+          </button>
+          <button class="detail-close" id="detailClose" title="Close">
+            &times;
           </button>
         </div>
       </div>
@@ -8551,7 +8538,6 @@
       <div class="space-modal" id="spaceModal">
         <div class="space-header" id="spaceHeader">
           <div class="space-header-left">
-            <button class="space-back-btn" id="spaceBackBtn" title="Back to tracker">&larr;</button>
             <span class="space-title" id="spaceTitle"></span>
             <span class="space-key" id="spaceKey"></span>
           </div>
@@ -12347,7 +12333,6 @@
         }
 
         $("#spaceCloseBtn").addEventListener("click", closeSpaceOverlay);
-        $("#spaceBackBtn").addEventListener("click", closeSpaceOverlay);
         // Click backdrop to close (clicks on overlay outside the modal)
         spaceOverlay.addEventListener("click", (e) => {
           if (e.target === spaceOverlay) closeSpaceOverlay();
