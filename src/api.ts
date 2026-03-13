@@ -102,7 +102,7 @@ import {
   cancelRestart,
   isSafeToRestart,
 } from "./orchestrator.js";
-import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR } from "./config.js";
+import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl } from "./config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -531,11 +531,15 @@ async function handleApiRequest(
         if (!project) return error(res, "Project not found", 404);
         const items = listWorkItems({ project_id: projectId });
         const commentCounts = getCommentCounts(items.map((i) => i.id));
-        const enriched = items.map((i) => ({
-          ...i,
-          key: `${project.short_name}-${i.seq_number}`,
-          comment_count: commentCounts[i.id] || 0,
-        }));
+        const enriched = items.map((i) => {
+          const key = `${project.short_name}-${i.seq_number}`;
+          return {
+            ...i,
+            key,
+            url: buildItemUrl(key),
+            comment_count: commentCounts[i.id] || 0,
+          };
+        });
         const tracker: Record<string, typeof enriched> = {};
         for (const state of VALID_STATES) {
           tracker[state] = enriched.filter((i) => i.state === state);
@@ -622,7 +626,8 @@ async function handleApiRequest(
               : undefined,
             created_by: body.created_by ? String(body.created_by) : undefined,
           });
-          return json(res, { ...item, key: getWorkItemKey(item) }, 201);
+          const key = getWorkItemKey(item);
+          return json(res, { ...item, key, url: buildItemUrl(key) }, 201);
         }
       }
 
@@ -716,11 +721,11 @@ async function handleApiRequest(
           items = items.filter((i) => i.id !== excludeId);
           items = items.slice(0, limit);
         }
-        // Enrich with keys
-        const enriched = items.map((item) => ({
-          ...item,
-          key: getWorkItemKey(item),
-        }));
+        // Enrich with keys and urls
+        const enriched = items.map((item) => {
+          const key = getWorkItemKey(item);
+          return { ...item, key, url: buildItemUrl(key) };
+        });
         return json(res, enriched);
       }
 
@@ -739,7 +744,8 @@ async function handleApiRequest(
             body.comment ? String(body.comment) : undefined,
           );
           if (!item) return error(res, "Work item not found", 404);
-          return json(res, { ...item, key: getWorkItemKey(item) });
+          const key = getWorkItemKey(item);
+          return json(res, { ...item, key, url: buildItemUrl(key) });
         } catch (e) {
           // Security control rejections (e.g., non-human trying to approve)
           const msg = e instanceof Error ? e.message : "State change rejected";
@@ -754,14 +760,16 @@ async function handleApiRequest(
         if (!body.agent) return error(res, "agent is required");
         const item = lockWorkItem(itemId, String(body.agent));
         if (!item) return error(res, "Work item not found", 404);
-        return json(res, { ...item, key: getWorkItemKey(item) });
+        const lockKey = getWorkItemKey(item);
+        return json(res, { ...item, key: lockKey, url: buildItemUrl(lockKey) });
       }
 
       // POST /items/:id/unlock
       if (parts.length === 3 && parts[2] === "unlock" && method === "POST") {
         const item = unlockWorkItem(itemId);
         if (!item) return error(res, "Work item not found", 404);
-        return json(res, { ...item, key: getWorkItemKey(item) });
+        const unlockKey = getWorkItemKey(item);
+        return json(res, { ...item, key: unlockKey, url: buildItemUrl(unlockKey) });
       }
 
       // POST /items/:id/dispatch — manually dispatch to OpenCode
@@ -926,9 +934,11 @@ async function handleApiRequest(
           body.actor ? String(body.actor) : "system",
         );
         if (!result) return error(res, "Work item or version not found", 404);
+        const revertKey = getWorkItemKey(result.item);
         return json(res, {
           ...result.item,
-          key: getWorkItemKey(result.item),
+          key: revertKey,
+          url: buildItemUrl(revertKey),
           reverted_to_version: result.version.version,
         });
       }
@@ -1188,6 +1198,7 @@ async function handleApiRequest(
           return json(res, {
             ...item,
             key,
+            url: buildItemUrl(key),
             comments,
             transitions,
             watchers,
@@ -1271,7 +1282,8 @@ async function handleApiRequest(
             actor: body.actor ? String(body.actor) : undefined,
           });
           if (!item) return error(res, "Work item not found", 404);
-          return json(res, { ...item, key: getWorkItemKey(item) });
+          const patchKey = getWorkItemKey(item);
+          return json(res, { ...item, key: patchKey, url: buildItemUrl(patchKey) });
         }
         if (method === "DELETE") {
           const ok = deleteWorkItem(itemId);
@@ -1362,9 +1374,11 @@ async function handleApiRequest(
       const enriched = allItems.map((i) => {
         const proj = projectMap.get(i.project_id);
         const prefix = proj?.short_name || "???";
+        const key = `${prefix}-${i.seq_number}`;
         return {
           ...i,
-          key: `${prefix}-${i.seq_number}`,
+          key,
+          url: buildItemUrl(key),
           project_name: proj?.name || "Unknown",
           project_theme: proj?.theme || "midnight",
           comment_count: commentCounts[i.id] || 0,
@@ -1413,11 +1427,11 @@ async function handleApiRequest(
           }
         }
       }
-      // Enrich with keys
-      const enriched = results.map((item) => ({
-        ...item,
-        key: getWorkItemKey(item),
-      }));
+      // Enrich with keys and urls
+      const enriched = results.map((item) => {
+        const key = getWorkItemKey(item);
+        return { ...item, key, url: buildItemUrl(key) };
+      });
       return json(res, enriched);
     }
 
