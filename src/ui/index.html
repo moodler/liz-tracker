@@ -6154,6 +6154,274 @@
         flex-direction: column;
       }
 
+      /* ── Today Modal (Desktop) ── */
+      .today-modal-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        background: rgba(0, 0, 0, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
+      .today-modal-overlay.open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .today-modal {
+        width: calc(100% - 120px);
+        height: calc(100% - 120px);
+        max-width: 900px;
+        max-height: 100%;
+        background: rgba(22, 33, 62, 0.65);
+        -webkit-backdrop-filter: blur(40px) saturate(180%);
+        backdrop-filter: blur(40px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-xl), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        transform: scale(0.97);
+        transition: transform 0.3s var(--spring);
+      }
+      .today-modal-overlay.open .today-modal {
+        transform: scale(1);
+      }
+      .today-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 20px;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+        min-height: 52px;
+      }
+      .today-modal-header-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .today-modal-header-left h2 {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .today-modal-header-left .today-modal-icon {
+        font-size: 1.2rem;
+      }
+      .today-modal-close-btn {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 1.4rem;
+        cursor: pointer;
+        padding: 2px 8px;
+        border-radius: var(--radius-sm);
+        transition: color 0.15s;
+      }
+      .today-modal-close-btn:hover {
+        color: var(--highlight);
+      }
+      .today-modal-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0;
+      }
+      .today-modal-body .today-dashboard {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+      .today-modal-body .today-section {
+        border-bottom: 1px solid var(--border);
+      }
+      .today-modal-body .today-section.collapsed .today-section-body {
+        display: none;
+      }
+      .today-modal-body .today-section-header {
+        display: flex;
+        align-items: center;
+        padding: 14px 20px;
+        cursor: pointer;
+        user-select: none;
+        background: rgba(15, 52, 96, 0.15);
+        min-height: 48px;
+      }
+      .today-modal-body .today-section-header:hover {
+        background: rgba(15, 52, 96, 0.25);
+      }
+      .today-modal-body .today-section-header h3 {
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+      }
+      .today-modal-body .today-section-emoji {
+        font-size: 1.05rem;
+      }
+      .today-modal-body .today-collapse-icon {
+        font-size: 0.6rem;
+        color: var(--text-dim);
+        transition: transform var(--transition);
+        display: inline-block;
+        width: 12px;
+        text-align: center;
+      }
+      .today-modal-body .today-section.collapsed .today-collapse-icon {
+        transform: rotate(-90deg);
+      }
+      .today-modal-body .today-section-count {
+        font-size: 0.7rem;
+        font-weight: 600;
+        background: var(--bg);
+        padding: 1px 8px;
+        border-radius: 10px;
+        min-width: 22px;
+        text-align: center;
+        color: var(--text-muted);
+        margin-left: auto;
+      }
+      .today-modal-body .today-section-body {
+        padding: 8px 16px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .today-modal-body .today-section-empty {
+        text-align: center;
+        padding: 16px;
+        color: var(--text-dim);
+        font-size: 0.85rem;
+        font-style: italic;
+      }
+      .today-modal-body .today-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--border);
+        border-radius: var(--radius);
+        padding: 12px 14px;
+        cursor: pointer;
+        transition: background var(--transition);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        position: relative;
+      }
+      .today-modal-body .today-card:hover {
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .today-modal-body .today-card[data-attention="high"] {
+        border-left-color: var(--col-needs_input);
+        background: linear-gradient(90deg, rgba(214, 48, 49, 0.08) 0%, var(--bg-card) 30%);
+      }
+      .today-modal-body .today-card[data-attention="medium"] {
+        border-left-color: var(--col-clarification);
+        background: linear-gradient(90deg, rgba(253, 203, 110, 0.06) 0%, var(--bg-card) 30%);
+      }
+      .today-modal-body .today-card[data-attention="normal"] {
+        border-left-color: var(--col-in_development);
+      }
+      .today-modal-body .today-card[data-attention="low"] {
+        border-left-color: var(--col-done);
+        filter: brightness(0.7) saturate(0.8);
+      }
+      .today-modal-body .today-card-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .today-modal-body .today-card-key {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--text-dim);
+        font-family: monospace;
+        letter-spacing: 0.3px;
+      }
+      .today-modal-body .today-card-title {
+        font-size: 0.95rem;
+        font-weight: 500;
+        line-height: 1.35;
+        color: var(--text);
+      }
+      .today-modal-body .today-card-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        font-size: 0.75rem;
+      }
+      .today-modal-body .today-card-project {
+        font-size: 0.65rem;
+        color: var(--text-dim);
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .today-modal-body .today-card-project-dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .today-modal-body .today-all-caught-up {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 20px;
+        text-align: center;
+        gap: 12px;
+        color: var(--text-dim);
+      }
+      .today-modal-body .today-caught-up-icon {
+        font-size: 2.5rem;
+      }
+      .today-modal-body .today-caught-up-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .today-modal-body .today-caught-up-sub {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+      }
+      /* Today button in control bar */
+      .today-control-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 12px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: rgba(15, 52, 96, 0.3);
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s;
+        white-space: nowrap;
+      }
+      .today-control-btn:hover {
+        background: rgba(15, 52, 96, 0.5);
+        color: var(--text);
+        border-color: rgba(255, 255, 255, 0.15);
+      }
+      .today-control-btn .today-btn-icon {
+        font-size: 0.9rem;
+        line-height: 1;
+      }
+
       /* ── Song Space ── */
       .song-space {
         display: flex;
@@ -7741,6 +8009,9 @@
           <input type="text" id="controlSearchInput" placeholder="Search items..." />
           <div class="search-results" id="controlSearchResults"></div>
         </div>
+        <button class="today-control-btn" id="todayControlBtn" title="Today view">
+          <span class="today-btn-icon">&#9728;&#65039;</span> Today
+        </button>
         <div style="flex: 1"></div>
         <div class="sort-control">
           <label class="sort-label" for="sortMode">Sort:</label>
@@ -8237,6 +8508,22 @@
         </div>
         <div class="space-body" id="spaceBody">
           <!-- Populated dynamically by space renderers -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Today Modal (Desktop) -->
+    <div class="today-modal-overlay" id="todayModalOverlay">
+      <div class="today-modal" id="todayModal">
+        <div class="today-modal-header">
+          <div class="today-modal-header-left">
+            <span class="today-modal-icon">&#9728;&#65039;</span>
+            <h2>Today</h2>
+          </div>
+          <button class="today-modal-close-btn" id="todayModalCloseBtn" title="Close">&times;</button>
+        </div>
+        <div class="today-modal-body" id="todayModalBody">
+          <!-- Populated dynamically by renderTodayModal() -->
         </div>
       </div>
     </div>
@@ -11521,6 +11808,190 @@
             loadTodayDashboard();
           });
         }
+
+        // ── Today Modal (Desktop) ──
+        const todayModalOverlay = $("#todayModalOverlay");
+        const todayModalBody = $("#todayModalBody");
+        let todayModalRefreshTimer = null;
+
+        function openTodayModal() {
+          todayModalOverlay.classList.add("open");
+          document.body.style.overflow = "hidden";
+          loadTodayModal();
+          startTodayModalRefresh();
+        }
+
+        function closeTodayModal() {
+          todayModalOverlay.classList.remove("open");
+          document.body.style.overflow = "";
+          stopTodayModalRefresh();
+        }
+
+        function startTodayModalRefresh() {
+          stopTodayModalRefresh();
+          todayModalRefreshTimer = setInterval(() => {
+            if (todayModalOverlay.classList.contains("open")) {
+              loadTodayModal(true);
+            }
+          }, 30000);
+        }
+
+        function stopTodayModalRefresh() {
+          if (todayModalRefreshTimer) {
+            clearInterval(todayModalRefreshTimer);
+            todayModalRefreshTimer = null;
+          }
+        }
+
+        async function loadTodayModal(silent) {
+          try {
+            const data = await apiGet("/overview");
+            renderTodayModalContent(data);
+          } catch (e) {
+            if (!silent) toast("Failed to load data: " + e.message, "error");
+          }
+        }
+
+        function renderTodayModalContent(data) {
+          if (!data || !data.tracker) return;
+
+          const projectLookup = {};
+          if (data.projects) {
+            for (const p of data.projects) {
+              projectLookup[p.id] = p;
+            }
+          }
+
+          const allItems = [];
+          for (const [state, items] of Object.entries(data.tracker)) {
+            for (const item of items) {
+              allItems.push({ ...item, state });
+            }
+          }
+
+          // Sort helper (priority descending, then most recently updated)
+          function sortByPriority(items) {
+            return items.sort((a, b) => {
+              const pa = PRIORITY_ORDER[a.priority] ?? 4;
+              const pb = PRIORITY_ORDER[b.priority] ?? 4;
+              if (pa !== pb) return pa - pb;
+              return new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime();
+            });
+          }
+
+          // Section 1: Due Today / Overdue
+          const today = new Date();
+          const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+          const dueItems = allItems.filter(i =>
+            i.date_due && i.date_due <= todayStr &&
+            i.state !== "done" && i.state !== "cancelled"
+          );
+          dueItems.sort((a, b) => {
+            const aOverdue = a.date_due < todayStr ? 0 : 1;
+            const bOverdue = b.date_due < todayStr ? 0 : 1;
+            if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+            const pa = PRIORITY_ORDER[a.priority] ?? 4;
+            const pb = PRIORITY_ORDER[b.priority] ?? 4;
+            if (pa !== pb) return pa - pb;
+            if (a.date_due !== b.date_due) return a.date_due < b.date_due ? -1 : 1;
+            return 0;
+          });
+          const dueItemIds = new Set(dueItems.map(i => i.id));
+
+          // Section 2: Needs Your Attention
+          const attentionItems = allItems.filter(i => {
+            if (dueItemIds.has(i.id)) return false;
+            if (i.state === "needs_input" || i.state === "in_review") return true;
+            if (i.state === "approved" && !i.bot_dispatch) return true;
+            if (i.state === "brainstorming") return true;
+            return false;
+          });
+
+          // Section 3: In Progress
+          const progressItems = allItems.filter(i =>
+            i.state === "in_development" && !dueItemIds.has(i.id)
+          );
+
+          // Section 4: Recently Completed
+          const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+          const completedItems = allItems.filter(i =>
+            (i.state === "done" || i.state === "testing") &&
+            new Date(i.updated_at).getTime() > twentyFourHoursAgo
+          );
+
+          const totalVisible = dueItems.length + attentionItems.length + progressItems.length + completedItems.length;
+
+          if (totalVisible === 0) {
+            todayModalBody.innerHTML = `
+              <div class="today-dashboard">
+                <div class="today-all-caught-up" style="display:flex">
+                  <div class="today-caught-up-icon">&#10024;</div>
+                  <div class="today-caught-up-title">All caught up!</div>
+                  <div class="today-caught-up-sub">Nothing needs your attention right now. Enjoy the calm.</div>
+                </div>
+              </div>`;
+            return;
+          }
+
+          let html = '<div class="today-dashboard">';
+
+          html += renderTodayModalSection("Due Today / Overdue", "&#128197;", dueItems, projectLookup);
+          html += renderTodayModalSection("Needs Your Attention", "&#128680;", sortByPriority(attentionItems), projectLookup);
+          html += renderTodayModalSection("In Progress", "&#9881;&#65039;", sortByPriority(progressItems), projectLookup);
+          html += renderTodayModalSection("Recently Completed", "&#9989;", sortByPriority(completedItems), projectLookup);
+
+          html += '</div>';
+          todayModalBody.innerHTML = html;
+
+          // Bind click handlers on cards
+          $$(".today-card", todayModalBody).forEach(el => {
+            el.addEventListener("click", () => {
+              closeTodayModal();
+              openDetail(el.dataset.id);
+            });
+          });
+        }
+
+        function renderTodayModalSection(title, emoji, items, projectLookup) {
+          const count = items.length;
+          let html = `<div class="today-section${count === 0 ? ' collapsed' : ''}" data-section="${esc(title)}">`;
+          html += `<div class="today-section-header"><h3>`;
+          html += `<span class="today-collapse-icon">&#9660;</span>`;
+          html += `<span class="today-section-emoji">${emoji}</span>`;
+          html += `${esc(title)}`;
+          html += `<span class="today-section-count">${count}</span>`;
+          html += `</h3></div>`;
+          html += `<div class="today-section-body">`;
+          if (count === 0) {
+            html += `<div class="today-section-empty">No items</div>`;
+          } else {
+            html += items.map(item => renderTodayCard(item, projectLookup)).join("");
+          }
+          html += `</div></div>`;
+          return html;
+        }
+
+        // Wire up Today modal button
+        $("#todayControlBtn").addEventListener("click", () => {
+          openTodayModal();
+        });
+
+        // Wire up Today modal close button
+        $("#todayModalCloseBtn").addEventListener("click", () => {
+          closeTodayModal();
+        });
+
+        // Close on backdrop click
+        todayModalOverlay.addEventListener("click", (e) => {
+          if (e.target === todayModalOverlay) closeTodayModal();
+        });
+
+        // Close on Escape
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && todayModalOverlay.classList.contains("open")) {
+            closeTodayModal();
+          }
+        });
 
         // ── Space: Type Registry ──
         const SPACE_TYPES = {
