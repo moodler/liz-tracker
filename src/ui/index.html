@@ -15905,7 +15905,7 @@
 
         $("#detailShare").addEventListener("click", async () => {
           if (!detailItemKey) return;
-          const shareUrl = `${location.origin}/#/item/${detailItemKey}`;
+          const shareUrl = `${location.origin}/${detailItemKey}`;
           if (navigator.share) {
             try {
               await navigator.share({

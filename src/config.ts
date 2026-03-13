@@ -77,11 +77,29 @@ export const TRACKER_PUBLIC_URL = (
 ).replace(/\/+$/, ""); // Strip trailing slash to avoid double-slash in URLs
 
 /**
+ * Short base URL for the shortest possible deep links to tracker items.
+ * When set (e.g. `http://t`), item links become `http://t/TRACK-187` instead
+ * of the longer `http://localhost:1000/#/item/TRACK-187`.
+ *
+ * Requires setting up a DNS alias (e.g. via /etc/hosts) or a reverse proxy
+ * so the short hostname resolves to the tracker server.
+ *
+ * Falls back to TRACKER_PUBLIC_URL if not set.
+ */
+export const TRACKER_SHORT_URL = (
+  process.env.TRACKER_SHORT_URL || TRACKER_PUBLIC_URL
+).replace(/\/+$/, "");
+
+/**
  * Build a browser-facing deep link URL to a work item in the tracker dashboard.
- * Format: {TRACKER_PUBLIC_URL}/#/item/{KEY}
+ * Uses the shortest possible format: {TRACKER_SHORT_URL}/{KEY}
+ *
+ * The server handles /{KEY} paths by redirecting to /#/item/{KEY}, so the
+ * short URL works as a redirect that resolves to the full dashboard URL.
+ * Example: http://t/TRACK-187 → redirects to http://t/#/item/TRACK-187
  */
 export function buildItemUrl(key: string): string {
-  return `${TRACKER_PUBLIC_URL}/#/item/${encodeURIComponent(key)}`;
+  return `${TRACKER_SHORT_URL}/${encodeURIComponent(key)}`;
 }
 
 // ── Orchestrator config ──

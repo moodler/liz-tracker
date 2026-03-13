@@ -1567,10 +1567,21 @@ export function startTrackerServer(port: number): http.Server {
       return handleApiRequest(req, res);
     }
 
-    // Static files for dashboard
+    // ── Short deep-link redirect: /TRACK-187 → /#/item/TRACK-187 ──
+    // Matches paths like /TRACK-187, /LIZ-42, etc. (uppercase or mixed-case
+    // project prefix, dash, sequence number). Redirects to the hash-routed
+    // dashboard URL so the SPA opens the item detail panel.
     if (method === "GET") {
-      let filePath: string;
       const pathname = new URL(url, "http://localhost").pathname;
+      const keyMatch = pathname.match(/^\/([A-Za-z]+-\d+)$/);
+      if (keyMatch) {
+        const itemKey = keyMatch[1].toUpperCase();
+        res.writeHead(302, { Location: `/#/item/${itemKey}` });
+        return res.end();
+      }
+
+      // Static files for dashboard
+      let filePath: string;
 
       if (pathname === "/" || pathname === "/index.html") {
         filePath = path.join(staticDir, "index.html");
