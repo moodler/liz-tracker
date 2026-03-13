@@ -7554,6 +7554,44 @@
         color: var(--text);
       }
 
+      /* Scheduled: due date */
+      .scheduled-due-date {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .scheduled-due-date input[type="date"] {
+        background: rgba(255,255,255,0.06);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--text);
+        padding: 3px 8px;
+        font-size: 0.83rem;
+        outline: none;
+        font-family: inherit;
+      }
+      .scheduled-due-date input[type="date"]:focus {
+        border-color: var(--accent);
+      }
+      .scheduled-due-date .due-clear-btn {
+        background: none;
+        border: none;
+        color: var(--text-dim);
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 2px 4px;
+        opacity: 0.7;
+      }
+      .scheduled-due-date .due-clear-btn:hover {
+        opacity: 1;
+        color: #d63031;
+      }
+      .scheduled-due-date-expired {
+        color: #d63031;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+
       /* Scheduled: days-of-week checkboxes */
       .scheduled-days-row {
         display: flex;
@@ -14364,6 +14402,15 @@
 
                       <span class="status-label">Run count</span>
                       <span class="status-value"><span class="scheduled-run-count">${status.run_count || 0}</span></span>
+
+                      <span class="status-label">Expires</span>
+                      <span class="status-value">
+                        <div class="scheduled-due-date">
+                          <input type="date" id="scheduledDueDate" value="${item.date_due || ""}" />
+                          ${item.date_due ? '<button class="due-clear-btn" id="scheduledDueDateClear" title="Clear due date">&#x2715;</button>' : ""}
+                          ${item.date_due && item.date_due < new Date().toISOString().slice(0, 10) ? '<span class="scheduled-due-date-expired">Expired</span>' : ""}
+                        </div>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -14470,6 +14517,41 @@
               if (ind) { ind.textContent = "Unsaved..."; ind.className = "engagement-save-indicator"; }
               if (scheduledSaveTimer) clearTimeout(scheduledSaveTimer);
               scheduledSaveTimer = setTimeout(() => saveScheduledDescription(), 2000);
+            });
+          }
+
+          // Due date editing
+          const dueDateInput = $("#scheduledDueDate");
+          if (dueDateInput) {
+            dueDateInput.addEventListener("change", async () => {
+              if (!spaceItemId) return;
+              const val = dueDateInput.value || null;
+              try {
+                await apiPatch(`/items/${spaceItemId}`, { date_due: val || "" });
+                const updated = await apiGet(`/items/${spaceItemId}`);
+                spaceItemData = updated;
+                refreshScheduledDashboard(updated);
+                loadTracker();
+                toast(val ? "Due date set" : "Due date cleared");
+              } catch (e) {
+                toast("Failed to save due date: " + e.message, "error");
+              }
+            });
+          }
+          const dueDateClear = $("#scheduledDueDateClear");
+          if (dueDateClear) {
+            dueDateClear.addEventListener("click", async () => {
+              if (!spaceItemId) return;
+              try {
+                await apiPatch(`/items/${spaceItemId}`, { date_due: "" });
+                const updated = await apiGet(`/items/${spaceItemId}`);
+                spaceItemData = updated;
+                refreshScheduledDashboard(updated);
+                loadTracker();
+                toast("Due date cleared");
+              } catch (e) {
+                toast("Failed to clear due date: " + e.message, "error");
+              }
             });
           }
 
@@ -14768,6 +14850,15 @@
 
                   <span class="status-label">Run count</span>
                   <span class="status-value"><span class="scheduled-run-count">${status.run_count || 0}</span></span>
+
+                  <span class="status-label">Expires</span>
+                  <span class="status-value">
+                    <div class="scheduled-due-date">
+                      <input type="date" id="scheduledDueDate" value="${item.date_due || ""}" />
+                      ${item.date_due ? '<button class="due-clear-btn" id="scheduledDueDateClear" title="Clear due date">&#x2715;</button>' : ""}
+                      ${item.date_due && item.date_due < new Date().toISOString().slice(0, 10) ? '<span class="scheduled-due-date-expired">Expired</span>' : ""}
+                    </div>
+                  </span>
                 </div>
               </div>
             </div>
@@ -14810,6 +14901,41 @@
               if (ind) { ind.textContent = "Unsaved..."; ind.className = "engagement-save-indicator"; }
               if (scheduledSaveTimer) clearTimeout(scheduledSaveTimer);
               scheduledSaveTimer = setTimeout(() => saveScheduledDescription(), 2000);
+            });
+          }
+
+          // Re-bind due date editing
+          const dueDateInput = $("#scheduledDueDate");
+          if (dueDateInput) {
+            dueDateInput.addEventListener("change", async () => {
+              if (!spaceItemId) return;
+              const val = dueDateInput.value || null;
+              try {
+                await apiPatch(`/items/${spaceItemId}`, { date_due: val || "" });
+                const updated = await apiGet(`/items/${spaceItemId}`);
+                spaceItemData = updated;
+                refreshScheduledDashboard(updated);
+                loadTracker();
+                toast(val ? "Due date set" : "Due date cleared");
+              } catch (e) {
+                toast("Failed to save due date: " + e.message, "error");
+              }
+            });
+          }
+          const dueDateClear = $("#scheduledDueDateClear");
+          if (dueDateClear) {
+            dueDateClear.addEventListener("click", async () => {
+              if (!spaceItemId) return;
+              try {
+                await apiPatch(`/items/${spaceItemId}`, { date_due: "" });
+                const updated = await apiGet(`/items/${spaceItemId}`);
+                spaceItemData = updated;
+                refreshScheduledDashboard(updated);
+                loadTracker();
+                toast("Due date cleared");
+              } catch (e) {
+                toast("Failed to clear due date: " + e.message, "error");
+              }
             });
           }
 

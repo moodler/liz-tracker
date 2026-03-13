@@ -31,6 +31,7 @@ import {
   onTrackerEvent,
   createExecutionAudit,
   completeExecutionAudit,
+  getExpiredScheduledItems,
   type WorkItem,
   type Project,
   type Attachment,
@@ -1127,6 +1128,9 @@ function tick(): void {
 
   // Check for stale sessions and abort them
   checkStaleSessions();
+
+  // Check for expired scheduled items and auto-close them
+  checkExpiredScheduledItems();
 
   // Check for items in testing/in_review that have been acknowledged by owner
   checkPendingAcknowledgments();
@@ -2864,6 +2868,28 @@ function getLatestStateEntryTime(transitions: Transition[], state: string): stri
  * current state — this prevents stale comments from retriggering auto-completion
  * when the owner manually moves an item back to testing.
  */
+/**
+ * Check for scheduled-space items whose date_due has passed and auto-close them.
+ * When a scheduled task has an expiry date (date_due) and that date is in the past,
+ * the task should no longer run. We move it to 'done' so the cron runner skips it.
+ */
+function checkExpiredScheduledItems(): void {
+  const expired = getExpiredScheduledItems();
+  for (const item of expired) {
+    const key = getWorkItemKey(item);
+    logger.info(
+      { itemId: item.id, key, dateDue: item.date_due },
+      "Scheduled item expired — auto-closing",
+    );
+    changeWorkItemState(
+      item.id,
+      "done",
+      "orchestrator",
+      `Auto-closed: scheduled task expired (due date ${item.date_due} has passed)`,
+    );
+  }
+}
+
 function checkPendingAcknowledgments(): void {
   const testingItems = listWorkItems({ state: "testing" });
   const reviewItems = listWorkItems({ state: "in_review" });

@@ -2233,6 +2233,25 @@ export function getWorkItemBySessionId(sessionId: string): WorkItem | undefined 
     .get(sessionId) as WorkItem | undefined;
 }
 
+/**
+ * Find scheduled-space items whose date_due has passed.
+ * Returns items with space_type='scheduled', a non-null date_due that is
+ * before today, and NOT already in done/cancelled state.
+ * Used by the orchestrator to auto-expire scheduled tasks.
+ */
+export function getExpiredScheduledItems(): WorkItem[] {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  return db
+    .prepare(
+      `SELECT * FROM tracker_work_items
+       WHERE space_type = 'scheduled'
+         AND date_due IS NOT NULL
+         AND date_due < ?
+         AND state NOT IN ('done', 'cancelled')`,
+    )
+    .all(today) as WorkItem[];
+}
+
 // ── Execution Audits (Section 4.6.2) ──
 
 export interface ExecutionAudit {
