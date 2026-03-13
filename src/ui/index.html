@@ -7845,6 +7845,20 @@
             <div class="today-caught-up-title">All caught up!</div>
             <div class="today-caught-up-sub">Nothing needs your attention right now. Enjoy the calm.</div>
           </div>
+          <!-- Due Today / Overdue Section -->
+          <div class="today-section" id="todayDueSection" data-section="due">
+            <div class="today-section-header">
+              <h3>
+                <span class="today-collapse-icon">&#9660;</span>
+                <span class="today-section-emoji">&#128197;</span>
+                Due Today / Overdue
+                <span class="today-section-count" id="todayDueCount">0</span>
+              </h3>
+            </div>
+            <div class="today-section-body" id="todayDueBody">
+              <div class="today-section-empty">No items due today or overdue</div>
+            </div>
+          </div>
           <!-- Needs Your Attention Section -->
           <div class="today-section" id="todayAttentionSection" data-section="attention">
             <div class="today-section-header">
@@ -8506,10 +8520,20 @@
 
         // Sub-states that show attention badges
         const ATTENTION_BADGES = {
+          brainstorming: {
+            label: "Brainstorming",
+            color: "#74b9ff",
+            textColor: "#1a1a2e",
+          },
           clarification: {
             label: "Clarification",
             color: "#fdcb6e",
             textColor: "#1a1a2e",
+          },
+          approved: {
+            label: "Approved",
+            color: "#00b894",
+            textColor: "#fff",
           },
           in_review: {
             label: "In Review",
@@ -11156,35 +11180,7 @@
             }
           }
 
-          // Section 1: Needs Your Attention — items in needs_input or in_review
-          const attentionItems = allItems.filter(i => i.state === "needs_input" || i.state === "in_review");
-
-          // Section 2: In Progress — items in in_development
-          const progressItems = allItems.filter(i => i.state === "in_development");
-
-          // Section 3: Recently Completed — items in done or testing updated in last 24h
-          const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
-          const completedItems = allItems.filter(i =>
-            (i.state === "done" || i.state === "testing") &&
-            new Date(i.updated_at).getTime() > twentyFourHoursAgo
-          );
-
-          const totalVisible = attentionItems.length + progressItems.length + completedItems.length;
-
-          // All caught up state
-          const allCaughtUp = $("#todayAllCaughtUp");
-          if (totalVisible === 0) {
-            allCaughtUp.style.display = "";
-            // Hide all sections
-            $("#todayAttentionSection").style.display = "none";
-            $("#todayProgressSection").style.display = "none";
-            $("#todayCompletedSection").style.display = "none";
-            renderTriageButton();
-            return;
-          }
-          allCaughtUp.style.display = "none";
-
-          // Sort helper (priority then time)
+          // Sort helper (priority descending, then most recently updated)
           function sortByPriority(items) {
             return items.sort((a, b) => {
               const pa = PRIORITY_ORDER[a.priority] ?? 4;
@@ -11194,6 +11190,74 @@
             });
           }
 
+          // Section 1: Due Today / Overdue — items with date_due <= today, not done/cancelled
+          const today = new Date(); today.setHours(0, 0, 0, 0);
+          const todayStr = today.toISOString().slice(0, 10);
+          const dueItems = allItems.filter(i =>
+            i.date_due && i.date_due <= todayStr &&
+            i.state !== "done" && i.state !== "cancelled"
+          );
+          // Sort: overdue first (oldest due date), then by priority
+          dueItems.sort((a, b) => {
+            // Overdue before due-today
+            const aOverdue = a.date_due < todayStr ? 0 : 1;
+            const bOverdue = b.date_due < todayStr ? 0 : 1;
+            if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+            // Within same group, sort by priority descending
+            const pa = PRIORITY_ORDER[a.priority] ?? 4;
+            const pb = PRIORITY_ORDER[b.priority] ?? 4;
+            if (pa !== pb) return pa - pb;
+            // Then by due date ascending (most overdue first)
+            if (a.date_due !== b.date_due) return a.date_due < b.date_due ? -1 : 1;
+            return 0;
+          });
+          const dueItemIds = new Set(dueItems.map(i => i.id));
+
+          // Section 2: Needs Your Attention — enhanced
+          // - needs_input or in_review (existing)
+          // - approved items with bot_dispatch=0 (manual work needed)
+          // - brainstorming items (need triage/decisions)
+          // Deduplicate: exclude items already in Due Today / Overdue
+          const attentionItems = allItems.filter(i => {
+            if (dueItemIds.has(i.id)) return false;
+            if (i.state === "needs_input" || i.state === "in_review") return true;
+            if (i.state === "approved" && !i.bot_dispatch) return true;
+            if (i.state === "brainstorming") return true;
+            return false;
+          });
+
+          // Section 3: In Progress — items in in_development (deduped)
+          const progressItems = allItems.filter(i =>
+            i.state === "in_development" && !dueItemIds.has(i.id)
+          );
+
+          // Section 4: Recently Completed — items in done or testing updated in last 24h
+          const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+          const completedItems = allItems.filter(i =>
+            (i.state === "done" || i.state === "testing") &&
+            new Date(i.updated_at).getTime() > twentyFourHoursAgo
+          );
+
+          const totalVisible = dueItems.length + attentionItems.length + progressItems.length + completedItems.length;
+
+          // All caught up state
+          const allCaughtUp = $("#todayAllCaughtUp");
+          if (totalVisible === 0) {
+            allCaughtUp.style.display = "";
+            // Hide all sections
+            $("#todayDueSection").style.display = "none";
+            $("#todayAttentionSection").style.display = "none";
+            $("#todayProgressSection").style.display = "none";
+            $("#todayCompletedSection").style.display = "none";
+            renderTriageButton();
+            return;
+          }
+          allCaughtUp.style.display = "none";
+
+          // Render Due Today / Overdue
+          renderTodaySection("todayDueSection", "todayDueBody", "todayDueCount",
+            dueItems, projectLookup, "No items due today or overdue");
+
           // Render Needs Attention
           renderTodaySection("todayAttentionSection", "todayAttentionBody", "todayAttentionCount",
             sortByPriority(attentionItems), projectLookup, "Nothing needs your attention right now");
@@ -11202,10 +11266,9 @@
           renderTodaySection("todayProgressSection", "todayProgressBody", "todayProgressCount",
             sortByPriority(progressItems), projectLookup, "No items in progress");
 
-          // Render Recently Completed (newest first)
-          completedItems.sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
+          // Render Recently Completed (sorted by priority descending, then newest)
           renderTodaySection("todayCompletedSection", "todayCompletedBody", "todayCompletedCount",
-            completedItems, projectLookup, "No recently completed items");
+            sortByPriority(completedItems), projectLookup, "No recently completed items");
 
           // Render triage button if brainstorming items exist
           renderTriageButton();
@@ -11268,6 +11331,17 @@
             ? `<span class="today-card-project"><span class="today-card-project-dot" style="background:${projectColor}"></span>${esc(projectName)}</span>`
             : "";
 
+          // Due date badge
+          let dueBadgeHtml = "";
+          if (item.date_due) {
+            const todayDate = new Date(); todayDate.setHours(0, 0, 0, 0);
+            const dueDate = new Date(item.date_due + "T00:00:00");
+            const diffDays = Math.ceil((dueDate - todayDate) / 86400000);
+            const dueCls = diffDays < 0 ? "overdue" : diffDays <= 2 ? "due-soon" : "";
+            const dueLabel = diffDays < 0 ? "Overdue" : diffDays === 0 ? "Today" : diffDays === 1 ? "Tomorrow" : item.date_due;
+            dueBadgeHtml = `<span class="card-due ${dueCls}" title="Due: ${esc(item.date_due)}">&#128197; ${esc(dueLabel)}</span>`;
+          }
+
           return `<div class="today-card" data-id="${esc(item.id)}" data-attention="${cardAttention(item)}" style="border-left-color:${projectColor};">
             ${agentStatusEmoji}
             <div class="today-card-top">
@@ -11279,6 +11353,7 @@
             <div class="today-card-meta">
               ${projectIndicator}
               <span class="priority-badge priority-${item.priority}">${item.priority}</span>
+              ${dueBadgeHtml}
               ${item.assignee ? `<span class="card-assignee"><svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="5" r="3.5"/><path d="M1 14.5C1 11.5 4 9.5 8 9.5s7 2 7 5"/></svg> ${esc(item.assignee)}</span>` : ""}
               <button class="card-comment-btn" onclick="openCommentSheet('${esc(item.id)}'); event.stopPropagation();" title="Comments"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2v3l3-3h7a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2z"/></svg><span class="comment-count-num">${item.comment_count || 0}</span></button>
               <span class="card-time">${timeAgo(item.updated_at)}</span>
