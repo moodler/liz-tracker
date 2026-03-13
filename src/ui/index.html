@@ -11674,12 +11674,17 @@
             }
           }
 
-          const allItems = [];
+          const allItemsRaw = [];
           for (const [state, items] of Object.entries(attentionData.tracker)) {
             for (const item of items) {
-              allItems.push({ ...item, state });
+              allItemsRaw.push({ ...item, state });
             }
           }
+
+          // Filter to only show items assigned to Martin or unassigned
+          const allItems = allItemsRaw.filter(i =>
+            !i.assignee || i.assignee.toLowerCase() === "martin"
+          );
 
           // Sort helper (priority descending, then most recently updated)
           function sortByPriority(items) {
@@ -12084,12 +12089,17 @@
             }
           }
 
-          const allItems = [];
+          const allItemsRaw = [];
           for (const [state, items] of Object.entries(data.tracker)) {
             for (const item of items) {
-              allItems.push({ ...item, state });
+              allItemsRaw.push({ ...item, state });
             }
           }
+
+          // Filter to only show items assigned to Martin or unassigned
+          const allItems = allItemsRaw.filter(i =>
+            !i.assignee || i.assignee.toLowerCase() === "martin"
+          );
 
           // Sort helper (priority descending, then most recently updated)
           function sortByPriority(items) {
