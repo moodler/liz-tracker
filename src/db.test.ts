@@ -1440,3 +1440,139 @@ describe('moveWorkItem', () => {
     expect(moved!.position).toBe(0);
   });
 });
+
+// ── Scheduled Task space_data Management ──
+
+describe('scheduled task space_data', () => {
+  beforeEach(() => _initTestTrackerDatabase());
+
+  it('creates a scheduled task with todo and ignore lists', () => {
+    const project = createProject({ name: 'Scheduled Proj' });
+    const spaceData = JSON.stringify({
+      schedule: { frequency: 'daily', time: '09:00', timezone: 'Australia/Perth' },
+      status: { next_run: null, last_run: null, run_count: 0 },
+      todo: ['Check emails', 'Review calendar'],
+      ignore: ['Skip weekends'],
+    });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Daily Task',
+      space_type: 'scheduled',
+      space_data: spaceData,
+    });
+    expect(item.space_type).toBe('scheduled');
+    expect(item.space_data).toBe(spaceData);
+    const parsed = JSON.parse(item.space_data!);
+    expect(parsed.todo).toEqual(['Check emails', 'Review calendar']);
+    expect(parsed.ignore).toEqual(['Skip weekends']);
+  });
+
+  it('updates todo list via space_data update', () => {
+    const project = createProject({ name: 'Scheduled Proj' });
+    const initialData = {
+      schedule: { frequency: 'daily', time: '09:00' },
+      status: { run_count: 0 },
+      todo: ['Task 1'],
+      ignore: [],
+    };
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Daily Task',
+      space_type: 'scheduled',
+      space_data: JSON.stringify(initialData),
+    });
+
+    // Add a todo item by updating space_data
+    const newData = { ...initialData, todo: ['Task 1', 'Task 2', 'Task 3'] };
+    const updated = updateWorkItem(item.id, { space_data: JSON.stringify(newData) });
+    expect(updated).toBeDefined();
+    const parsed = JSON.parse(updated!.space_data!);
+    expect(parsed.todo).toEqual(['Task 1', 'Task 2', 'Task 3']);
+  });
+
+  it('removes todo items by index correctly', () => {
+    const project = createProject({ name: 'Scheduled Proj' });
+    const data = {
+      schedule: { frequency: 'daily' },
+      status: {},
+      todo: ['A', 'B', 'C', 'D', 'E'],
+      ignore: ['rule1'],
+    };
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Task',
+      space_type: 'scheduled',
+      space_data: JSON.stringify(data),
+    });
+
+    // Remove indices 1 and 3 (B and D)
+    const todo = [...data.todo];
+    const sortedIndices = [3, 1]; // reverse order
+    for (const idx of sortedIndices) {
+      todo.splice(idx, 1);
+    }
+    expect(todo).toEqual(['A', 'C', 'E']);
+
+    const newData = { ...data, todo };
+    const updated = updateWorkItem(item.id, { space_data: JSON.stringify(newData) });
+    const parsed = JSON.parse(updated!.space_data!);
+    expect(parsed.todo).toEqual(['A', 'C', 'E']);
+    // Ignore list should be unchanged
+    expect(parsed.ignore).toEqual(['rule1']);
+  });
+
+  it('handles empty space_data gracefully', () => {
+    const project = createProject({ name: 'Scheduled Proj' });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Empty Task',
+      space_type: 'scheduled',
+    });
+    expect(item.space_type).toBe('scheduled');
+    expect(item.space_data).toBeNull();
+
+    // Setting space_data with just todo should work
+    const newData = {
+      schedule: { frequency: 'daily', time: '09:00' },
+      status: {},
+      todo: ['First task'],
+      ignore: [],
+    };
+    const updated = updateWorkItem(item.id, { space_data: JSON.stringify(newData) });
+    expect(updated).toBeDefined();
+    const parsed = JSON.parse(updated!.space_data!);
+    expect(parsed.todo).toEqual(['First task']);
+  });
+
+  it('preserves schedule and status when modifying todo/ignore', () => {
+    const project = createProject({ name: 'Scheduled Proj' });
+    const data = {
+      schedule: { frequency: 'weekly', time: '08:30', days_of_week: ['monday', 'friday'], timezone: 'Australia/Perth' },
+      status: { next_run: '2026-03-14T00:30:00Z', last_run: '2026-03-13T00:30:00Z', run_count: 5 },
+      todo: ['Original task'],
+      ignore: ['Original rule'],
+    };
+    const item = createWorkItem({
+      project_id: project.id,
+      title: 'Weekly Task',
+      space_type: 'scheduled',
+      space_data: JSON.stringify(data),
+    });
+
+    // Modify only the todo list
+    const newData = { ...data, todo: ['Updated task 1', 'Updated task 2'] };
+    const updated = updateWorkItem(item.id, { space_data: JSON.stringify(newData) });
+    const parsed = JSON.parse(updated!.space_data!);
+
+    // Schedule and status should be preserved
+    expect(parsed.schedule.frequency).toBe('weekly');
+    expect(parsed.schedule.days_of_week).toEqual(['monday', 'friday']);
+    expect(parsed.status.run_count).toBe(5);
+    expect(parsed.status.next_run).toBe('2026-03-14T00:30:00Z');
+
+    // Todo should be updated
+    expect(parsed.todo).toEqual(['Updated task 1', 'Updated task 2']);
+    // Ignore should be unchanged
+    expect(parsed.ignore).toEqual(['Original rule']);
+  });
+});

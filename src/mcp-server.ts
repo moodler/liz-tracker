@@ -1109,6 +1109,206 @@ function createMcpServer(): McpServer {
     },
   );
 
+  // ── Scheduled Task Helpers ──
+
+  /**
+   * Parse the space_data JSON from a scheduled task work item.
+   * Returns the parsed object, or null if the item is not a scheduled task or has no space_data.
+   */
+  function parseScheduledSpaceData(item: ReturnType<typeof getWorkItem>): {
+    schedule: Record<string, unknown>;
+    status: Record<string, unknown>;
+    todo: string[];
+    ignore: string[];
+  } | null {
+    if (!item) return null;
+    if (item.space_type !== "scheduled") return null;
+    if (!item.space_data) {
+      // Return default empty structure
+      return {
+        schedule: { frequency: "daily", time: "09:00", days_of_week: null, timezone: "Australia/Perth", cron_override: null },
+        status: { next_run: null, last_run: null, last_status: null, last_duration_ms: null, run_count: 0 },
+        todo: [],
+        ignore: [],
+      };
+    }
+    try {
+      const parsed = JSON.parse(item.space_data);
+      return {
+        schedule: parsed.schedule || {},
+        status: parsed.status || {},
+        todo: Array.isArray(parsed.todo) ? parsed.todo.map(String) : [],
+        ignore: Array.isArray(parsed.ignore) ? parsed.ignore.map(String) : [],
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Save updated space_data back to a scheduled task work item.
+   */
+  function saveScheduledSpaceData(
+    itemId: string,
+    data: { schedule: Record<string, unknown>; status: Record<string, unknown>; todo: string[]; ignore: string[] },
+  ): ReturnType<typeof updateWorkItem> {
+    return updateWorkItem(itemId, {
+      space_data: JSON.stringify(data),
+    });
+  }
+
+  server.tool(
+    "tracker_add_scheduled_todo",
+    "Add one or more TODO items to a scheduled task. Much simpler than updating space_data manually — just pass the item key and the text strings to add.",
+    {
+      item_id: z.string().describe("Work item ID or display key (e.g. \"HARMONI-5\")"),
+      items: z.array(z.string()).describe("TODO items to add — each must be a plain text string describing a task step"),
+    },
+    async (args) => {
+      const item = resolveItem(args.item_id);
+      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
+      if (item.space_type !== "scheduled") {
+        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not a scheduled task (space_type="${item.space_type}"). This tool only works on scheduled tasks.` }] };
+      }
+
+      const data = parseScheduledSpaceData(item);
+      if (!data) return { content: [{ type: "text", text: "Error: Could not parse scheduled task data" }] };
+
+      // Ensure all items are plain strings
+      const newItems = args.items.map((i) => String(i));
+      data.todo.push(...newItems);
+
+      const updated = saveScheduledSpaceData(item.id, data);
+      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
+
+      return {
+        content: [{
+          type: "text",
+          text: `Added ${newItems.length} TODO item(s) to ${getWorkItemKey(item)}. Total TODO items: ${data.todo.length}.\n\nCurrent TODO list:\n${data.todo.map((t, i) => `  ${i}: ${t}`).join("\n")}`,
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    "tracker_remove_scheduled_todo",
+    "Remove TODO items from a scheduled task by their index numbers. Use tracker_get_item first to see the current TODO list and their indices.",
+    {
+      item_id: z.string().describe("Work item ID or display key (e.g. \"HARMONI-5\")"),
+      indices: z.array(z.number()).describe("Zero-based indices of TODO items to remove. Use tracker_get_item to see the list and indices first."),
+    },
+    async (args) => {
+      const item = resolveItem(args.item_id);
+      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
+      if (item.space_type !== "scheduled") {
+        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not a scheduled task (space_type="${item.space_type}"). This tool only works on scheduled tasks.` }] };
+      }
+
+      const data = parseScheduledSpaceData(item);
+      if (!data) return { content: [{ type: "text", text: "Error: Could not parse scheduled task data" }] };
+
+      // Validate indices
+      const invalidIndices = args.indices.filter((i) => i < 0 || i >= data.todo.length);
+      if (invalidIndices.length > 0) {
+        return { content: [{ type: "text", text: `Error: Invalid indices: ${invalidIndices.join(", ")}. TODO list has ${data.todo.length} items (indices 0-${data.todo.length - 1}).` }] };
+      }
+
+      // Remove in reverse order to preserve indices
+      const sortedIndices = [...args.indices].sort((a, b) => b - a);
+      const removed: string[] = [];
+      for (const idx of sortedIndices) {
+        removed.push(data.todo[idx]);
+        data.todo.splice(idx, 1);
+      }
+
+      const updated = saveScheduledSpaceData(item.id, data);
+      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
+
+      return {
+        content: [{
+          type: "text",
+          text: `Removed ${removed.length} TODO item(s) from ${getWorkItemKey(item)}. Remaining: ${data.todo.length}.\n\nRemoved:\n${removed.map((t) => `  - ${t}`).join("\n")}\n\nCurrent TODO list:\n${data.todo.length > 0 ? data.todo.map((t, i) => `  ${i}: ${t}`).join("\n") : "  (empty)"}`,
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    "tracker_add_scheduled_ignore",
+    "Add one or more IGNORE rules to a scheduled task. Much simpler than updating space_data manually — just pass the item key and the rule strings to add.",
+    {
+      item_id: z.string().describe("Work item ID or display key (e.g. \"HARMONI-5\")"),
+      rules: z.array(z.string()).describe("IGNORE rules to add — each must be a plain text string describing what to skip or exclude"),
+    },
+    async (args) => {
+      const item = resolveItem(args.item_id);
+      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
+      if (item.space_type !== "scheduled") {
+        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not a scheduled task (space_type="${item.space_type}"). This tool only works on scheduled tasks.` }] };
+      }
+
+      const data = parseScheduledSpaceData(item);
+      if (!data) return { content: [{ type: "text", text: "Error: Could not parse scheduled task data" }] };
+
+      // Ensure all rules are plain strings
+      const newRules = args.rules.map((r) => String(r));
+      data.ignore.push(...newRules);
+
+      const updated = saveScheduledSpaceData(item.id, data);
+      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
+
+      return {
+        content: [{
+          type: "text",
+          text: `Added ${newRules.length} IGNORE rule(s) to ${getWorkItemKey(item)}. Total IGNORE rules: ${data.ignore.length}.\n\nCurrent IGNORE list:\n${data.ignore.map((r, i) => `  ${i}: ${r}`).join("\n")}`,
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    "tracker_remove_scheduled_ignore",
+    "Remove IGNORE rules from a scheduled task by their index numbers. Use tracker_get_item first to see the current IGNORE list and their indices.",
+    {
+      item_id: z.string().describe("Work item ID or display key (e.g. \"HARMONI-5\")"),
+      indices: z.array(z.number()).describe("Zero-based indices of IGNORE rules to remove. Use tracker_get_item to see the list and indices first."),
+    },
+    async (args) => {
+      const item = resolveItem(args.item_id);
+      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
+      if (item.space_type !== "scheduled") {
+        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not a scheduled task (space_type="${item.space_type}"). This tool only works on scheduled tasks.` }] };
+      }
+
+      const data = parseScheduledSpaceData(item);
+      if (!data) return { content: [{ type: "text", text: "Error: Could not parse scheduled task data" }] };
+
+      // Validate indices
+      const invalidIndices = args.indices.filter((i) => i < 0 || i >= data.ignore.length);
+      if (invalidIndices.length > 0) {
+        return { content: [{ type: "text", text: `Error: Invalid indices: ${invalidIndices.join(", ")}. IGNORE list has ${data.ignore.length} rules (indices 0-${data.ignore.length - 1}).` }] };
+      }
+
+      // Remove in reverse order to preserve indices
+      const sortedIndices = [...args.indices].sort((a, b) => b - a);
+      const removed: string[] = [];
+      for (const idx of sortedIndices) {
+        removed.push(data.ignore[idx]);
+        data.ignore.splice(idx, 1);
+      }
+
+      const updated = saveScheduledSpaceData(item.id, data);
+      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
+
+      return {
+        content: [{
+          type: "text",
+          text: `Removed ${removed.length} IGNORE rule(s) from ${getWorkItemKey(item)}. Remaining: ${data.ignore.length}.\n\nRemoved:\n${removed.map((r) => `  - ${r}`).join("\n")}\n\nCurrent IGNORE list:\n${data.ignore.length > 0 ? data.ignore.map((r, i) => `  ${i}: ${r}`).join("\n") : "  (empty)"}`,
+        }],
+      };
+    },
+  );
+
   return server;
 }
 

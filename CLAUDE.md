@@ -256,6 +256,10 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `tracker_safe_restart` | Safely restart the tracker (waits for active sessions) |
 | `tracker_restart_status` | Check restart safety and pending restart status |
 | `tracker_cancel_restart` | Cancel a pending restart request |
+| `tracker_add_scheduled_todo` | Add TODO items to a scheduled task (simple string array) |
+| `tracker_remove_scheduled_todo` | Remove TODO items from a scheduled task by index |
+| `tracker_add_scheduled_ignore` | Add IGNORE rules to a scheduled task (simple string array) |
+| `tracker_remove_scheduled_ignore` | Remove IGNORE rules from a scheduled task by index |
 
 ### Per-project setup
 
@@ -357,12 +361,29 @@ When updating a scheduled task's `space_data` via MCP tools or the API, the valu
 - `frequency` options: `"once"`, `"hourly"`, `"daily"`, `"weekly"`, `"monthly"`, `"manual"`, `"custom"` (with `cron_override`).
 - `days_of_week` is only used when `frequency` is `"weekly"`: an array of lowercase day names like `["monday", "wednesday", "friday"]`.
 
+**Preferred: Use dedicated MCP tools instead of raw `space_data` updates.**
+
+Agents should use these simpler tools instead of constructing `space_data` JSON manually:
+
+| MCP Tool | Description |
+| --- | --- |
+| `tracker_add_scheduled_todo` | Add TODO items — pass `item_id` and `items` (array of strings) |
+| `tracker_remove_scheduled_todo` | Remove TODO items — pass `item_id` and `indices` (array of index numbers) |
+| `tracker_add_scheduled_ignore` | Add IGNORE rules — pass `item_id` and `rules` (array of strings) |
+| `tracker_remove_scheduled_ignore` | Remove IGNORE rules — pass `item_id` and `indices` (array of index numbers) |
+
+These tools handle the GET→parse→modify→save cycle internally and only accept plain strings, making it impossible to accidentally create `[object Object]` entries.
+
 ### API Endpoints
 
 - `PATCH /items/:id` — accepts `space_type`, `space_data`, and `project_id` fields. Passing `project_id` moves the item to another project (allocates new seq_number, resets space if needed).
 - `PATCH /projects/:id` — accepts `active_spaces` field (JSON array)
 - `GET /items/:id/versions` — returns description version history
 - `POST /items/:id/versions` — save a description version snapshot
+- `POST /items/:id/scheduled/todo` — add TODO items (`{ items: ["string1", "string2"] }`)
+- `DELETE /items/:id/scheduled/todo` — remove TODO items (`{ indices: [0, 2] }`)
+- `POST /items/:id/scheduled/ignore` — add IGNORE rules (`{ rules: ["rule1"] }`)
+- `DELETE /items/:id/scheduled/ignore` — remove IGNORE rules (`{ indices: [0] }`)
 
 ### UI Sections
 

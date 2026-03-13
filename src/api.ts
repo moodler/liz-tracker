@@ -137,6 +137,37 @@ function sanitizeScheduledSpaceData(spaceDataStr: string, spaceType?: string | n
   }
 }
 
+/**
+ * Parse space_data from a scheduled task work item for API operations.
+ * Returns a structured object with todo/ignore arrays, or null on parse failure.
+ */
+function parseScheduledSpaceDataForApi(item: { space_type: string; space_data: string | null }): {
+  schedule: Record<string, unknown>;
+  status: Record<string, unknown>;
+  todo: string[];
+  ignore: string[];
+} | null {
+  if (!item.space_data) {
+    return {
+      schedule: { frequency: "daily", time: "09:00", days_of_week: null, timezone: "Australia/Perth", cron_override: null },
+      status: { next_run: null, last_run: null, last_status: null, last_duration_ms: null, run_count: 0 },
+      todo: [],
+      ignore: [],
+    };
+  }
+  try {
+    const parsed = JSON.parse(item.space_data);
+    return {
+      schedule: parsed.schedule || {},
+      status: parsed.status || {},
+      todo: Array.isArray(parsed.todo) ? parsed.todo.map(String) : [],
+      ignore: Array.isArray(parsed.ignore) ? parsed.ignore.map(String) : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 function json(res: http.ServerResponse, data: unknown, status = 200): void {
   res.writeHead(status, {
     "Content-Type": "application/json",
@@ -999,6 +1030,116 @@ async function handleApiRequest(
         }
 
         return error(res, "Unsupported Content-Type. Use multipart/form-data or application/json");
+      }
+
+      // ── Scheduled Task List Management ──
+
+      // POST /items/:id/scheduled/todo — add TODO items to a scheduled task
+      if (parts.length === 4 && parts[2] === "scheduled" && parts[3] === "todo" && method === "POST") {
+        const item = getWorkItem(itemId);
+        if (!item) return error(res, "Work item not found", 404);
+        if (item.space_type !== "scheduled") {
+          return error(res, `Item is not a scheduled task (space_type="${item.space_type}")`, 400);
+        }
+
+        const body = await parseBody(req);
+        if (!body.items || !Array.isArray(body.items)) return error(res, "items (array of strings) is required");
+
+        const spaceData = parseScheduledSpaceDataForApi(item);
+        if (!spaceData) return error(res, "Could not parse scheduled task data", 500);
+
+        const newItems = (body.items as unknown[]).map((i) => String(i));
+        spaceData.todo.push(...newItems);
+
+        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
+        if (!updated) return error(res, "Failed to update work item", 500);
+        return json(res, { todo: spaceData.todo, added: newItems.length, total: spaceData.todo.length });
+      }
+
+      // DELETE /items/:id/scheduled/todo — remove TODO items by indices
+      if (parts.length === 4 && parts[2] === "scheduled" && parts[3] === "todo" && method === "DELETE") {
+        const item = getWorkItem(itemId);
+        if (!item) return error(res, "Work item not found", 404);
+        if (item.space_type !== "scheduled") {
+          return error(res, `Item is not a scheduled task (space_type="${item.space_type}")`, 400);
+        }
+
+        const body = await parseBody(req);
+        if (!body.indices || !Array.isArray(body.indices)) return error(res, "indices (array of numbers) is required");
+
+        const spaceData = parseScheduledSpaceDataForApi(item);
+        if (!spaceData) return error(res, "Could not parse scheduled task data", 500);
+
+        const indices = (body.indices as unknown[]).map(Number);
+        const invalidIndices = indices.filter((i) => i < 0 || i >= spaceData.todo.length);
+        if (invalidIndices.length > 0) {
+          return error(res, `Invalid indices: ${invalidIndices.join(", ")}. TODO list has ${spaceData.todo.length} items.`, 400);
+        }
+
+        const sortedIndices = [...indices].sort((a, b) => b - a);
+        const removed: string[] = [];
+        for (const idx of sortedIndices) {
+          removed.push(spaceData.todo[idx]);
+          spaceData.todo.splice(idx, 1);
+        }
+
+        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
+        if (!updated) return error(res, "Failed to update work item", 500);
+        return json(res, { todo: spaceData.todo, removed: removed.length, total: spaceData.todo.length });
+      }
+
+      // POST /items/:id/scheduled/ignore — add IGNORE rules to a scheduled task
+      if (parts.length === 4 && parts[2] === "scheduled" && parts[3] === "ignore" && method === "POST") {
+        const item = getWorkItem(itemId);
+        if (!item) return error(res, "Work item not found", 404);
+        if (item.space_type !== "scheduled") {
+          return error(res, `Item is not a scheduled task (space_type="${item.space_type}")`, 400);
+        }
+
+        const body = await parseBody(req);
+        if (!body.rules || !Array.isArray(body.rules)) return error(res, "rules (array of strings) is required");
+
+        const spaceData = parseScheduledSpaceDataForApi(item);
+        if (!spaceData) return error(res, "Could not parse scheduled task data", 500);
+
+        const newRules = (body.rules as unknown[]).map((r) => String(r));
+        spaceData.ignore.push(...newRules);
+
+        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
+        if (!updated) return error(res, "Failed to update work item", 500);
+        return json(res, { ignore: spaceData.ignore, added: newRules.length, total: spaceData.ignore.length });
+      }
+
+      // DELETE /items/:id/scheduled/ignore — remove IGNORE rules by indices
+      if (parts.length === 4 && parts[2] === "scheduled" && parts[3] === "ignore" && method === "DELETE") {
+        const item = getWorkItem(itemId);
+        if (!item) return error(res, "Work item not found", 404);
+        if (item.space_type !== "scheduled") {
+          return error(res, `Item is not a scheduled task (space_type="${item.space_type}")`, 400);
+        }
+
+        const body = await parseBody(req);
+        if (!body.indices || !Array.isArray(body.indices)) return error(res, "indices (array of numbers) is required");
+
+        const spaceData = parseScheduledSpaceDataForApi(item);
+        if (!spaceData) return error(res, "Could not parse scheduled task data", 500);
+
+        const indices = (body.indices as unknown[]).map(Number);
+        const invalidIndices = indices.filter((i) => i < 0 || i >= spaceData.ignore.length);
+        if (invalidIndices.length > 0) {
+          return error(res, `Invalid indices: ${invalidIndices.join(", ")}. IGNORE list has ${spaceData.ignore.length} rules.`, 400);
+        }
+
+        const sortedIndices = [...indices].sort((a, b) => b - a);
+        const removed: string[] = [];
+        for (const idx of sortedIndices) {
+          removed.push(spaceData.ignore[idx]);
+          spaceData.ignore.splice(idx, 1);
+        }
+
+        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
+        if (!updated) return error(res, "Failed to update work item", 500);
+        return json(res, { ignore: spaceData.ignore, removed: removed.length, total: spaceData.ignore.length });
       }
 
       // GET/POST /items/:id/watchers
