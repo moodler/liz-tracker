@@ -1,6 +1,6 @@
 {
   "name": "liz-tracker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Liz Tracker — lightweight project management tracker with kanban UI, REST API, MCP tools, and OpenCode orchestrator",
   "type": "module",
   "main": "dist/index.js",
