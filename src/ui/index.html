@@ -1133,11 +1133,14 @@
       .overlay {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, 0.4);
         z-index: 100;
         opacity: 0;
         pointer-events: none;
         transition: opacity 200ms ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .overlay.open {
         opacity: 1;
@@ -1145,25 +1148,37 @@
       }
       .detail-panel {
         position: fixed;
-        top: 0;
-        right: 0;
-        bottom: 0;
-        width: 560px;
-        max-width: 100vw;
-        background: rgba(22, 33, 62, 0.60);
+        inset: 0;
+        z-index: 101;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+      .detail-panel.open {
+        pointer-events: auto;
+      }
+      .detail-panel-inner {
+        width: calc(100% - 120px);
+        height: calc(100% - 120px);
+        max-width: 900px;
+        max-height: 100%;
+        background: rgba(22, 33, 62, 0.65);
         -webkit-backdrop-filter: blur(40px) saturate(180%);
         backdrop-filter: blur(40px) saturate(180%);
-        border-left: 1px solid rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: var(--radius);
         box-shadow: var(--shadow-xl), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-        z-index: 101;
-        transform: translateX(100%);
-        transition: transform 250ms var(--ease-out);
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        transform: scale(0.97);
+        opacity: 0;
+        transition: transform 0.3s var(--spring), opacity 0.2s ease;
       }
-      .detail-panel.open {
-        transform: translateX(0);
+      .detail-panel.open .detail-panel-inner {
+        transform: scale(1);
+        opacity: 1;
       }
       .detail-header {
         display: flex;
@@ -2635,8 +2650,10 @@
           width: 260px;
           min-width: 260px;
         }
-        .detail-panel {
-          width: 100vw;
+        .detail-panel-inner {
+          width: calc(100% - 40px);
+          height: calc(100% - 40px);
+          max-width: 100%;
         }
         .control-bar {
           padding: 6px 12px;
@@ -3008,9 +3025,15 @@
         }
 
         /* ── Phone Detail Panel ── */
-        .detail-panel {
+        .detail-panel-inner {
           width: 100vw;
           width: 100dvw;
+          height: 100vh;
+          height: 100dvh;
+          max-width: 100%;
+          max-height: 100%;
+          border-radius: 0;
+          border: none;
           -webkit-overflow-scrolling: touch;
         }
         .detail-header {
@@ -4379,9 +4402,10 @@
       html.is-ipad .tracker-container { padding-bottom: 0 !important; }
 
       /* ── iPad Detail Panel ── */
-      html.is-ipad .detail-panel {
-        width: 100vw;
-        width: 100dvw;
+      html.is-ipad .detail-panel-inner {
+        width: calc(100% - 40px);
+        height: calc(100% - 40px);
+        max-width: 100%;
         -webkit-overflow-scrolling: touch;
       }
       html.is-ipad .detail-header {
@@ -5022,9 +5046,10 @@
         position: fixed;
         inset: 0;
         z-index: 600;
-        background: var(--bg);
+        background: rgba(0, 0, 0, 0.4);
         display: flex;
-        flex-direction: column;
+        align-items: center;
+        justify-content: center;
         opacity: 0;
         pointer-events: none;
         transition: opacity 250ms ease;
@@ -5033,12 +5058,31 @@
         opacity: 1;
         pointer-events: auto;
       }
+      .triage-modal {
+        width: calc(100% - 120px);
+        height: calc(100% - 120px);
+        max-width: 900px;
+        max-height: 100%;
+        background: rgba(22, 33, 62, 0.65);
+        -webkit-backdrop-filter: blur(40px) saturate(180%);
+        backdrop-filter: blur(40px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-xl), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        transform: scale(0.97);
+        transition: transform 0.3s var(--spring);
+      }
+      .triage-overlay.open .triage-modal {
+        transform: scale(1);
+      }
       .triage-header {
         display: flex;
         align-items: center;
         gap: 12px;
         padding: 12px 20px;
-        background: var(--bg-card);
         border-bottom: 1px solid var(--border);
         flex-shrink: 0;
       }
@@ -5513,6 +5557,13 @@
 
       /* Phone responsive overrides for triage */
       @media (max-width: 480px) {
+        .triage-modal {
+          width: 100%;
+          height: 100%;
+          max-width: 100%;
+          border-radius: 0;
+          border: none;
+        }
         .triage-header {
           padding: 10px 14px;
         }
@@ -8182,29 +8233,31 @@
 
       <!-- Triage Mode Overlay -->
       <div class="triage-overlay" id="triageOverlay">
-        <div class="triage-header">
-          <button class="triage-close-btn" id="triageCloseBtn" title="Exit Triage">&#10005;</button>
-          <div class="triage-header-title">Triage Mode</div>
-        </div>
-        <div class="triage-progress">
-          <div class="triage-progress-bar">
-            <div class="triage-progress-fill" id="triageProgressFill"></div>
+        <div class="triage-modal">
+          <div class="triage-header">
+            <button class="triage-close-btn" id="triageCloseBtn" title="Exit Triage">&#10005;</button>
+            <div class="triage-header-title">Triage Mode</div>
           </div>
-          <div class="triage-progress-text" id="triageProgressText">0 of 0</div>
-        </div>
-        <div class="triage-card-area" id="triageCardArea">
-          <!-- Card rendered dynamically -->
-        </div>
-        <div class="triage-actions" id="triageActions">
-          <button class="triage-action-btn triage-action-reject" id="triageRejectBtn">
-            &#8592; Reject
-          </button>
-          <button class="triage-action-btn triage-action-skip" id="triageSkipBtn">
-            Skip
-          </button>
-          <button class="triage-action-btn triage-action-approve" id="triageApproveBtn">
-            Approve &#8594;
-          </button>
+          <div class="triage-progress">
+            <div class="triage-progress-bar">
+              <div class="triage-progress-fill" id="triageProgressFill"></div>
+            </div>
+            <div class="triage-progress-text" id="triageProgressText">0 of 0</div>
+          </div>
+          <div class="triage-card-area" id="triageCardArea">
+            <!-- Card rendered dynamically -->
+          </div>
+          <div class="triage-actions" id="triageActions">
+            <button class="triage-action-btn triage-action-reject" id="triageRejectBtn">
+              &#8592; Reject
+            </button>
+            <button class="triage-action-btn triage-action-skip" id="triageSkipBtn">
+              Skip
+            </button>
+            <button class="triage-action-btn triage-action-approve" id="triageApproveBtn">
+              Approve &#8594;
+            </button>
+          </div>
         </div>
       </div>
 
@@ -8281,6 +8334,7 @@
     <!-- Detail Panel -->
     <div class="overlay" id="detailOverlay"></div>
     <div class="detail-panel" id="detailPanel">
+      <div class="detail-panel-inner">
       <div class="detail-header">
         <button class="detail-close" id="detailClose" title="Close">
           &times;
@@ -8488,6 +8542,7 @@
           <h3>History</h3>
           <div class="transition-list" id="detailTransitions"></div>
         </div>
+      </div>
       </div>
     </div>
 
@@ -15357,6 +15412,9 @@
         }
 
         detailOverlay.addEventListener("click", closeDetail);
+        detailPanel.addEventListener("click", (e) => {
+          if (e.target === detailPanel) closeDetail();
+        });
         $("#detailClose").addEventListener("click", closeDetail);
 
         // Space view toggle — switch from standard detail to space overlay
@@ -17867,6 +17925,9 @@
 
         // Button handlers
         $("#triageCloseBtn").addEventListener("click", closeTriageMode);
+        triageOverlay.addEventListener("click", (e) => {
+          if (e.target === triageOverlay) closeTriageMode();
+        });
         $("#triageRejectBtn").addEventListener("click", () => triageAction("reject"));
         $("#triageSkipBtn").addEventListener("click", () => triageAction("skip"));
         $("#triageApproveBtn").addEventListener("click", () => triageAction("approve"));
