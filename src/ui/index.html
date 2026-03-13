@@ -11721,12 +11721,14 @@
           const dueItemIds = new Set(dueItems.map(i => i.id));
 
           // Section 2: Needs Your Attention — enhanced
+          // - testing items first (need owner verification — highest attention priority)
           // - needs_input or in_review (existing)
           // - approved items with bot_dispatch=0 (manual work needed)
           // - brainstorming items (need triage/decisions)
           // Deduplicate: exclude items already in Due Today / Overdue
           const attentionItems = allItems.filter(i => {
             if (dueItemIds.has(i.id)) return false;
+            if (i.state === "testing") return true;
             if (i.state === "needs_input" || i.state === "in_review") return true;
             if (i.state === "approved" && !i.bot_dispatch) return true;
             if (i.state === "brainstorming") return true;
@@ -11738,10 +11740,10 @@
             i.state === "in_development" && !dueItemIds.has(i.id)
           );
 
-          // Section 4: Recently Completed — items in done or testing updated in last 24h
+          // Section 4: Recently Completed — items in done updated in last 24h
           const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
           const completedItems = allItems.filter(i =>
-            (i.state === "done" || i.state === "testing") &&
+            i.state === "done" &&
             new Date(i.updated_at).getTime() > twentyFourHoursAgo
           );
 
@@ -11765,9 +11767,18 @@
           renderTodaySection("todayDueSection", "todayDueBody", "todayDueCount",
             dueItems, projectLookup, "No items due today or overdue");
 
-          // Render Needs Attention
+          // Render Needs Attention — testing items first, then sort by priority within each group
+          attentionItems.sort((a, b) => {
+            const aTest = a.state === "testing" ? 0 : 1;
+            const bTest = b.state === "testing" ? 0 : 1;
+            if (aTest !== bTest) return aTest - bTest;
+            const pa = PRIORITY_ORDER[a.priority] ?? 4;
+            const pb = PRIORITY_ORDER[b.priority] ?? 4;
+            if (pa !== pb) return pa - pb;
+            return new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime();
+          });
           renderTodaySection("todayAttentionSection", "todayAttentionBody", "todayAttentionCount",
-            sortByPriority(attentionItems), projectLookup, "Nothing needs your attention right now");
+            attentionItems, projectLookup, "Nothing needs your attention right now");
 
           // Render In Progress
           renderTodaySection("todayProgressSection", "todayProgressBody", "todayProgressCount",
@@ -12131,8 +12142,11 @@
           const dueItemIds = new Set(dueItems.map(i => i.id));
 
           // Section 2: Needs Your Attention
+          // - testing items first (need owner verification — highest attention priority)
+          // - needs_input or in_review, approved (non-bot), brainstorming
           const attentionItems = allItems.filter(i => {
             if (dueItemIds.has(i.id)) return false;
+            if (i.state === "testing") return true;
             if (i.state === "needs_input" || i.state === "in_review") return true;
             if (i.state === "approved" && !i.bot_dispatch) return true;
             if (i.state === "brainstorming") return true;
@@ -12144,10 +12158,10 @@
             i.state === "in_development" && !dueItemIds.has(i.id)
           );
 
-          // Section 4: Recently Completed
+          // Section 4: Recently Completed — done items only (testing moved to attention)
           const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
           const completedItems = allItems.filter(i =>
-            (i.state === "done" || i.state === "testing") &&
+            i.state === "done" &&
             new Date(i.updated_at).getTime() > twentyFourHoursAgo
           );
 
@@ -12168,7 +12182,17 @@
           let html = '<div class="today-dashboard">';
 
           html += renderTodayModalSection("Due Today / Overdue", "&#128197;", dueItems, projectLookup);
-          html += renderTodayModalSection("Needs Your Attention", "&#128680;", sortByPriority(attentionItems), projectLookup);
+          // Sort attention items: testing first, then by priority within each group
+          attentionItems.sort((a, b) => {
+            const aTest = a.state === "testing" ? 0 : 1;
+            const bTest = b.state === "testing" ? 0 : 1;
+            if (aTest !== bTest) return aTest - bTest;
+            const pa = PRIORITY_ORDER[a.priority] ?? 4;
+            const pb = PRIORITY_ORDER[b.priority] ?? 4;
+            if (pa !== pb) return pa - pb;
+            return new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime();
+          });
+          html += renderTodayModalSection("Needs Your Attention", "&#128680;", attentionItems, projectLookup);
           html += renderTodayModalSection("In Progress", "&#9881;&#65039;", sortByPriority(progressItems), projectLookup);
           html += renderTodayModalSection("Recently Completed", "&#9989;", sortByPriority(completedItems), projectLookup);
 
