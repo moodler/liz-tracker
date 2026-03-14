@@ -1367,6 +1367,20 @@ export function moveWorkItem(
   ).run(...values);
 
   const updated = getWorkItem(id)!;
+
+  // Record the move in the transition history
+  const sourceProject = getProject(existing.project_id);
+  const oldKey = `${sourceProject?.short_name || "???"}-${existing.seq_number}`;
+  const newKey = `${targetProject.short_name}-${newSeqNumber}`;
+  const moveComment = `Moved from ${sourceProject?.name || "unknown"} (${oldKey}) to ${targetProject.name} (${newKey})`;
+  recordTransition(
+    id,
+    existing.state as WorkItemState,
+    existing.state as WorkItemState,
+    actor || "system",
+    moveComment,
+  );
+
   emit({
     type: "work_item.moved",
     work_item_id: id,

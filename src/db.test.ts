@@ -1439,6 +1439,38 @@ describe('moveWorkItem', () => {
     expect(moved).toBeDefined();
     expect(moved!.position).toBe(0);
   });
+
+  it('records a transition when moving between projects', () => {
+    const projectA = createProject({ name: 'Project Alpha', short_name: 'PA' });
+    const projectB = createProject({ name: 'Project Beta', short_name: 'PB' });
+    const item = createWorkItem({ project_id: projectA.id, title: 'Track Move' });
+
+    // Move the item to a different project
+    const moved = moveWorkItem(item.id, projectB.id, 'Martin');
+    expect(moved).toBeDefined();
+
+    // Check that a transition was recorded
+    const transitions = listTransitions(item.id);
+    // Should have: 1 initial "Created" transition + 1 move transition
+    expect(transitions.length).toBe(2);
+
+    const moveTransition = transitions[1];
+    expect(moveTransition.from_state).toBe('brainstorming');
+    expect(moveTransition.to_state).toBe('brainstorming');
+    expect(moveTransition.actor).toBe('Martin');
+    expect(moveTransition.comment).toBe('Moved from Project Alpha (PA-1) to Project Beta (PB-1)');
+  });
+
+  it('does not record a transition when moving to same project', () => {
+    const project = createProject({ name: 'Same Proj', short_name: 'SP' });
+    const item = createWorkItem({ project_id: project.id, title: 'Static Item' });
+
+    moveWorkItem(item.id, project.id);
+
+    // Only the initial "Created" transition should exist
+    const transitions = listTransitions(item.id);
+    expect(transitions.length).toBe(1);
+  });
 });
 
 // ── Scheduled Task space_data Management ──
