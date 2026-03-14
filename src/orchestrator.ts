@@ -439,6 +439,25 @@ interface ActiveSession {
    * Informational — logged for debugging.
    */
   compactionCount?: number;
+  /**
+   * Whether the session is waiting for a permission response from the user.
+   * Set to true when a permission.updated event is received (e.g., the agent
+   * wants to access files outside its working directory). Cleared when the
+   * permission is replied to (permission.replied) or the session returns to busy.
+   *
+   * TRACK-203: This surfaces the permission-waiting state to the tracker so
+   * the owner knows the session needs attention in the OpenCode UI.
+   */
+  waitingForPermission?: boolean;
+  /**
+   * Details of the pending permission request, for logging and display.
+   * Set from the permission.updated event's title and type fields.
+   */
+  pendingPermission?: {
+    id: string;
+    type: string;
+    title: string;
+  };
 }
 
 /**
@@ -2254,6 +2273,17 @@ function handleSseEvent(raw: Record<string, unknown>): void {
           session.compactionStartedAt = undefined;
         }
 
+        // TRACK-203: If session was waiting for permission and is now busy again,
+        // the permission was granted — clear the waiting state
+        if (session.waitingForPermission) {
+          logger.info(
+            { sessionId, itemId: session.itemId },
+            "Session resumed from permission wait — back to busy",
+          );
+          session.waitingForPermission = false;
+          session.pendingPermission = undefined;
+        }
+
         // If there was a deferred error for this session, cancel it — session recovered
         cancelDeferredError(sessionId);
       } else if (status.type === "retry") {
@@ -2329,6 +2359,88 @@ function handleSseEvent(raw: Record<string, unknown>): void {
         deferError(sessionId, message);
       } else {
         handleSessionError(sessionId, message);
+      }
+      break;
+    }
+
+    // TRACK-203: Detect when a session is waiting for user permission
+    // (e.g., to access files outside its working directory, run bash commands, etc.)
+    // and communicate this back to the tracker so the owner knows the session
+    // needs attention in the OpenCode UI.
+    case "permission.updated": {
+      const session = activeSessions.get(sessionId)!;
+      session.lastActivityAt = new Date();
+
+      const permissionId = properties.id as string | undefined;
+      const permissionType = properties.type as string | undefined;
+      const permissionTitle = properties.title as string | undefined;
+
+      // Only react to new permission requests (not already waiting)
+      if (!session.waitingForPermission) {
+        session.waitingForPermission = true;
+        session.pendingPermission = {
+          id: permissionId || "unknown",
+          type: permissionType || "unknown",
+          title: permissionTitle || "Permission requested",
+        };
+
+        // Update session status in the DB so the dashboard can show it
+        updateSessionStatus(session.itemId, "waiting_for_permission");
+
+        // Build a deep link URL so the owner can go directly to the session
+        const item = getWorkItem(session.itemId);
+        const project = item ? getProject(item.project_id) : null;
+        const deepLink = project?.working_directory
+          ? buildOpencodeSessionUrl(sessionId, project.working_directory)
+          : null;
+
+        // Add a tracker comment so the owner is informed
+        const linkText = deepLink
+          ? `\n\n[Open session in OpenCode](${deepLink})`
+          : "";
+        createComment({
+          work_item_id: session.itemId,
+          author: "orchestrator",
+          body: `⚠️ **Session waiting for permission** — the agent needs approval to proceed.\n\n**Type:** ${permissionType || "unknown"}\n**Request:** ${permissionTitle || "Permission requested"}\n\nPlease open the OpenCode UI to grant or deny this permission. The session will remain paused until the permission is responded to.${linkText}`,
+        });
+
+        logger.warn(
+          { sessionId, itemId: session.itemId, permissionId, permissionType, permissionTitle },
+          "Session waiting for permission — owner needs to respond in OpenCode UI",
+        );
+      } else {
+        // Already waiting — update the pending permission info
+        session.pendingPermission = {
+          id: permissionId || session.pendingPermission?.id || "unknown",
+          type: permissionType || session.pendingPermission?.type || "unknown",
+          title: permissionTitle || session.pendingPermission?.title || "Permission requested",
+        };
+        logger.debug(
+          { sessionId, itemId: session.itemId, permissionId, permissionType },
+          "Additional permission request while already waiting",
+        );
+      }
+      break;
+    }
+
+    case "permission.replied": {
+      const session = activeSessions.get(sessionId)!;
+      session.lastActivityAt = new Date();
+
+      const response = properties.response as string | undefined;
+      const repliedPermissionId = properties.permissionID as string | undefined;
+
+      if (session.waitingForPermission) {
+        session.waitingForPermission = false;
+        session.pendingPermission = undefined;
+
+        // Restore running status in the DB
+        updateSessionStatus(session.itemId, "running");
+
+        logger.info(
+          { sessionId, itemId: session.itemId, permissionId: repliedPermissionId, response },
+          "Permission responded to — session can continue",
+        );
       }
       break;
     }
@@ -2950,8 +3062,8 @@ function checkPendingTestingFeedback(): void {
   for (const item of testingItems) {
     // Skip items that are already locked (another session handling them)
     if (item.locked_by) continue;
-    // Skip items with an active session
-    if (item.session_status === "pending" || item.session_status === "running") continue;
+    // Skip items with an active session (including those waiting for permission)
+    if (item.session_status === "pending" || item.session_status === "running" || item.session_status === "waiting_for_permission") continue;
 
     const transitions = listTransitions(item.id);
     const comments = listComments(item.id);
@@ -3261,7 +3373,7 @@ function startCommentWatcher(): void {
           logger.debug({ itemId: work_item_id }, "Owner feedback received but item is locked — skipping auto-redispatch");
           return;
         }
-        if (item.session_status === "pending" || item.session_status === "running") {
+        if (item.session_status === "pending" || item.session_status === "running" || item.session_status === "waiting_for_permission") {
           logger.debug({ itemId: work_item_id }, "Owner feedback received but item has active session — skipping auto-redispatch");
           return;
         }

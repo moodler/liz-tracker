@@ -118,6 +118,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 - `completed` — Session finished, orchestrator cleaned up
 - `failed` — Session errored or aborted
 - `idle` — Session returned to idle (transitional)
+- `waiting_for_permission` — Session paused, waiting for user to grant/deny a permission in OpenCode UI (e.g. external directory access)
 
 ### Safety features
 

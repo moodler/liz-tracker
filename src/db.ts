@@ -2036,7 +2036,7 @@ export function getProjectStats(projectId: string): TrackerStats {
 
 // ── Session / Orchestrator Functions ──
 
-export type SessionStatus = "pending" | "running" | "completed" | "failed" | "idle";
+export type SessionStatus = "pending" | "running" | "completed" | "failed" | "idle" | "waiting_for_permission";
 
 /** Set session info on a work item (called by orchestrator). */
 export function setSessionInfo(
@@ -2082,13 +2082,13 @@ export function updateSessionStatus(
  *   Exception: comment-only items (requires_code=0) can be dispatched without
  *   human approval, since they don't present a security risk (no code changes).
  * - approved_description_hash matches current description (Section 4.3.1)
- * - no active session (session_status NOT IN pending/running)
- *
- * Note: bot_dispatch controls whether the orchestrator should dispatch the item.
- * requires_code controls whether the bot should make code changes (vs just research/think).
- *
- * Ordered by priority (urgent first) then age (oldest first).
- */
+  * - no active session (session_status NOT IN pending/running/waiting_for_permission)
+  *
+  * Note: bot_dispatch controls whether the orchestrator should dispatch the item.
+  * requires_code controls whether the bot should make code changes (vs just research/think).
+  *
+  * Ordered by priority (urgent first) then age (oldest first).
+  */
 export function getDispatchableItems(limit: number = 1): WorkItem[] {
   const priorityOrder = "CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END";
   const items = db
@@ -2100,7 +2100,7 @@ export function getDispatchableItems(limit: number = 1): WorkItem[] {
           AND (wi.approved_by_class = 'human' OR wi.requires_code = 0)
          AND wi.locked_by IS NULL
          AND p.orchestration = 1
-         AND (wi.session_status IS NULL OR wi.session_status NOT IN ('pending', 'running'))
+         AND (wi.session_status IS NULL OR wi.session_status NOT IN ('pending', 'running', 'waiting_for_permission'))
           AND NOT EXISTS (
             SELECT 1 FROM tracker_dependencies d
             JOIN tracker_work_items dep ON dep.id = d.depends_on_id
@@ -2171,7 +2171,7 @@ export function getClarifiableItems(limit: number = 1): WorkItem[] {
        WHERE wi.state = 'clarification'
          AND wi.locked_by IS NULL
          AND p.orchestration = 1
-         AND (wi.session_status IS NULL OR wi.session_status NOT IN ('pending', 'running'))
+         AND (wi.session_status IS NULL OR wi.session_status NOT IN ('pending', 'running', 'waiting_for_permission'))
           AND NOT EXISTS (
             SELECT 1 FROM tracker_dependencies d
             JOIN tracker_work_items dep ON dep.id = d.depends_on_id
@@ -2208,7 +2208,7 @@ export function getDispatchableReviewItems(limit: number = 1): WorkItem[] {
        WHERE wi.state = 'in_review'
          AND wi.locked_by IS NULL
          AND p.orchestration = 1
-         AND (wi.session_status IS NULL OR wi.session_status NOT IN ('pending', 'running'))
+         AND (wi.session_status IS NULL OR wi.session_status NOT IN ('pending', 'running', 'waiting_for_permission'))
           AND NOT EXISTS (
             SELECT 1 FROM tracker_dependencies d
             JOIN tracker_work_items dep ON dep.id = d.depends_on_id
@@ -2231,11 +2231,11 @@ export function getDispatchableReviewItems(limit: number = 1): WorkItem[] {
     .all(limit) as WorkItem[];
 }
 
-/** Get items that have an active session (pending or running). */
+/** Get items that have an active session (pending, running, or waiting_for_permission). */
 export function getActiveSessionItems(): WorkItem[] {
   return db
     .prepare(
-      "SELECT * FROM tracker_work_items WHERE session_status IN ('pending', 'running')",
+      "SELECT * FROM tracker_work_items WHERE session_status IN ('pending', 'running', 'waiting_for_permission')",
     )
     .all() as WorkItem[];
 }
