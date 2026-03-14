@@ -102,7 +102,7 @@ import {
   cancelRestart,
   isSafeToRestart,
 } from "./orchestrator.js";
-import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl } from "./config.js";
+import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL } from "./config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1520,6 +1520,117 @@ async function handleApiRequest(
   }
 }
 
+// ── OG Meta Tag Injection for Deep Links ──
+
+/**
+ * Strip markdown formatting from text to produce plain text for OG descriptions.
+ * Handles common patterns: headers, bold, italic, links, images, code blocks.
+ */
+function stripMarkdown(md: string): string {
+  return md
+    .replace(/^#{1,6}\s+/gm, "")         // headers
+    .replace(/\*\*(.+?)\*\*/g, "$1")      // bold
+    .replace(/\*(.+?)\*/g, "$1")          // italic
+    .replace(/__(.+?)__/g, "$1")          // bold (underscores)
+    .replace(/_(.+?)_/g, "$1")            // italic (underscores)
+    .replace(/`{3}[\s\S]*?`{3}/g, "")     // code blocks
+    .replace(/`(.+?)`/g, "$1")            // inline code
+    .replace(/!\[.*?\]\(.*?\)/g, "")       // images
+    .replace(/\[(.+?)\]\(.*?\)/g, "$1")   // links
+    .replace(/^\s*[-*+]\s+/gm, "")        // list items
+    .replace(/^\s*\d+\.\s+/gm, "")        // numbered lists
+    .replace(/^\s*>\s+/gm, "")            // blockquotes
+    .replace(/\|.*\|/g, "")               // table rows
+    .replace(/[-=]{3,}/g, "")             // horizontal rules
+    .replace(/\n{2,}/g, " ")              // collapse multiple newlines
+    .replace(/\n/g, " ")                  // remaining newlines → spaces
+    .replace(/\s+/g, " ")                 // collapse whitespace
+    .trim();
+}
+
+/**
+ * HTML-escape a string for safe embedding in HTML attributes and content.
+ */
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Build an HTML string with Open Graph meta tags injected for a work item deep link.
+ * Reads index.html and injects og:title, og:description, og:image, og:url into <head>.
+ * Returns null if the item doesn't exist or the HTML can't be read.
+ */
+function buildOgHtml(indexPath: string, key: string): string | null {
+  // Look up the work item
+  const item = getWorkItemByKey(key);
+  if (!item) return null;
+
+  const project = getProject(item.project_id);
+  const displayKey = getWorkItemKey(item);
+  const projectName = project?.name || "Tracker";
+
+  // Build OG title: "TRACK-188: Title — Project Name"
+  const ogTitle = escHtml(`${displayKey}: ${item.title}`);
+
+  // Build OG description: plain text from description, truncated to 200 chars
+  let ogDescription = "";
+  if (item.description) {
+    const plain = stripMarkdown(item.description);
+    ogDescription = escHtml(plain.length > 200 ? plain.slice(0, 197) + "..." : plain);
+  }
+
+  // Build OG image: first image attachment, or fallback to app icon
+  let ogImage = `${TRACKER_PUBLIC_URL}/icon-512.png`;
+  const attachments = listAttachments(item.id);
+  const imageAttachment = attachments.find(a => a.mime_type.startsWith("image/"));
+  if (imageAttachment) {
+    ogImage = `${TRACKER_PUBLIC_URL}/api/v1/attachments/${imageAttachment.id}`;
+  }
+
+  // Build the canonical URL for the deep link
+  const ogUrl = escHtml(buildItemUrl(displayKey));
+
+  // Build OG meta tags
+  const ogTags = [
+    `<meta property="og:type" content="article" />`,
+    `<meta property="og:site_name" content="Tracker" />`,
+    `<meta property="og:title" content="${ogTitle}" />`,
+    `<meta property="og:description" content="${ogDescription}" />`,
+    `<meta property="og:image" content="${escHtml(ogImage)}" />`,
+    `<meta property="og:url" content="${ogUrl}" />`,
+    // Twitter card tags for broader compatibility
+    `<meta name="twitter:card" content="summary" />`,
+    `<meta name="twitter:title" content="${ogTitle}" />`,
+    `<meta name="twitter:description" content="${ogDescription}" />`,
+    `<meta name="twitter:image" content="${escHtml(ogImage)}" />`,
+  ].join("\n    ");
+
+  try {
+    let html = fs.readFileSync(indexPath, "utf-8");
+
+    // Replace the generic <title> and default OG tags with item-specific versions.
+    // The default OG block in index.html is:
+    //   <title>Tracker</title>
+    //   <meta property="og:type" .../>
+    //   <meta property="og:site_name" .../>
+    //   <meta property="og:title" .../>
+    //   <meta property="og:description" .../>
+    //   <meta property="og:image" .../>
+    html = html.replace(
+      /<title>Tracker<\/title>\s*(?:<meta property="og:[^"]*"[^>]*\/>\s*)*/,
+      `<title>${ogTitle} — ${escHtml(projectName)}</title>\n    ${ogTags}\n    `,
+    );
+
+    return html;
+  } catch {
+    return null;
+  }
+}
+
 function serveStaticFile(res: http.ServerResponse, filePath: string): void {
   const ext = path.extname(filePath);
   const mimeTypes: Record<string, string> = {
@@ -1586,6 +1697,10 @@ export function startTrackerServer(port: number): http.Server {
     // the SPA fallback serves index.html, then handleInitialDeepLink() in
     // the JS detects the key pattern in the URL pathname and opens the item.
     // No server-side redirect needed — avoids service worker interference.
+    //
+    // For deep-link URLs matching /{KEY} (e.g. /TRACK-188), the server injects
+    // Open Graph meta tags into the HTML so link previews (iMessage, Slack, etc.)
+    // show the item title, description, and first image attachment.
     if (method === "GET") {
       const pathname = new URL(url, "http://localhost").pathname;
 
@@ -1606,6 +1721,22 @@ export function startTrackerServer(port: number): http.Server {
 
       if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
         return serveStaticFile(res, filePath);
+      }
+
+      // ── Deep-link OG meta tag injection ──
+      // If the pathname matches a work item key pattern (e.g. /TRACK-188),
+      // serve index.html with dynamic OG meta tags for rich link previews.
+      const keyMatch = pathname.match(/^\/([A-Za-z]+-\d+)$/);
+      if (keyMatch) {
+        const key = keyMatch[1].toUpperCase();
+        const ogHtml = buildOgHtml(path.join(staticDir, "index.html"), key);
+        if (ogHtml) {
+          res.writeHead(200, {
+            "Content-Type": "text/html",
+            "Cache-Control": "no-cache",
+          });
+          return res.end(ogHtml);
+        }
       }
 
       // SPA fallback: serve index.html for unmatched routes
