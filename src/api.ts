@@ -102,7 +102,7 @@ import {
   cancelRestart,
   isSafeToRestart,
 } from "./orchestrator.js";
-import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL } from "./config.js";
+import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL, PORT } from "./config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1679,8 +1679,11 @@ function escHtml(s: string): string {
  * Build an HTML string with Open Graph meta tags injected for a work item deep link.
  * Reads index.html and injects og:title, og:description, og:image, og:url into <head>.
  * Returns null if the item doesn't exist or the HTML can't be read.
+ *
+ * Uses the request's Host header to build absolute URLs so OG images are reachable
+ * from the same network the client used (e.g. LAN IP instead of localhost).
  */
-function buildOgHtml(indexPath: string, key: string): string | null {
+function buildOgHtml(indexPath: string, key: string, req: http.IncomingMessage): string | null {
   // Look up the work item
   const item = getWorkItemByKey(key);
   if (!item) return null;
@@ -1688,6 +1691,12 @@ function buildOgHtml(indexPath: string, key: string): string | null {
   const project = getProject(item.project_id);
   const displayKey = getWorkItemKey(item);
   const projectName = project?.name || "Tracker";
+
+  // Build a base URL from the request's Host header so OG image/url tags
+  // resolve correctly from the requesting device (e.g. phone on LAN).
+  const host = req.headers.host || `localhost:${PORT}`;
+  const proto = (req.headers["x-forwarded-proto"] as string) || "http";
+  const requestBaseUrl = `${proto}://${host}`;
 
   // Build OG title: "TRACK-188: Title — Project Name"
   const ogTitle = escHtml(`${displayKey}: ${item.title}`);
@@ -1699,16 +1708,22 @@ function buildOgHtml(indexPath: string, key: string): string | null {
     ogDescription = escHtml(plain.length > 200 ? plain.slice(0, 197) + "..." : plain);
   }
 
-  // Build OG image: first image attachment, or fallback to app icon
-  let ogImage = `${TRACKER_PUBLIC_URL}/icon-512.png`;
+  // Build OG image: prefer cover image (cover.jpg/png/etc), then first image
+  // attachment, then fall back to app icon
+  let ogImage = `${requestBaseUrl}/icon-512.png`;
   const attachments = listAttachments(item.id);
-  const imageAttachment = attachments.find(a => a.mime_type.startsWith("image/"));
+  const coverRe = /^cover\.(png|jpg|jpeg|webp)$/i;
+  const coverAttachment = attachments.find(a => coverRe.test(a.filename));
+  const imageAttachment = coverAttachment || attachments.find(a => a.mime_type.startsWith("image/"));
   if (imageAttachment) {
-    ogImage = `${TRACKER_PUBLIC_URL}/api/v1/attachments/${imageAttachment.id}`;
+    ogImage = `${requestBaseUrl}/api/v1/attachments/${imageAttachment.id}`;
   }
 
-  // Build the canonical URL for the deep link
-  const ogUrl = escHtml(buildItemUrl(displayKey));
+  // Build the canonical URL for the deep link (use request base for consistency)
+  const ogUrl = escHtml(`${requestBaseUrl}/${encodeURIComponent(displayKey)}`);
+
+  // Use summary_large_image for items with a real image, summary for icon-only
+  const twitterCard = imageAttachment ? "summary_large_image" : "summary";
 
   // Build OG meta tags
   const ogTags = [
@@ -1719,7 +1734,7 @@ function buildOgHtml(indexPath: string, key: string): string | null {
     `<meta property="og:image" content="${escHtml(ogImage)}" />`,
     `<meta property="og:url" content="${ogUrl}" />`,
     // Twitter card tags for broader compatibility
-    `<meta name="twitter:card" content="summary" />`,
+    `<meta name="twitter:card" content="${twitterCard}" />`,
     `<meta name="twitter:title" content="${ogTitle}" />`,
     `<meta name="twitter:description" content="${ogDescription}" />`,
     `<meta name="twitter:image" content="${escHtml(ogImage)}" />`,
@@ -1845,7 +1860,7 @@ export function startTrackerServer(port: number): http.Server {
       const keyMatch = pathname.match(/^\/([A-Za-z]+-\d+)$/);
       if (keyMatch) {
         const key = keyMatch[1].toUpperCase();
-        const ogHtml = buildOgHtml(path.join(staticDir, "index.html"), key);
+        const ogHtml = buildOgHtml(path.join(staticDir, "index.html"), key, req);
         if (ogHtml) {
           res.writeHead(200, {
             "Content-Type": "text/html",
