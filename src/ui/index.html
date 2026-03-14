@@ -1340,6 +1340,17 @@
         font-size: 0.85rem;
         color: var(--text);
       }
+      .blocker-chip .blocker-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        text-decoration: none;
+        color: inherit;
+      }
+      .blocker-chip .blocker-link:hover .blocker-key {
+        text-decoration: underline;
+      }
       .blocker-chip .blocker-key {
         font-weight: 600;
         color: var(--highlight);
@@ -15438,12 +15449,20 @@
               chip.className = 'blocker-chip';
               const stateColor = STATE_COLORS[dep.state] || '#636e72';
               const stateLabel = STATE_LABELS[dep.state] || dep.state;
+              const depKey = dep.key || dep.id.substring(0, 8);
               chip.innerHTML = `
-                <span class="blocker-key">${esc(dep.key || dep.id.substring(0, 8))}</span>
-                <span class="blocker-title">${esc(dep.title)}</span>
+                <a class="blocker-link" title="Open ${esc(depKey)}">
+                  <span class="blocker-key">${esc(depKey)}</span>
+                  <span class="blocker-title">${esc(dep.title)}</span>
+                </a>
                 <span class="blocker-state" style="background:${stateColor}20;color:${stateColor}">${esc(stateLabel)}</span>
                 <button class="blocker-remove" data-id="${dep.id}" title="Remove blocker">&times;</button>
               `;
+              chip.querySelector('.blocker-link').addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openItemByKeyOrId(dep.key || dep.id);
+              });
               chip.querySelector('.blocker-remove').addEventListener('click', () => {
                 if (onRemove) onRemove(dep.id);
                 currentDeps = currentDeps.filter(d => d.id !== dep.id);
