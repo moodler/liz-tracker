@@ -2806,8 +2806,11 @@
           display: none !important;
         }
 
-        /* ── Phone: Hide density toggle from control bar (moved to bottom nav) ── */
+        /* ── Phone: Hide density + scheduled toggles from control bar ── */
         .density-toggle {
+          display: none !important;
+        }
+        .scheduled-toggle {
           display: none !important;
         }
 
@@ -5944,6 +5947,39 @@
         border-left: 1px solid var(--border);
       }
 
+      /* ── Scheduled Toggle ── */
+      .scheduled-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: none;
+        color: var(--text-dim);
+        font-size: 0.75rem;
+        cursor: pointer;
+        transition: all var(--transition);
+        -webkit-tap-highlight-color: transparent;
+        white-space: nowrap;
+      }
+      .scheduled-toggle:hover {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .scheduled-toggle.active {
+        color: var(--text);
+        background: var(--bg-accent);
+        border-color: var(--highlight);
+      }
+      .scheduled-toggle-icon {
+        font-size: 0.85rem;
+        line-height: 1;
+      }
+      .scheduled-toggle-count {
+        font-variant-numeric: tabular-nums;
+      }
+
       /* ── Density: Compact ── */
       .density-compact .card {
         padding: 6px 10px;
@@ -8235,6 +8271,10 @@
           <button class="density-toggle-btn active" data-density="normal" title="Normal"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg></button>
           <button class="density-toggle-btn" data-density="expanded" title="Expanded"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></button>
         </div>
+        <button class="scheduled-toggle" id="scheduledToggle" title="Show/hide recurring scheduled tasks" style="display:none">
+          <span class="scheduled-toggle-icon">&#128336;</span>
+          <span class="scheduled-toggle-count" id="scheduledToggleCount"></span>
+        </button>
         <span id="lastRefresh" style="font-size: 0.7rem; color: var(--text-dim)"></span>
       </div>
 
@@ -9725,6 +9765,8 @@
           // Restore quick-create bar (CSS controls phone-only visibility)
           const qcBar1 = $("#quickCreateBar");
           if (qcBar1) qcBar1.style.display = "";
+          // Hide scheduled toggle (not relevant in overview)
+          updateScheduledToggle();
           // Update tab styling
           renderTabs();
           loadAttention();
@@ -9758,6 +9800,8 @@
           // Apply project theme
           const proj = projectsCache.find((p) => p.id === projectId);
           applyTheme(proj ? proj.theme : "midnight");
+          // Load scheduled toggle preference for this project
+          loadScheduledPref();
           // Load tracker
           loadTracker();
           // Update context banner
@@ -10284,6 +10328,73 @@
           }
         }
 
+        // ── Scheduled Toggle ──
+        const STORAGE_SCHEDULED_PREFIX = "tracker_show_scheduled_";
+        const scheduledToggleBtn = $("#scheduledToggle");
+        const scheduledToggleCount = $("#scheduledToggleCount");
+        let showScheduledItems = true; // default: show all
+
+        /** Get per-project localStorage key for the scheduled toggle */
+        function scheduledStorageKey(projectId) {
+          return STORAGE_SCHEDULED_PREFIX + projectId;
+        }
+
+        /** Load the scheduled toggle preference for the current project */
+        function loadScheduledPref() {
+          showScheduledItems = true; // default ON
+          if (!currentProjectId) return;
+          try {
+            const saved = localStorage.getItem(scheduledStorageKey(currentProjectId));
+            if (saved === "0") showScheduledItems = false;
+          } catch {}
+        }
+
+        /** Save the scheduled toggle preference for the current project */
+        function saveScheduledPref() {
+          if (!currentProjectId) return;
+          try {
+            if (showScheduledItems) {
+              localStorage.removeItem(scheduledStorageKey(currentProjectId));
+            } else {
+              localStorage.setItem(scheduledStorageKey(currentProjectId), "0");
+            }
+          } catch {}
+        }
+
+        /** Count scheduled items across all columns in trackerData */
+        function countScheduledItems() {
+          if (!trackerData || !trackerData.tracker) return 0;
+          let count = 0;
+          for (const items of Object.values(trackerData.tracker)) {
+            for (const item of items) {
+              if (item.space_type === "scheduled") count++;
+            }
+          }
+          return count;
+        }
+
+        /** Update the scheduled toggle button visibility and label */
+        function updateScheduledToggle() {
+          const count = countScheduledItems();
+          if (count === 0 || isAttentionView || isTodayDashboardView) {
+            scheduledToggleBtn.style.display = "none";
+            return;
+          }
+          scheduledToggleBtn.style.display = "";
+          scheduledToggleCount.textContent = showScheduledItems ? count : count;
+          scheduledToggleBtn.classList.toggle("active", showScheduledItems);
+          scheduledToggleBtn.title = showScheduledItems
+            ? "Showing " + count + " recurring task" + (count !== 1 ? "s" : "") + " — click to hide"
+            : count + " recurring task" + (count !== 1 ? "s" : "") + " hidden — click to show";
+        }
+
+        scheduledToggleBtn.addEventListener("click", () => {
+          showScheduledItems = !showScheduledItems;
+          saveScheduledPref();
+          updateScheduledToggle();
+          renderTracker();
+        });
+
         // ── Tracker ──
         function showEmpty() {
           emptyState.style.display = "";
@@ -10329,6 +10440,8 @@
         function renderTracker() {
           if (!trackerData) return;
           const showCancelled = showCancelledCb.checked;
+          // Update scheduled toggle visibility (uses trackerData)
+          updateScheduledToggle();
           // Preserve vertical scroll positions of each column before re-render
           const savedScrollPositions = {};
           $$(".column", trackerEl).forEach((col) => {
@@ -10351,6 +10464,10 @@
             }
             if (!showCancelled && dcol.id === "done") {
               items = items.filter((i) => i.state !== "cancelled");
+            }
+            // Filter out scheduled items when toggle is off
+            if (!showScheduledItems) {
+              items = items.filter((i) => i.space_type !== "scheduled");
             }
             // Sort based on current sort mode
             sortItems(items, currentSortMode);
@@ -10485,10 +10602,18 @@
           if (!trackerData) return 0;
           let count = 0;
           for (const st of dcol.states) {
-            count += (trackerData.tracker[st] || []).length;
+            let stateItems = trackerData.tracker[st] || [];
+            if (!showScheduledItems) {
+              stateItems = stateItems.filter(i => i.space_type !== "scheduled");
+            }
+            count += stateItems.length;
           }
           if (dcol.id === "done" && !showCancelledCb.checked) {
-            count -= (trackerData.tracker["cancelled"] || []).length;
+            let cancelledItems = trackerData.tracker["cancelled"] || [];
+            if (!showScheduledItems) {
+              cancelledItems = cancelledItems.filter(i => i.space_type !== "scheduled");
+            }
+            count -= cancelledItems.length;
           }
           return Math.max(0, count);
         }
