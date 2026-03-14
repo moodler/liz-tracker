@@ -54,6 +54,11 @@ if (WEBHOOK_URL) {
  * 3. Any human comment on an item where Harmoni is the creator or assignee
  *    (ensures orchestration projects like App still route to Harmoni when she's involved)
  *
+ * Exception: During active development (in_development / in_review states),
+ * criterion #3 is suppressed — only explicit @harmoni mentions trigger the webhook.
+ * This prevents Harmoni from responding to every comment when Martin is working
+ * directly with the coder bot in the development loop (TRACK-200).
+ *
  * Bot/agent/system comments are always excluded (loop prevention).
  *
  * The webhook payload includes issue key, author, comment body, and space_type
@@ -84,11 +89,18 @@ function startCommentWebhook(): void {
     // 3. Any human comment on an item where Harmoni is the creator or assignee
     //    (ensures comments on orchestration projects like App still reach Harmoni
     //     when she has a stake in the item — fixes TRACK-175)
+    //
+    // Exception (TRACK-200): When an item is in active development (in_development
+    // or in_review), suppress the "harmoniInvolved" criterion. During the dev loop
+    // Martin is working directly with the coder — only ping Harmoni if explicitly
+    // tagged with @harmoni.
     const isNonOrchestrationProject = project.orchestration === 0;
     const hasMention = /@harmoni\b/i.test(body);
+    const isInDevLoop = item.state === "in_development" || item.state === "in_review";
     const harmoniInvolved =
-      item.created_by?.toLowerCase() === "harmoni" ||
-      item.assignee?.toLowerCase() === "harmoni";
+      !isInDevLoop &&
+      (item.created_by?.toLowerCase() === "harmoni" ||
+       item.assignee?.toLowerCase() === "harmoni");
 
     if (!isNonOrchestrationProject && !hasMention && !harmoniInvolved) return;
 
