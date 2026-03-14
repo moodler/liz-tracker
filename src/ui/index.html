@@ -17928,6 +17928,74 @@
         // Initialize PTR after DOM is ready
         initPullToRefresh();
 
+        // ── Scroll to Top (Tap Topbar) ──
+        // iOS convention: tapping the top bar scrolls the active content to the top.
+        // Works on phone and iPad for kanban columns, today dashboard, and attention view.
+        (function initScrollToTop() {
+          const topbar = $(".topbar");
+          if (!topbar) return;
+
+          let touchStartX = 0;
+          let touchStartY = 0;
+          let touchStartTime = 0;
+
+          topbar.addEventListener("touchstart", (e) => {
+            const t = e.touches[0];
+            touchStartX = t.clientX;
+            touchStartY = t.clientY;
+            touchStartTime = Date.now();
+          }, { passive: true });
+
+          topbar.addEventListener("touchend", (e) => {
+            // Ignore if the touch moved too much (was a swipe/drag)
+            if (!e.changedTouches.length) return;
+            const t = e.changedTouches[0];
+            const dx = Math.abs(t.clientX - touchStartX);
+            const dy = Math.abs(t.clientY - touchStartY);
+            if (dx > 10 || dy > 10) return;
+
+            // Ignore long-presses (>400ms)
+            if (Date.now() - touchStartTime > 400) return;
+
+            // Ignore taps on interactive elements (buttons, inputs, links)
+            const tag = e.target.tagName;
+            if (tag === "BUTTON" || tag === "INPUT" || tag === "A" || tag === "SELECT" || tag === "TEXTAREA") return;
+            if (e.target.closest("button, a, input, select, .orchestrator-indicator, .topbar-agent-status, .agent-robots")) return;
+
+            // Find the active scrollable container (reuse PTR logic)
+            let scrollEl = null;
+            if (isTodayDashboardView) {
+              scrollEl = todayDashboardContainer;
+            } else if (isAttentionView) {
+              // Attention view on phone uses horizontal snap; scroll the visible column-cards
+              const cols = $$(".column-cards", attentionContainer);
+              if (cols.length) {
+                const rect = attentionContainer.getBoundingClientRect();
+                for (const col of cols) {
+                  const r = col.getBoundingClientRect();
+                  if (Math.abs(r.left - rect.left) < 20) { scrollEl = col; break; }
+                }
+                if (!scrollEl) scrollEl = cols[0];
+              }
+            } else if (currentProjectId) {
+              // Kanban board: find the currently visible column-cards
+              const columns = $$(".column-cards", trackerContainer);
+              if (columns.length) {
+                const rect = trackerContainer.getBoundingClientRect();
+                for (const col of columns) {
+                  const r = col.getBoundingClientRect();
+                  if (Math.abs(r.left - rect.left) < 20) { scrollEl = col; break; }
+                }
+                if (!scrollEl) scrollEl = columns[0];
+              }
+            }
+
+            if (scrollEl && scrollEl.scrollTop > 0) {
+              scrollEl.scrollTo({ top: 0, behavior: "smooth" });
+            }
+          }, { passive: true });
+        })();
+
         // ── Quick-Create Inline Input (Phone) ──
         const quickCreateInput = $("#quickCreateInput");
         const quickCreateSend = $("#quickCreateSend");
