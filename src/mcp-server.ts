@@ -1319,6 +1319,200 @@ function createMcpServer(): McpServer {
     },
   );
 
+  // ── Cover Image Helpers ──
+
+  /** Space types that support cover images. */
+  const COVER_SPACE_TYPES = ["song", "engagement"];
+
+  /** Regex matching cover image attachment filenames. */
+  const COVER_FILENAME_RE = /^cover\.(png|jpg|jpeg|webp)$/i;
+
+  /**
+   * Delete all existing cover image attachments for a work item.
+   * Returns the number of attachments deleted.
+   */
+  function deleteExistingCovers(itemId: string): number {
+    const attachments = listAttachments(itemId);
+    let deleted = 0;
+    for (const att of attachments) {
+      if (COVER_FILENAME_RE.test(att.filename)) {
+        deleteAttachment(att.id);
+        const fullPath = path.join(STORE_DIR, att.storage_path);
+        try { if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath); } catch { /* ignore */ }
+        deleted++;
+      }
+    }
+    return deleted;
+  }
+
+  server.tool(
+    "tracker_set_cover_image",
+    "Set or replace the cover image on a song or engagement space item. Accepts base64-encoded image data. Automatically removes any existing cover image before uploading the new one.",
+    {
+      item_id: z.string().describe("Work item ID or display key (e.g. \"MUSIC-3\")"),
+      data: z.string().describe("Base64-encoded image file content"),
+      filename: z.string().optional().describe("Original filename (e.g. \"cover.jpg\"). Used to determine image format. Defaults to \"cover.jpg\"."),
+      uploaded_by: z.string().optional().describe("Who uploaded this (default: Claude)"),
+    },
+    async (args) => {
+      const item = resolveItem(args.item_id);
+      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
+      if (!COVER_SPACE_TYPES.includes(item.space_type)) {
+        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} has space_type="${item.space_type}". Cover images are only supported on: ${COVER_SPACE_TYPES.join(", ")}.` }] };
+      }
+
+      const fileData = Buffer.from(args.data, "base64");
+      if (fileData.length > MAX_ATTACHMENT_SIZE) {
+        return { content: [{ type: "text", text: `Error: File exceeds maximum size of ${Math.round(MAX_ATTACHMENT_SIZE / 1024 / 1024)}MB` }] };
+      }
+
+      // Determine cover filename from the provided filename or default
+      const sourceFilename = args.filename || "cover.jpg";
+      const ext = path.extname(sourceFilename).toLowerCase().replace(".", "");
+      const validExts = ["png", "jpg", "jpeg", "webp"];
+      const finalExt = validExts.includes(ext) ? ext : "jpg";
+      const coverFilename = `cover.${finalExt}`;
+
+      // Detect MIME type
+      const mimeType = detectMimeType(coverFilename);
+
+      // Delete any existing cover attachments
+      const deletedCount = deleteExistingCovers(item.id);
+
+      // Save the new cover image
+      const storagePath = path.join("attachments", item.id, coverFilename);
+      const fullPath = path.join(STORE_DIR, storagePath);
+      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+      fs.writeFileSync(fullPath, fileData);
+
+      const attachment = createAttachment({
+        work_item_id: item.id,
+        filename: coverFilename,
+        mime_type: mimeType,
+        size_bytes: fileData.length,
+        storage_path: storagePath,
+        uploaded_by: args.uploaded_by || "Coder",
+      });
+
+      const replacedNote = deletedCount > 0 ? ` (replaced ${deletedCount} existing cover)` : "";
+      return {
+        content: [{
+          type: "text",
+          text: `Set cover image on ${getWorkItemKey(item)}${replacedNote}.\nFilename: ${coverFilename} (${formatBytes(fileData.length)}, ${mimeType})\nAttachment ID: ${attachment.id}`,
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    "tracker_set_cover_image_from_path",
+    "Set or replace the cover image on a song or engagement space item from a local file path. Automatically removes any existing cover image before uploading the new one.",
+    {
+      item_id: z.string().describe("Work item ID or display key (e.g. \"MUSIC-3\")"),
+      file_path: z.string().describe("Absolute path to the image file on disk"),
+      uploaded_by: z.string().optional().describe("Who uploaded this (default: Claude)"),
+    },
+    async (args) => {
+      const item = resolveItem(args.item_id);
+      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
+      if (!COVER_SPACE_TYPES.includes(item.space_type)) {
+        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} has space_type="${item.space_type}". Cover images are only supported on: ${COVER_SPACE_TYPES.join(", ")}.` }] };
+      }
+
+      // Expand leading ~ to home directory
+      const filePath = args.file_path.startsWith("~/")
+        ? path.join(os.homedir(), args.file_path.slice(2))
+        : args.file_path;
+
+      if (!path.isAbsolute(filePath)) {
+        return { content: [{ type: "text", text: "Error: file_path must be an absolute path" }] };
+      }
+
+      // Translate container paths
+      let resolvedPath = filePath;
+      let wasTranslated = false;
+      const translation = translateContainerPath(filePath);
+      if (translation) {
+        resolvedPath = translation.hostPath;
+        wasTranslated = true;
+      }
+
+      if (!fs.existsSync(resolvedPath)) {
+        const note = wasTranslated ? ` (translated from container path: ${filePath})` : "";
+        return { content: [{ type: "text", text: `Error: File not found: ${resolvedPath}${note}` }] };
+      }
+
+      const stat = fs.statSync(resolvedPath);
+      if (!stat.isFile()) {
+        return { content: [{ type: "text", text: `Error: Path is not a file: ${resolvedPath}` }] };
+      }
+      if (stat.size > MAX_ATTACHMENT_SIZE) {
+        return { content: [{ type: "text", text: `Error: File exceeds maximum size of ${Math.round(MAX_ATTACHMENT_SIZE / 1024 / 1024)}MB (${formatBytes(stat.size)})` }] };
+      }
+
+      // Determine cover filename from the source file extension
+      const ext = path.extname(resolvedPath).toLowerCase().replace(".", "");
+      const validExts = ["png", "jpg", "jpeg", "webp"];
+      const finalExt = validExts.includes(ext) ? ext : "jpg";
+      const coverFilename = `cover.${finalExt}`;
+      const mimeType = detectMimeType(coverFilename);
+
+      // Delete any existing cover attachments
+      const deletedCount = deleteExistingCovers(item.id);
+
+      // Copy the new cover image
+      const storagePath = path.join("attachments", item.id, coverFilename);
+      const fullPath = path.join(STORE_DIR, storagePath);
+      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+      fs.copyFileSync(resolvedPath, fullPath);
+
+      const attachment = createAttachment({
+        work_item_id: item.id,
+        filename: coverFilename,
+        mime_type: mimeType,
+        size_bytes: stat.size,
+        storage_path: storagePath,
+        uploaded_by: args.uploaded_by || "Coder",
+      });
+
+      const replacedNote = deletedCount > 0 ? ` (replaced ${deletedCount} existing cover)` : "";
+      const translationNote = wasTranslated ? ` (translated from container path: ${args.file_path})` : "";
+      return {
+        content: [{
+          type: "text",
+          text: `Set cover image on ${getWorkItemKey(item)}${replacedNote}.\nFilename: ${coverFilename} (${formatBytes(stat.size)}, ${mimeType})\nAttachment ID: ${attachment.id}${translationNote}`,
+        }],
+      };
+    },
+  );
+
+  server.tool(
+    "tracker_remove_cover_image",
+    "Remove the cover image from a song or engagement space item.",
+    {
+      item_id: z.string().describe("Work item ID or display key (e.g. \"MUSIC-3\")"),
+    },
+    async (args) => {
+      const item = resolveItem(args.item_id);
+      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
+      if (!COVER_SPACE_TYPES.includes(item.space_type)) {
+        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} has space_type="${item.space_type}". Cover images are only supported on: ${COVER_SPACE_TYPES.join(", ")}.` }] };
+      }
+
+      const deletedCount = deleteExistingCovers(item.id);
+      if (deletedCount === 0) {
+        return { content: [{ type: "text", text: `No cover image found on ${getWorkItemKey(item)}.` }] };
+      }
+
+      return {
+        content: [{
+          type: "text",
+          text: `Removed cover image from ${getWorkItemKey(item)} (${deletedCount} attachment(s) deleted).`,
+        }],
+      };
+    },
+  );
+
   return server;
 }
 

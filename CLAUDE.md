@@ -262,6 +262,9 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `tracker_remove_scheduled_todo` | Remove TODO items from a scheduled task by index |
 | `tracker_add_scheduled_ignore` | Add IGNORE rules to a scheduled task (simple string array) |
 | `tracker_remove_scheduled_ignore` | Remove IGNORE rules from a scheduled task by index |
+| `tracker_set_cover_image` | Set/replace cover image on a song or engagement item (base64 data) |
+| `tracker_set_cover_image_from_path` | Set/replace cover image from a local file path |
+| `tracker_remove_cover_image` | Remove cover image from a song or engagement item |
 
 ### Per-project setup
 
@@ -387,6 +390,8 @@ These tools handle the GET→parse→modify→save cycle internally and only acc
 - `DELETE /items/:id/scheduled/todo` — remove TODO items (`{ indices: [0, 2] }`)
 - `POST /items/:id/scheduled/ignore` — add IGNORE rules (`{ rules: ["rule1"] }`)
 - `DELETE /items/:id/scheduled/ignore` — remove IGNORE rules (`{ indices: [0] }`)
+- `PUT /items/:id/cover` — set/replace cover image on song or engagement items (multipart/form-data or JSON with base64 `data`)
+- `DELETE /items/:id/cover` — remove cover image from song or engagement items
 
 ### UI Sections
 

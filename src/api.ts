@@ -1152,6 +1152,122 @@ async function handleApiRequest(
         return json(res, { ignore: spaceData.ignore, removed: removed.length, total: spaceData.ignore.length });
       }
 
+      // ── Cover Image Management ──
+
+      // PUT /items/:id/cover — set/replace cover image (song and engagement spaces)
+      if (parts.length === 3 && parts[2] === "cover" && method === "PUT") {
+        const item = getWorkItem(itemId);
+        if (!item) return error(res, "Work item not found", 404);
+
+        const coverSpaceTypes = ["song", "engagement"];
+        if (!coverSpaceTypes.includes(item.space_type)) {
+          return error(res, `Item has space_type="${item.space_type}". Cover images are only supported on: ${coverSpaceTypes.join(", ")}.`, 400);
+        }
+
+        const contentType = req.headers["content-type"] || "";
+
+        let fileData: Buffer;
+        let coverFilename: string;
+        let mimeType: string;
+        let uploadedBy: string;
+
+        if (contentType.includes("multipart/form-data")) {
+          const boundaryMatch = contentType.match(/boundary=(.+)/);
+          if (!boundaryMatch) return error(res, "Missing boundary in Content-Type");
+
+          const rawBody = await parseRawBody(req);
+          const { files, fields } = parseMultipart(rawBody, boundaryMatch[1]);
+          if (files.length === 0) return error(res, "No file found in upload");
+
+          const file = files[0];
+          if (file.data.length > MAX_ATTACHMENT_SIZE) {
+            return error(res, `File exceeds maximum size of ${Math.round(MAX_ATTACHMENT_SIZE / 1024 / 1024)}MB`);
+          }
+
+          fileData = file.data;
+          const ext = path.extname(file.filename).toLowerCase().replace(".", "");
+          const validExts = ["png", "jpg", "jpeg", "webp"];
+          const finalExt = validExts.includes(ext) ? ext : "jpg";
+          coverFilename = `cover.${finalExt}`;
+          mimeType = file.contentType || `image/${finalExt === "jpg" ? "jpeg" : finalExt}`;
+          uploadedBy = fields.find((f) => f.fieldName === "uploaded_by")?.value || "anonymous";
+        } else if (contentType.includes("application/json")) {
+          const body = await parseBody(req);
+          if (!body.data) return error(res, "data (base64) is required");
+
+          fileData = Buffer.from(String(body.data), "base64");
+          if (fileData.length > MAX_ATTACHMENT_SIZE) {
+            return error(res, `File exceeds maximum size of ${Math.round(MAX_ATTACHMENT_SIZE / 1024 / 1024)}MB`);
+          }
+
+          const sourceFilename = body.filename ? String(body.filename) : "cover.jpg";
+          const ext = path.extname(sourceFilename).toLowerCase().replace(".", "");
+          const validExts = ["png", "jpg", "jpeg", "webp"];
+          const finalExt = validExts.includes(ext) ? ext : "jpg";
+          coverFilename = `cover.${finalExt}`;
+          mimeType = body.mime_type ? String(body.mime_type) : `image/${finalExt === "jpg" ? "jpeg" : finalExt}`;
+          uploadedBy = body.uploaded_by ? String(body.uploaded_by) : "api";
+        } else {
+          return error(res, "Unsupported Content-Type. Use multipart/form-data or application/json");
+        }
+
+        // Delete any existing cover attachments
+        const existing = listAttachments(itemId);
+        const coverRe = /^cover\.(png|jpg|jpeg|webp)$/i;
+        for (const att of existing) {
+          if (coverRe.test(att.filename)) {
+            deleteAttachment(att.id);
+            const fp = path.join(STORE_DIR, att.storage_path);
+            try { if (fs.existsSync(fp)) fs.unlinkSync(fp); } catch { /* ignore */ }
+          }
+        }
+
+        // Save new cover image
+        const storagePath = path.join("attachments", itemId, coverFilename);
+        const fullPath = path.join(STORE_DIR, storagePath);
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, fileData);
+
+        const attachment = createAttachment({
+          work_item_id: itemId,
+          filename: coverFilename,
+          mime_type: mimeType,
+          size_bytes: fileData.length,
+          storage_path: storagePath,
+          uploaded_by: uploadedBy,
+        });
+
+        return json(res, attachment, 201);
+      }
+
+      // DELETE /items/:id/cover — remove cover image (song and engagement spaces)
+      if (parts.length === 3 && parts[2] === "cover" && method === "DELETE") {
+        const item = getWorkItem(itemId);
+        if (!item) return error(res, "Work item not found", 404);
+
+        const coverSpaceTypes = ["song", "engagement"];
+        if (!coverSpaceTypes.includes(item.space_type)) {
+          return error(res, `Item has space_type="${item.space_type}". Cover images are only supported on: ${coverSpaceTypes.join(", ")}.`, 400);
+        }
+
+        const existing = listAttachments(itemId);
+        const coverRe = /^cover\.(png|jpg|jpeg|webp)$/i;
+        let deleted = 0;
+        for (const att of existing) {
+          if (coverRe.test(att.filename)) {
+            deleteAttachment(att.id);
+            const fp = path.join(STORE_DIR, att.storage_path);
+            try { if (fs.existsSync(fp)) fs.unlinkSync(fp); } catch { /* ignore */ }
+            deleted++;
+          }
+        }
+
+        if (deleted === 0) {
+          return json(res, { message: "No cover image found", deleted: 0 });
+        }
+        return json(res, { message: "Cover image removed", deleted });
+      }
+
       // GET/POST /items/:id/watchers
       if (parts.length === 3 && parts[2] === "watchers") {
         if (method === "GET") {
