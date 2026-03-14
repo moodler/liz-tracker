@@ -2806,11 +2806,8 @@
           display: none !important;
         }
 
-        /* ── Phone: Hide density + scheduled toggles from control bar ── */
+        /* ── Phone: Hide density toggle from control bar ── */
         .density-toggle {
-          display: none !important;
-        }
-        .scheduled-toggle {
           display: none !important;
         }
 
@@ -5947,37 +5944,49 @@
         border-left: 1px solid var(--border);
       }
 
-      /* ── Scheduled Toggle ── */
+      /* ── Scheduled Toggle (in approved column header) ── */
       .scheduled-toggle {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
-        padding: 4px 10px;
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        background: none;
-        color: var(--text-dim);
+        gap: 6px;
+        padding: 4px 8px;
+        border-radius: 8px;
         font-size: 0.75rem;
+        font-weight: 600;
+        background: rgba(0, 184, 148, 0.12);
+        color: #00b894;
+        border: 1px solid rgba(0, 184, 148, 0.3);
         cursor: pointer;
         transition: all var(--transition);
-        -webkit-tap-highlight-color: transparent;
         white-space: nowrap;
+        -webkit-tap-highlight-color: transparent;
       }
       .scheduled-toggle:hover {
-        color: var(--text);
+        background: rgba(0, 184, 148, 0.2);
+        border-color: #00b894;
+      }
+      .scheduled-toggle:active {
+        transform: scale(0.97);
+      }
+      .scheduled-toggle.hiding {
         background: rgba(255, 255, 255, 0.05);
+        color: var(--text-dim);
+        border-color: var(--border);
       }
-      .scheduled-toggle.active {
+      .scheduled-toggle.hiding:hover {
+        background: rgba(255, 255, 255, 0.08);
         color: var(--text);
-        background: var(--bg-accent);
-        border-color: var(--highlight);
       }
-      .scheduled-toggle-icon {
-        font-size: 0.85rem;
-        line-height: 1;
+      .scheduled-toggle .scheduled-count {
+        background: #00b894;
+        color: #fff;
+        padding: 1px 7px;
+        border-radius: 10px;
+        font-size: 0.75rem;
+        font-weight: 700;
       }
-      .scheduled-toggle-count {
-        font-variant-numeric: tabular-nums;
+      .scheduled-toggle.hiding .scheduled-count {
+        background: var(--text-dim);
       }
 
       /* ── Density: Compact ── */
@@ -8271,10 +8280,6 @@
           <button class="density-toggle-btn active" data-density="normal" title="Normal"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg></button>
           <button class="density-toggle-btn" data-density="expanded" title="Expanded"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></button>
         </div>
-        <button class="scheduled-toggle" id="scheduledToggle" title="Show/hide recurring scheduled tasks" style="display:none">
-          <span class="scheduled-toggle-icon">&#128336;</span>
-          <span class="scheduled-toggle-count" id="scheduledToggleCount"></span>
-        </button>
         <span id="lastRefresh" style="font-size: 0.7rem; color: var(--text-dim)"></span>
       </div>
 
@@ -9765,9 +9770,7 @@
           // Restore quick-create bar (CSS controls phone-only visibility)
           const qcBar1 = $("#quickCreateBar");
           if (qcBar1) qcBar1.style.display = "";
-          // Hide scheduled toggle (not relevant in overview)
-          updateScheduledToggle();
-          // Update tab styling
+           // Update tab styling
           renderTabs();
           loadAttention();
           // Hide context banner (no project selected)
@@ -10330,8 +10333,6 @@
 
         // ── Scheduled Toggle ──
         const STORAGE_SCHEDULED_PREFIX = "tracker_show_scheduled_";
-        const scheduledToggleBtn = $("#scheduledToggle");
-        const scheduledToggleCount = $("#scheduledToggleCount");
         let showScheduledItems = true; // default: show all
 
         /** Get per-project localStorage key for the scheduled toggle */
@@ -10373,27 +10374,50 @@
           return count;
         }
 
-        /** Update the scheduled toggle button visibility and label */
-        function updateScheduledToggle() {
+        /**
+         * Render the scheduled toggle button inside the approved column header.
+         * Mirrors renderTriageButton() pattern for the brainstorming column.
+         */
+        function renderScheduledToggle() {
+          // Only show in board view for a specific project
+          if (!currentProjectId || isAttentionView || isTodayDashboardView) return;
           const count = countScheduledItems();
-          if (count === 0 || isAttentionView || isTodayDashboardView) {
-            scheduledToggleBtn.style.display = "none";
-            return;
+          const colHeader = document.querySelector('.column[data-state="approved"] .column-header');
+          if (!colHeader) return;
+          const existing = colHeader.querySelector(".scheduled-toggle");
+          if (count > 0) {
+            if (!existing) {
+              const btn = document.createElement("button");
+              btn.className = "scheduled-toggle" + (showScheduledItems ? "" : " hiding");
+              btn.title = showScheduledItems
+                ? "Showing " + count + " recurring task" + (count !== 1 ? "s" : "") + " — click to hide"
+                : count + " recurring task" + (count !== 1 ? "s" : "") + " hidden — click to show";
+              btn.innerHTML = `&#128336; <span class="scheduled-count">${count}</span>`;
+              btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                showScheduledItems = !showScheduledItems;
+                saveScheduledPref();
+                renderTracker();
+              });
+              // Insert before the + button (column-add), like triage button placement
+              const addBtn = colHeader.querySelector(".column-add");
+              if (addBtn) {
+                colHeader.insertBefore(btn, addBtn);
+              } else {
+                colHeader.appendChild(btn);
+              }
+            } else {
+              const countEl = existing.querySelector(".scheduled-count");
+              if (countEl) countEl.textContent = count;
+              existing.classList.toggle("hiding", !showScheduledItems);
+              existing.title = showScheduledItems
+                ? "Showing " + count + " recurring task" + (count !== 1 ? "s" : "") + " — click to hide"
+                : count + " recurring task" + (count !== 1 ? "s" : "") + " hidden — click to show";
+            }
+          } else if (existing) {
+            existing.remove();
           }
-          scheduledToggleBtn.style.display = "";
-          scheduledToggleCount.textContent = showScheduledItems ? count : count;
-          scheduledToggleBtn.classList.toggle("active", showScheduledItems);
-          scheduledToggleBtn.title = showScheduledItems
-            ? "Showing " + count + " recurring task" + (count !== 1 ? "s" : "") + " — click to hide"
-            : count + " recurring task" + (count !== 1 ? "s" : "") + " hidden — click to show";
         }
-
-        scheduledToggleBtn.addEventListener("click", () => {
-          showScheduledItems = !showScheduledItems;
-          saveScheduledPref();
-          updateScheduledToggle();
-          renderTracker();
-        });
 
         // ── Tracker ──
         function showEmpty() {
@@ -10440,8 +10464,6 @@
         function renderTracker() {
           if (!trackerData) return;
           const showCancelled = showCancelledCb.checked;
-          // Update scheduled toggle visibility (uses trackerData)
-          updateScheduledToggle();
           // Preserve vertical scroll positions of each column before re-render
           const savedScrollPositions = {};
           $$(".column", trackerEl).forEach((col) => {
@@ -10560,6 +10582,8 @@
           renderStatePillBar();
           // Render triage button if brainstorming items exist
           renderTriageButton();
+          // Render scheduled toggle in approved column header
+          renderScheduledToggle();
         }
 
         // ── State Pill Bar (Mobile Carousel) ──
