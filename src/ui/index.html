@@ -15335,11 +15335,13 @@
             if (commentSortOrder === "desc") {
               // Newest first: form at top (before the thread)
               parent.insertBefore(commentFormEl, commentsEl);
+              commentFormEl.style.marginBottom = "40px";
             } else {
               // Oldest first: form at bottom (after the thread)
               if (commentsEl.nextSibling !== commentFormEl) {
                 commentsEl.after(commentFormEl);
               }
+              commentFormEl.style.marginBottom = "";
             }
           }
           commentsEl.innerHTML = "";
