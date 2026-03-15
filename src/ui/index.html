@@ -53,7 +53,9 @@
         --transition: 150ms ease;
       }
       html {
-        font-size: 14px;
+        font-size: 87.5%; /* 14px default, scales with OS text size (e.g. iOS Dynamic Type) */
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
       }
       body {
         font-family:
@@ -2742,7 +2744,7 @@
       /* ── Responsive: Phone (480px and below) ── */
       @media (max-width: 480px) {
         html {
-          font-size: 14px;
+          font-size: 87.5%;
         }
         body {
           overflow: hidden;
@@ -4179,7 +4181,7 @@
       /* ── iPad: iOS-like mobile UI on wider screen ── */
       /* iPad gets the same mobile interface as iPhone but shows multiple columns */
       html.is-ipad {
-        font-size: 14px;
+        font-size: 87.5%;
       }
       html.is-ipad body {
         overflow: hidden;
