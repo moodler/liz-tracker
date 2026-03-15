@@ -1214,6 +1214,7 @@
         align-items: center;
         justify-content: center;
         border-radius: var(--radius-sm);
+        flex-shrink: 0;
       }
       .detail-close:hover {
         color: var(--highlight);
@@ -3065,8 +3066,20 @@
           -webkit-overflow-scrolling: touch;
         }
         .detail-header {
-          padding: 12px 14px;
-          gap: 8px;
+          padding: 10px 12px;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+        .detail-header .detail-close {
+          flex-shrink: 0;
+        }
+        .detail-header .detail-id {
+          flex-shrink: 0;
+          flex: 1;
+          min-width: 0;
+        }
+        .detail-header .detail-actions {
+          gap: 6px;
         }
         .detail-body {
           padding: 14px;
@@ -8540,6 +8553,9 @@
     <div class="detail-panel" id="detailPanel">
       <div class="detail-panel-inner">
       <div class="detail-header">
+        <button class="detail-close" id="detailClose" title="Close">
+          &times;
+        </button>
         <span class="detail-id" id="detailId"></span>
         <div class="detail-actions">
           <button class="btn btn-ghost btn-sm" id="detailSpaceViewBtn" title="Switch to space view"></button>
@@ -8558,9 +8574,6 @@
             style="color: var(--highlight)"
           >
             Delete
-          </button>
-          <button class="detail-close" id="detailClose" title="Close">
-            &times;
           </button>
         </div>
       </div>
