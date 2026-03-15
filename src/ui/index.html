@@ -53,9 +53,7 @@
         --transition: 150ms ease;
       }
       html {
-        font-size: 87.5%; /* 14px default, scales with OS text size (e.g. iOS Dynamic Type) */
-        -webkit-text-size-adjust: 100%;
-        text-size-adjust: 100%;
+        font-size: 14px;
       }
       body {
         font-family:
@@ -2744,7 +2742,7 @@
       /* ── Responsive: Phone (480px and below) ── */
       @media (max-width: 480px) {
         html {
-          font-size: 87.5%;
+          font-size: 14px;
         }
         body {
           overflow: hidden;
@@ -4181,7 +4179,7 @@
       /* ── iPad: iOS-like mobile UI on wider screen ── */
       /* iPad gets the same mobile interface as iPhone but shows multiple columns */
       html.is-ipad {
-        font-size: 87.5%;
+        font-size: 14px;
       }
       html.is-ipad body {
         overflow: hidden;
@@ -16950,6 +16948,41 @@
         if (_isIPad) {
           document.documentElement.classList.add("is-ipad");
         }
+
+        // ── iOS Dynamic Type Support ──
+        // Detect if user has changed text size in iOS Settings or Control Center (aA button).
+        // Uses a hidden probe element with `font: -apple-system-body` which returns the
+        // system Dynamic Type body font size (default 17px). If the user has changed it,
+        // we scale our 14px base proportionally. Works in both Safari and standalone PWA.
+        (function applyDynamicTypeScale() {
+          // Only run on iOS/iPadOS (iPhone + iPad)
+          const ua = navigator.userAgent || "";
+          const isIOS = /iPhone|iPod/.test(ua) || _isIPad;
+          if (!isIOS) return;
+
+          function updateScale() {
+            const probe = document.createElement("p");
+            probe.style.cssText = "font:-apple-system-body;position:absolute;visibility:hidden;pointer-events:none";
+            document.documentElement.appendChild(probe);
+            const systemSize = parseFloat(getComputedStyle(probe).fontSize);
+            probe.remove();
+            // Default iOS Dynamic Type body size is 17px.
+            // Only adjust if the user has changed it (with a small tolerance for rounding).
+            if (Math.abs(systemSize - 17) > 0.5) {
+              const scaled = Math.round(14 * (systemSize / 17));
+              document.documentElement.style.fontSize = scaled + "px";
+            } else {
+              // Reset to default in case it was previously scaled
+              document.documentElement.style.fontSize = "";
+            }
+          }
+
+          updateScale();
+          // Re-check when app comes back to foreground (user may have changed text size in Settings)
+          document.addEventListener("visibilitychange", function () {
+            if (!document.hidden) updateScale();
+          });
+        })();
 
         // Check if we're on a phone-sized screen (or iPad, which uses the iOS mobile UI)
         function isPhoneWidth() {
