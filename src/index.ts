@@ -54,10 +54,10 @@ if (WEBHOOK_URL) {
  * 3. Any human comment on an item where Harmoni is the creator or assignee
  *    (ensures orchestration projects like App still route to Harmoni when she's involved)
  *
- * Exception: During active development (in_development / in_review states),
+ * Exception: During active development (in_development / in_review / testing states),
  * criterion #3 is suppressed — only explicit @harmoni mentions trigger the webhook.
  * This prevents Harmoni from responding to every comment when Martin is working
- * directly with the coder bot in the development loop (TRACK-200).
+ * directly with the coder bot in the development loop (TRACK-200, TRACK-209).
  *
  * Bot/agent/system comments are always excluded (loop prevention).
  *
@@ -90,13 +90,16 @@ function startCommentWebhook(): void {
     //    (ensures comments on orchestration projects like App still reach Harmoni
     //     when she has a stake in the item — fixes TRACK-175)
     //
-    // Exception (TRACK-200): When an item is in active development (in_development
-    // or in_review), suppress the "harmoniInvolved" criterion. During the dev loop
-    // Martin is working directly with the coder — only ping Harmoni if explicitly
-    // tagged with @harmoni.
+    // Exception (TRACK-200, TRACK-209): When an item is in active development
+    // (in_development, in_review, or testing), suppress the "harmoniInvolved"
+    // criterion. During the dev loop Martin is working directly with the coder —
+    // only ping Harmoni if explicitly tagged with @harmoni. The testing state is
+    // included because the orchestrator auto-moves items from in_review → testing,
+    // and Martin's verification comments during testing are still part of the same
+    // coder interaction loop, not a conversation with Harmoni.
     const isNonOrchestrationProject = project.orchestration === 0;
     const hasMention = /@harmoni\b/i.test(body);
-    const isInDevLoop = item.state === "in_development" || item.state === "in_review";
+    const isInDevLoop = item.state === "in_development" || item.state === "in_review" || item.state === "testing";
     const harmoniInvolved =
       !isInDevLoop &&
       (item.created_by?.toLowerCase() === "harmoni" ||
