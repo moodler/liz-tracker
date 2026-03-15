@@ -182,10 +182,10 @@ export const HUMAN_ACTORS: string[] = [
 
 /**
  * Additional actor names classified as "agent" (AI/bot identifiers).
- * "claude", "agent", "opencode", and "coder" are always recognised as agents.
+ * "coder" and "harmoni" are always recognised as agents.
  * Set via comma-separated env var, e.g. AGENT_ACTORS="my-bot,helper"
  */
-const DEFAULT_AGENT_ACTORS = ["coder"];
+const DEFAULT_AGENT_ACTORS = ["coder", "harmoni"];
 export const AGENT_ACTORS: string[] = [
   ...DEFAULT_AGENT_ACTORS,
   ...(process.env.AGENT_ACTORS

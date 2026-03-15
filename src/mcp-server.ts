@@ -320,12 +320,17 @@ function createMcpServer(): McpServer {
       link: z.string().optional().describe("Optional URL link associated with this item"),
       space_type: z.string().optional().describe('Space type for specialized UI (e.g. "standard", "song", "engagement", "scheduled"). Default: "standard"'),
       space_data: z.string().optional().describe('JSON string for space-specific custom fields. For scheduled tasks (space_type="scheduled"), the JSON must have this exact structure: {"schedule": {"frequency": "daily", "time": "07:00", "days_of_week": null, "timezone": "Australia/Perth", "cron_override": null}, "status": {"next_run": null, "last_run": null, "last_status": null, "last_duration_ms": null, "run_count": 0}, "todo": ["plain string task 1", "plain string task 2"], "ignore": ["plain string rule 1"]}. IMPORTANT: "todo" and "ignore" must be arrays of plain strings (NOT objects). Always include ALL four top-level keys (schedule, status, todo, ignore) — the entire space_data is replaced on update, not merged.'),
-      created_by: z.string().optional().describe("Who created this"),
+      created_by: z.string().optional().describe("Ignored — MCP items are always attributed to Harmoni for security (TRACK-213)"),
       blocked_by: z.array(z.string()).optional().describe('Item IDs or display keys (e.g. "TRACK-5") that block this item. The blocked item cannot be worked on until all blockers are done/testing/cancelled.'),
     },
     async (args) => {
       const project = getProject(args.project_id);
       if (!project) return { content: [{ type: "text", text: "Error: Project not found" }] };
+      // Security: MCP requests always originate from agents (never from a verified
+      // human source). Force created_by = "Harmoni" so that passing a human actor name
+      // (e.g. "dashboard", "Martin") cannot bypass actor classification and gain
+      // human-level privileges like auto-approval (TRACK-213).
+      const MCP_CREATED_BY = "Harmoni";
       const item = createWorkItem({
         project_id: args.project_id,
         title: args.title,
@@ -341,7 +346,7 @@ function createMcpServer(): McpServer {
         link: args.link || null,
         space_type: args.space_type,
         space_data: args.space_data ? sanitizeScheduledSpaceData(args.space_data, args.space_type) : null,
-        created_by: args.created_by,
+        created_by: MCP_CREATED_BY,
       });
 
       // Add dependencies if blocked_by was specified

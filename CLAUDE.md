@@ -140,11 +140,13 @@ Every state transition and item creation records an `actor_class`:
 | Actor pattern | Class | Can approve? |
 | --- | --- | --- |
 | `dashboard`, `me` + `HUMAN_ACTORS` env | `human` | ✅ |
-| `coder` + `AGENT_ACTORS` env | `agent` | ❌ |
+| `coder`, `harmoni` + `AGENT_ACTORS` env | `agent` | ❌ |
 | `orchestrator`, `system` | `system` | ❌ |
 | anything else | `api` | ❌ |
 
 Only `human`-class actors can move items to `approved` or `cancelled`. Attempts by other actor classes throw an error (403 from API, error from MCP).
+
+**MCP enforcement:** All items created via MCP tools have `created_by` forced to `"Harmoni"` (TRACK-213). This prevents agents from impersonating human actors (e.g. passing `created_by: "dashboard"`) to bypass actor classification. Similarly, state changes via MCP force `actor_class = "agent"` (LIZ-57).
 
 **Exception:** Comment-only items (`requires_code=0`) can be approved by agents. Since they don't grant code access, they don't present a security risk. This allows multiple agents to discuss and take turns on an issue without requiring human re-approval on every turn.
 

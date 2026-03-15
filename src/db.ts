@@ -80,7 +80,7 @@ export type ActorClass = "human" | "agent" | "system" | "api";
 /**
  * Classify an actor string into an actor class.
  * - Human actors are configured via HUMAN_ACTORS in config (default: "dashboard", "me")
- * - Agent actors are configured via AGENT_ACTORS in config (default: "coder")
+ * - Agent actors are configured via AGENT_ACTORS in config (default: "coder", "harmoni")
  * - "orchestrator", "system", "health-check" → system
  * - Unknown actors default to "api" (conservative — blocked from approval)
  *

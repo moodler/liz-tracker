@@ -59,6 +59,9 @@ describe('classifyActor', () => {
     expect(classifyActor('agent')).toBe('agent');
     expect(classifyActor('opencode')).toBe('agent');
     expect(classifyActor('coder')).toBe('agent');
+    expect(classifyActor('Harmoni')).toBe('agent');
+    expect(classifyActor('harmoni')).toBe('agent');
+    expect(classifyActor('HARMONI')).toBe('agent');
   });
 
   it('classifies system actors', () => {
@@ -301,6 +304,12 @@ describe('Work Item CRUD', () => {
     const agentItem = createWorkItem({ project_id: projectId, title: 'Agent', created_by: 'Coder' });
     expect(humanItem.created_by_class).toBe('human');
     expect(agentItem.created_by_class).toBe('agent');
+  });
+
+  it('classifies Harmoni as agent (TRACK-213)', () => {
+    const item = createWorkItem({ project_id: projectId, title: 'Harmoni item', created_by: 'Harmoni' });
+    expect(item.created_by).toBe('Harmoni');
+    expect(item.created_by_class).toBe('agent');
   });
 });
 
