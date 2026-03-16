@@ -7599,17 +7599,14 @@
       }
       .engagement-field-help-popup {
         display: none;
-        position: absolute;
-        bottom: calc(100% + 6px);
-        left: 50%;
-        transform: translateX(-50%);
+        position: fixed;
         width: 280px;
         background: var(--bg-card);
         border: 1px solid var(--border);
         border-radius: var(--radius);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
         padding: 10px 12px;
-        z-index: 100;
+        z-index: 10001;
         font-size: 0.78rem;
         color: var(--text-muted);
         line-height: 1.5;
@@ -14080,7 +14077,14 @@
               const wasOpen = popup.classList.contains("open");
               // Close all other popups first
               $$("#engagementSpace .engagement-field-help-popup").forEach(p => p.classList.remove("open"));
-              if (!wasOpen) popup.classList.add("open");
+              if (!wasOpen) {
+                // Position fixed popup relative to the button
+                const rect = btn.getBoundingClientRect();
+                popup.style.left = Math.max(8, rect.left + rect.width / 2 - 140) + "px";
+                popup.style.top = (rect.top - 8) + "px";
+                popup.style.transform = "translateY(-100%)";
+                popup.classList.add("open");
+              }
             });
           });
           // Close popups when clicking elsewhere
