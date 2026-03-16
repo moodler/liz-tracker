@@ -9,6 +9,7 @@
  */
 
 import { initTrackerDatabase, onTrackerEvent, getWorkItem, getWorkItemKey, getProject, classifyActor } from "./db.js";
+import "./spaces/index.js"; // Register all space plugins before starting the server
 import { startTrackerServer } from "./api.js";
 import { PORT, ORCHESTRATOR_ENABLED, TRACKER_API_TOKEN, AUTH_TOKEN_IS_NEW, WEBHOOK_URL, WEBHOOK_SECRET } from "./config.js";
 import { startOrchestrator, stopOrchestrator } from "./orchestrator.js";

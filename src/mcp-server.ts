@@ -56,6 +56,8 @@ import path from "path";
 import { logger } from "./logger.js";
 import { dispatchItem, abortSession, getOrchestratorStatus, emergencyStop, requestSafeRestart, getRestartStatus, cancelRestart, isSafeToRestart, validateAgentConfig } from "./orchestrator.js";
 import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, STORE_DIR, ASSISTANT_PROJECT_ROOT, buildItemUrl } from "./config.js";
+import { listSpacePlugins, getSpacePlugin, getCoverSpaceTypes } from "./spaces/index.js";
+import { sanitizeScheduledSpaceData } from "./spaces/scheduled.js";
 
 /** Simple MIME type detection from file extension. */
 function detectMimeType(filename: string): string {
@@ -89,56 +91,18 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
+// sanitizeScheduledSpaceData is imported from ./spaces/scheduled.js
+
 /**
- * Sanitize space_data JSON for scheduled tasks.
- * Ensures todo and ignore arrays contain only plain strings (not objects).
- * This prevents "[object Object]" from appearing in the UI when agents
- * accidentally pass objects instead of strings in these arrays.
+ * Sanitize space_data using the appropriate space plugin's sanitizer.
+ * Falls back to the scheduled sanitizer for backward compatibility.
  */
-function sanitizeScheduledSpaceData(spaceDataJson: string, spaceType?: string | null): string {
-  // Only sanitize scheduled space data
-  if (!spaceDataJson) return spaceDataJson;
-
-  try {
-    const parsed = JSON.parse(spaceDataJson);
-
-    // Detect scheduled data by checking for scheduled-specific keys or explicit space_type
-    const isScheduled = spaceType === "scheduled" ||
-      (parsed.schedule && typeof parsed.schedule === "object") ||
-      Array.isArray(parsed.todo) || Array.isArray(parsed.ignore);
-
-    if (!isScheduled) return spaceDataJson;
-
-    // Coerce todo items to plain strings
-    if (Array.isArray(parsed.todo)) {
-      parsed.todo = parsed.todo.map((item: unknown) => {
-        if (typeof item === "string") return item;
-        if (item && typeof item === "object") {
-          // Try common keys agents might use: text, title, name, content, description, value
-          const obj = item as Record<string, unknown>;
-          return String(obj.text || obj.title || obj.name || obj.content || obj.description || obj.value || JSON.stringify(item));
-        }
-        return String(item);
-      });
-    }
-
-    // Coerce ignore items to plain strings
-    if (Array.isArray(parsed.ignore)) {
-      parsed.ignore = parsed.ignore.map((item: unknown) => {
-        if (typeof item === "string") return item;
-        if (item && typeof item === "object") {
-          const obj = item as Record<string, unknown>;
-          return String(obj.text || obj.title || obj.name || obj.content || obj.description || obj.value || JSON.stringify(item));
-        }
-        return String(item);
-      });
-    }
-
-    return JSON.stringify(parsed);
-  } catch {
-    // If JSON parsing fails, return as-is — the DB layer will handle it
-    return spaceDataJson;
+function sanitizeSpaceData(raw: string, spaceType?: string | null): string {
+  if (spaceType) {
+    const plugin = getSpacePlugin(spaceType);
+    if (plugin?.sanitizeSpaceData) return plugin.sanitizeSpaceData(raw);
   }
+  return sanitizeScheduledSpaceData(raw, spaceType);
 }
 
 /**
@@ -345,7 +309,7 @@ function createMcpServer(): McpServer {
         date_due: args.date_due || null,
         link: args.link || null,
         space_type: args.space_type,
-        space_data: args.space_data ? sanitizeScheduledSpaceData(args.space_data, args.space_type) : null,
+        space_data: args.space_data ? sanitizeSpaceData(args.space_data, args.space_type) : null,
         created_by: MCP_CREATED_BY,
       });
 
@@ -457,7 +421,7 @@ function createMcpServer(): McpServer {
         if (args.space_data) {
           const existingItem = getWorkItem(itemId);
           const effectiveSpaceType = args.space_type || existingItem?.space_type;
-          sanitizedSpaceData = sanitizeScheduledSpaceData(args.space_data, effectiveSpaceType);
+          sanitizedSpaceData = sanitizeSpaceData(args.space_data, effectiveSpaceType);
         } else {
           sanitizedSpaceData = null;
         }
@@ -1124,590 +1088,30 @@ function createMcpServer(): McpServer {
     },
   );
 
-  // ── Scheduled Task Helpers ──
-
-  /**
-   * Parse the space_data JSON from a scheduled task work item.
-   * Returns the parsed object, or null if the item is not a scheduled task or has no space_data.
-   */
-  function parseScheduledSpaceData(item: ReturnType<typeof getWorkItem>): {
-    schedule: Record<string, unknown>;
-    status: Record<string, unknown>;
-    todo: string[];
-    ignore: string[];
-  } | null {
-    if (!item) return null;
-    if (item.space_type !== "scheduled") return null;
-    if (!item.space_data) {
-      // Return default empty structure
-      return {
-        schedule: { frequency: "daily", time: "09:00", days_of_week: null, timezone: "Australia/Perth", cron_override: null },
-        status: { next_run: null, last_run: null, last_status: null, last_duration_ms: null, run_count: 0 },
-        todo: [],
-        ignore: [],
-      };
-    }
-    try {
-      const parsed = JSON.parse(item.space_data);
-      return {
-        schedule: parsed.schedule || {},
-        status: parsed.status || {},
-        todo: Array.isArray(parsed.todo) ? parsed.todo.map(String) : [],
-        ignore: Array.isArray(parsed.ignore) ? parsed.ignore.map(String) : [],
-      };
-    } catch {
-      return null;
+  // ── Dynamic Space Plugin Tool Registration ──
+  // Each space plugin defines its own MCP tools in its mcpTools array.
+  // This loop replaces ~765 lines of hardcoded tool registrations for
+  // scheduled, engagement, and cover image tools.
+  for (const plugin of listSpacePlugins()) {
+    if (!plugin.mcpTools) continue;
+    for (const tool of plugin.mcpTools) {
+      server.tool(tool.name, tool.description, tool.schema, async (args: Record<string, unknown>) => {
+        const item = resolveItem(args.item_id as string);
+        if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
+        if (item.space_type !== plugin.name) {
+          return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not a ${plugin.label} (space_type="${item.space_type}"). This tool only works on ${plugin.label.toLowerCase()} items.` }] };
+        }
+        return tool.handler(args, item, plugin);
+      });
     }
   }
 
-  /**
-   * Save updated space_data back to a scheduled task work item.
-   */
-  function saveScheduledSpaceData(
-    itemId: string,
-    data: { schedule: Record<string, unknown>; status: Record<string, unknown>; todo: string[]; ignore: string[] },
-  ): ReturnType<typeof updateWorkItem> {
-    return updateWorkItem(itemId, {
-      space_data: JSON.stringify(data),
-    });
-  }
+  // ── Cover Image Tools ──
+  // These are cross-cutting tools shared by all spaces with coverImage capability.
+  // They use getCoverSpaceTypes() from the registry instead of a hardcoded list.
 
-  server.tool(
-    "tracker_add_scheduled_todo",
-    "Add one or more TODO items to a scheduled task. Much simpler than updating space_data manually — just pass the item key and the text strings to add.",
-    {
-      item_id: z.string().describe("Work item ID or display key (e.g. \"HARMONI-5\")"),
-      items: z.array(z.string()).describe("TODO items to add — each must be a plain text string describing a task step"),
-    },
-    async (args) => {
-      const item = resolveItem(args.item_id);
-      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (item.space_type !== "scheduled") {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not a scheduled task (space_type="${item.space_type}"). This tool only works on scheduled tasks.` }] };
-      }
-
-      const data = parseScheduledSpaceData(item);
-      if (!data) return { content: [{ type: "text", text: "Error: Could not parse scheduled task data" }] };
-
-      // Ensure all items are plain strings
-      const newItems = args.items.map((i) => String(i));
-      data.todo.push(...newItems);
-
-      const updated = saveScheduledSpaceData(item.id, data);
-      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
-
-      return {
-        content: [{
-          type: "text",
-          text: `Added ${newItems.length} TODO item(s) to ${getWorkItemKey(item)}. Total TODO items: ${data.todo.length}.\n\nCurrent TODO list:\n${data.todo.map((t, i) => `  ${i}: ${t}`).join("\n")}`,
-        }],
-      };
-    },
-  );
-
-  server.tool(
-    "tracker_remove_scheduled_todo",
-    "Remove TODO items from a scheduled task by their index numbers. Use tracker_get_item first to see the current TODO list and their indices.",
-    {
-      item_id: z.string().describe("Work item ID or display key (e.g. \"HARMONI-5\")"),
-      indices: z.array(z.number()).describe("Zero-based indices of TODO items to remove. Use tracker_get_item to see the list and indices first."),
-    },
-    async (args) => {
-      const item = resolveItem(args.item_id);
-      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (item.space_type !== "scheduled") {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not a scheduled task (space_type="${item.space_type}"). This tool only works on scheduled tasks.` }] };
-      }
-
-      const data = parseScheduledSpaceData(item);
-      if (!data) return { content: [{ type: "text", text: "Error: Could not parse scheduled task data" }] };
-
-      // Validate indices
-      const invalidIndices = args.indices.filter((i) => i < 0 || i >= data.todo.length);
-      if (invalidIndices.length > 0) {
-        return { content: [{ type: "text", text: `Error: Invalid indices: ${invalidIndices.join(", ")}. TODO list has ${data.todo.length} items (indices 0-${data.todo.length - 1}).` }] };
-      }
-
-      // Remove in reverse order to preserve indices
-      const sortedIndices = [...args.indices].sort((a, b) => b - a);
-      const removed: string[] = [];
-      for (const idx of sortedIndices) {
-        removed.push(data.todo[idx]);
-        data.todo.splice(idx, 1);
-      }
-
-      const updated = saveScheduledSpaceData(item.id, data);
-      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
-
-      return {
-        content: [{
-          type: "text",
-          text: `Removed ${removed.length} TODO item(s) from ${getWorkItemKey(item)}. Remaining: ${data.todo.length}.\n\nRemoved:\n${removed.map((t) => `  - ${t}`).join("\n")}\n\nCurrent TODO list:\n${data.todo.length > 0 ? data.todo.map((t, i) => `  ${i}: ${t}`).join("\n") : "  (empty)"}`,
-        }],
-      };
-    },
-  );
-
-  server.tool(
-    "tracker_add_scheduled_ignore",
-    "Add one or more IGNORE rules to a scheduled task. Much simpler than updating space_data manually — just pass the item key and the rule strings to add.",
-    {
-      item_id: z.string().describe("Work item ID or display key (e.g. \"HARMONI-5\")"),
-      rules: z.array(z.string()).describe("IGNORE rules to add — each must be a plain text string describing what to skip or exclude"),
-    },
-    async (args) => {
-      const item = resolveItem(args.item_id);
-      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (item.space_type !== "scheduled") {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not a scheduled task (space_type="${item.space_type}"). This tool only works on scheduled tasks.` }] };
-      }
-
-      const data = parseScheduledSpaceData(item);
-      if (!data) return { content: [{ type: "text", text: "Error: Could not parse scheduled task data" }] };
-
-      // Ensure all rules are plain strings
-      const newRules = args.rules.map((r) => String(r));
-      data.ignore.push(...newRules);
-
-      const updated = saveScheduledSpaceData(item.id, data);
-      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
-
-      return {
-        content: [{
-          type: "text",
-          text: `Added ${newRules.length} IGNORE rule(s) to ${getWorkItemKey(item)}. Total IGNORE rules: ${data.ignore.length}.\n\nCurrent IGNORE list:\n${data.ignore.map((r, i) => `  ${i}: ${r}`).join("\n")}`,
-        }],
-      };
-    },
-  );
-
-  server.tool(
-    "tracker_remove_scheduled_ignore",
-    "Remove IGNORE rules from a scheduled task by their index numbers. Use tracker_get_item first to see the current IGNORE list and their indices.",
-    {
-      item_id: z.string().describe("Work item ID or display key (e.g. \"HARMONI-5\")"),
-      indices: z.array(z.number()).describe("Zero-based indices of IGNORE rules to remove. Use tracker_get_item to see the list and indices first."),
-    },
-    async (args) => {
-      const item = resolveItem(args.item_id);
-      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (item.space_type !== "scheduled") {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not a scheduled task (space_type="${item.space_type}"). This tool only works on scheduled tasks.` }] };
-      }
-
-      const data = parseScheduledSpaceData(item);
-      if (!data) return { content: [{ type: "text", text: "Error: Could not parse scheduled task data" }] };
-
-      // Validate indices
-      const invalidIndices = args.indices.filter((i) => i < 0 || i >= data.ignore.length);
-      if (invalidIndices.length > 0) {
-        return { content: [{ type: "text", text: `Error: Invalid indices: ${invalidIndices.join(", ")}. IGNORE list has ${data.ignore.length} rules (indices 0-${data.ignore.length - 1}).` }] };
-      }
-
-      // Remove in reverse order to preserve indices
-      const sortedIndices = [...args.indices].sort((a, b) => b - a);
-      const removed: string[] = [];
-      for (const idx of sortedIndices) {
-        removed.push(data.ignore[idx]);
-        data.ignore.splice(idx, 1);
-      }
-
-      const updated = saveScheduledSpaceData(item.id, data);
-      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
-
-      return {
-        content: [{
-          type: "text",
-          text: `Removed ${removed.length} IGNORE rule(s) from ${getWorkItemKey(item)}. Remaining: ${data.ignore.length}.\n\nRemoved:\n${removed.map((r) => `  - ${r}`).join("\n")}\n\nCurrent IGNORE list:\n${data.ignore.length > 0 ? data.ignore.map((r, i) => `  ${i}: ${r}`).join("\n") : "  (empty)"}`,
-        }],
-      };
-    },
-  );
-
-  // ── Engagement Space Helpers ──
-
-  /** Engagement space_data shape. */
-  interface EngagementData {
-    contractor: { company: string; contact: string; phone: string; mobile: string; email: string; address: string };
-    quote: { reference: string; date: string; expiry: string; status: string; total: number; currency: string; includes_gst: boolean; line_items: { desc: string; amount: number | null }[] };
-    payment: { status: string; deposits: { date: string; amount: number; method: string }[]; invoices: { ref: string; date: string; amount: number }[] };
-    milestones: { label: string; date: string | null; status: string }[];
-    gmail_query: string;
-    calendar_tag: string;
-    comms_log: { direction: string; date: string; subject: string; snippet: string }[];
-  }
-
-  /**
-   * Parse the space_data JSON from an engagement work item.
-   * Returns the parsed object, or null if the item is not an engagement or has invalid data.
-   */
-  function parseEngagementSpaceData(item: ReturnType<typeof getWorkItem>): EngagementData | null {
-    if (!item) return null;
-    if (item.space_type !== "engagement") return null;
-
-    const defaults: EngagementData = {
-      contractor: { company: "", contact: "", phone: "", mobile: "", email: "", address: "" },
-      quote: { reference: "", date: "", expiry: "", status: "pending", total: 0, currency: "AUD", includes_gst: true, line_items: [] },
-      payment: { status: "not_started", deposits: [], invoices: [] },
-      milestones: [],
-      gmail_query: "",
-      calendar_tag: "",
-      comms_log: [],
-    };
-
-    if (!item.space_data) return defaults;
-
-    try {
-      const parsed = JSON.parse(item.space_data);
-      return {
-        contractor: { ...defaults.contractor, ...(parsed.contractor || {}) },
-        quote: { ...defaults.quote, ...(parsed.quote || {}), line_items: (parsed.quote && parsed.quote.line_items) || [] },
-        payment: { ...defaults.payment, ...(parsed.payment || {}), deposits: (parsed.payment && parsed.payment.deposits) || [], invoices: (parsed.payment && parsed.payment.invoices) || [] },
-        milestones: parsed.milestones || [],
-        gmail_query: parsed.gmail_query || "",
-        calendar_tag: parsed.calendar_tag || "",
-        comms_log: parsed.comms_log || [],
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Save updated space_data back to an engagement work item.
-   */
-  function saveEngagementData(
-    itemId: string,
-    data: EngagementData,
-  ): ReturnType<typeof updateWorkItem> {
-    return updateWorkItem(itemId, {
-      space_data: JSON.stringify(data),
-    });
-  }
-
-  server.tool(
-    "tracker_update_engagement_contact",
-    "Update contact/contractor details on an engagement space item. Only provided fields are updated — omitted fields keep their current values. Much simpler than updating space_data manually.",
-    {
-      item_id: z.string().describe("Work item ID or display key (e.g. \"MARTIN-94\")"),
-      company: z.string().optional().describe("Company or business name"),
-      contact: z.string().optional().describe("Contact person name"),
-      phone: z.string().optional().describe("Phone number"),
-      mobile: z.string().optional().describe("Mobile number"),
-      email: z.string().optional().describe("Email address"),
-      address: z.string().optional().describe("Physical address"),
-    },
-    async (args) => {
-      const item = resolveItem(args.item_id);
-      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (item.space_type !== "engagement") {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not an engagement (space_type="${item.space_type}"). This tool only works on engagement items.` }] };
-      }
-
-      const data = parseEngagementSpaceData(item);
-      if (!data) return { content: [{ type: "text", text: "Error: Could not parse engagement data" }] };
-
-      // Only update provided fields
-      if (args.company !== undefined) data.contractor.company = args.company;
-      if (args.contact !== undefined) data.contractor.contact = args.contact;
-      if (args.phone !== undefined) data.contractor.phone = args.phone;
-      if (args.mobile !== undefined) data.contractor.mobile = args.mobile;
-      if (args.email !== undefined) data.contractor.email = args.email;
-      if (args.address !== undefined) data.contractor.address = args.address;
-
-      const updated = saveEngagementData(item.id, data);
-      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
-
-      const c = data.contractor;
-      const summary = [
-        c.company && `Company: ${c.company}`,
-        c.contact && `Contact: ${c.contact}`,
-        c.phone && `Phone: ${c.phone}`,
-        c.mobile && `Mobile: ${c.mobile}`,
-        c.email && `Email: ${c.email}`,
-        c.address && `Address: ${c.address}`,
-      ].filter(Boolean).join("\n  ");
-
-      return {
-        content: [{
-          type: "text",
-          text: `Updated contact details on ${getWorkItemKey(item)}.\n\nCurrent contact:\n  ${summary || "(empty)"}`,
-        }],
-      };
-    },
-  );
-
-  server.tool(
-    "tracker_update_engagement_quote",
-    "Update quote/financial details on an engagement space item. Only provided fields are updated — omitted fields keep their current values. For line_items, pass the complete array (replaces existing). Much simpler than updating space_data manually.",
-    {
-      item_id: z.string().describe("Work item ID or display key (e.g. \"MARTIN-94\")"),
-      reference: z.string().optional().describe("Quote reference number"),
-      date: z.string().optional().describe("Quote date (YYYY-MM-DD)"),
-      expiry: z.string().optional().describe("Quote expiry date (YYYY-MM-DD)"),
-      status: z.enum(["pending", "valid", "expired"]).optional().describe("Quote status"),
-      total: z.number().optional().describe("Total amount"),
-      currency: z.string().optional().describe("Currency code (e.g. AUD, USD, GBP)"),
-      includes_gst: z.boolean().optional().describe("Whether the total includes GST"),
-      line_items: z.array(z.object({
-        desc: z.string().describe("Line item description"),
-        amount: z.number().nullable().optional().describe("Line item amount"),
-      })).optional().describe("Complete list of line items (replaces existing)"),
-      payment_status: z.enum(["not_started", "deposit_paid", "in_progress", "final_paid"]).optional().describe("Payment status"),
-    },
-    async (args) => {
-      const item = resolveItem(args.item_id);
-      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (item.space_type !== "engagement") {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not an engagement (space_type="${item.space_type}"). This tool only works on engagement items.` }] };
-      }
-
-      const data = parseEngagementSpaceData(item);
-      if (!data) return { content: [{ type: "text", text: "Error: Could not parse engagement data" }] };
-
-      // Update quote fields
-      if (args.reference !== undefined) data.quote.reference = args.reference;
-      if (args.date !== undefined) data.quote.date = args.date;
-      if (args.expiry !== undefined) data.quote.expiry = args.expiry;
-      if (args.status !== undefined) data.quote.status = args.status;
-      if (args.total !== undefined) data.quote.total = args.total;
-      if (args.currency !== undefined) data.quote.currency = args.currency;
-      if (args.includes_gst !== undefined) data.quote.includes_gst = args.includes_gst;
-      if (args.line_items !== undefined) {
-        data.quote.line_items = args.line_items.map(li => ({
-          desc: li.desc,
-          amount: li.amount ?? null,
-        }));
-      }
-
-      // Update payment status
-      if (args.payment_status !== undefined) data.payment.status = args.payment_status;
-
-      const updated = saveEngagementData(item.id, data);
-      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
-
-      const q = data.quote;
-      const sym = q.currency === "AUD" ? "$" : q.currency === "USD" ? "US$" : q.currency === "GBP" ? "\u00a3" : "$";
-      return {
-        content: [{
-          type: "text",
-          text: `Updated quote/financial on ${getWorkItemKey(item)}.\n\nQuote: ${sym}${q.total.toFixed(2)} ${q.currency} (${q.status})${q.includes_gst ? " inc. GST" : " ex. GST"}\nPayment: ${data.payment.status}\nLine items: ${q.line_items.length}`,
-        }],
-      };
-    },
-  );
-
-  server.tool(
-    "tracker_add_engagement_milestone",
-    "Add one or more milestones to an engagement space item. Each milestone has a label, optional date, and status.",
-    {
-      item_id: z.string().describe("Work item ID or display key (e.g. \"MARTIN-94\")"),
-      milestones: z.array(z.object({
-        label: z.string().describe("Milestone label/description"),
-        date: z.string().nullable().optional().describe("Milestone date (YYYY-MM-DD or free-form like \"Mar 15\")"),
-        status: z.enum(["upcoming", "done", "overdue"]).optional().describe("Milestone status (default: upcoming)"),
-      })).describe("Milestones to add"),
-    },
-    async (args) => {
-      const item = resolveItem(args.item_id);
-      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (item.space_type !== "engagement") {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not an engagement (space_type="${item.space_type}"). This tool only works on engagement items.` }] };
-      }
-
-      const data = parseEngagementSpaceData(item);
-      if (!data) return { content: [{ type: "text", text: "Error: Could not parse engagement data" }] };
-
-      const newMilestones = args.milestones.map(ms => ({
-        label: ms.label,
-        date: ms.date ?? null,
-        status: ms.status || "upcoming",
-      }));
-      data.milestones.push(...newMilestones);
-
-      const updated = saveEngagementData(item.id, data);
-      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
-
-      return {
-        content: [{
-          type: "text",
-          text: `Added ${newMilestones.length} milestone(s) to ${getWorkItemKey(item)}. Total: ${data.milestones.length}.\n\nCurrent milestones:\n${data.milestones.map((ms, i) => `  ${i}: [${ms.status}] ${ms.label}${ms.date ? " — " + ms.date : ""}`).join("\n")}`,
-        }],
-      };
-    },
-  );
-
-  server.tool(
-    "tracker_remove_engagement_milestone",
-    "Remove milestones from an engagement space item by their index numbers. Use tracker_get_item first to see the current milestones and their indices.",
-    {
-      item_id: z.string().describe("Work item ID or display key (e.g. \"MARTIN-94\")"),
-      indices: z.array(z.number()).describe("Zero-based indices of milestones to remove. Use tracker_get_item to see the list and indices first."),
-    },
-    async (args) => {
-      const item = resolveItem(args.item_id);
-      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (item.space_type !== "engagement") {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not an engagement (space_type="${item.space_type}"). This tool only works on engagement items.` }] };
-      }
-
-      const data = parseEngagementSpaceData(item);
-      if (!data) return { content: [{ type: "text", text: "Error: Could not parse engagement data" }] };
-
-      // Validate indices
-      const invalidIndices = args.indices.filter(i => i < 0 || i >= data.milestones.length);
-      if (invalidIndices.length > 0) {
-        return { content: [{ type: "text", text: `Error: Invalid indices: ${invalidIndices.join(", ")}. Milestones list has ${data.milestones.length} items (indices 0-${data.milestones.length - 1}).` }] };
-      }
-
-      // Remove in reverse order to preserve indices
-      const sortedIndices = [...args.indices].sort((a, b) => b - a);
-      const removed: { label: string; date: string | null; status: string }[] = [];
-      for (const idx of sortedIndices) {
-        removed.push(data.milestones[idx]);
-        data.milestones.splice(idx, 1);
-      }
-
-      const updated = saveEngagementData(item.id, data);
-      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
-
-      return {
-        content: [{
-          type: "text",
-          text: `Removed ${removed.length} milestone(s) from ${getWorkItemKey(item)}. Remaining: ${data.milestones.length}.\n\nRemoved:\n${removed.map(ms => `  - [${ms.status}] ${ms.label}`).join("\n")}\n\nCurrent milestones:\n${data.milestones.length > 0 ? data.milestones.map((ms, i) => `  ${i}: [${ms.status}] ${ms.label}${ms.date ? " — " + ms.date : ""}`).join("\n") : "  (empty)"}`,
-        }],
-      };
-    },
-  );
-
-  server.tool(
-    "tracker_update_engagement_milestone",
-    "Update existing milestones on an engagement space item. Specify the index and the fields to change.",
-    {
-      item_id: z.string().describe("Work item ID or display key (e.g. \"MARTIN-94\")"),
-      index: z.number().describe("Zero-based index of the milestone to update"),
-      label: z.string().optional().describe("New milestone label"),
-      date: z.string().nullable().optional().describe("New milestone date (YYYY-MM-DD or free-form). Pass null to clear."),
-      status: z.enum(["upcoming", "done", "overdue"]).optional().describe("New milestone status"),
-    },
-    async (args) => {
-      const item = resolveItem(args.item_id);
-      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (item.space_type !== "engagement") {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not an engagement (space_type="${item.space_type}"). This tool only works on engagement items.` }] };
-      }
-
-      const data = parseEngagementSpaceData(item);
-      if (!data) return { content: [{ type: "text", text: "Error: Could not parse engagement data" }] };
-
-      if (args.index < 0 || args.index >= data.milestones.length) {
-        return { content: [{ type: "text", text: `Error: Invalid index ${args.index}. Milestones list has ${data.milestones.length} items (indices 0-${data.milestones.length - 1}).` }] };
-      }
-
-      const ms = data.milestones[args.index];
-      if (args.label !== undefined) ms.label = args.label;
-      if (args.date !== undefined) ms.date = args.date;
-      if (args.status !== undefined) ms.status = args.status;
-
-      const updated = saveEngagementData(item.id, data);
-      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
-
-      return {
-        content: [{
-          type: "text",
-          text: `Updated milestone ${args.index} on ${getWorkItemKey(item)}.\n\nCurrent milestones:\n${data.milestones.map((m, i) => `  ${i}: [${m.status}] ${m.label}${m.date ? " — " + m.date : ""}`).join("\n")}`,
-        }],
-      };
-    },
-  );
-
-  server.tool(
-    "tracker_add_engagement_comms",
-    "Add one or more communication log entries to an engagement space item. Use this to track emails, calls, and messages.",
-    {
-      item_id: z.string().describe("Work item ID or display key (e.g. \"MARTIN-94\")"),
-      entries: z.array(z.object({
-        direction: z.enum(["inbound", "outbound"]).describe("Whether the communication was inbound (received) or outbound (sent)"),
-        date: z.string().describe("Date of the communication (YYYY-MM-DD or free-form)"),
-        subject: z.string().describe("Subject or brief description"),
-        snippet: z.string().optional().describe("Short excerpt or summary of the content"),
-      })).describe("Communication log entries to add"),
-    },
-    async (args) => {
-      const item = resolveItem(args.item_id);
-      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (item.space_type !== "engagement") {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not an engagement (space_type="${item.space_type}"). This tool only works on engagement items.` }] };
-      }
-
-      const data = parseEngagementSpaceData(item);
-      if (!data) return { content: [{ type: "text", text: "Error: Could not parse engagement data" }] };
-
-      const newEntries = args.entries.map(e => ({
-        direction: e.direction,
-        date: e.date,
-        subject: e.subject,
-        snippet: e.snippet || "",
-      }));
-      data.comms_log.push(...newEntries);
-
-      const updated = saveEngagementData(item.id, data);
-      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
-
-      return {
-        content: [{
-          type: "text",
-          text: `Added ${newEntries.length} comms log entry/entries to ${getWorkItemKey(item)}. Total entries: ${data.comms_log.length}.\n\nLatest entries:\n${data.comms_log.slice(-5).map((e, i) => `  ${e.direction === "outbound" ? "↑" : "↓"} ${e.date} — ${e.subject}`).join("\n")}`,
-        }],
-      };
-    },
-  );
-
-  server.tool(
-    "tracker_update_engagement_settings",
-    "Update engagement settings (gmail_query, calendar_tag) on an engagement space item.",
-    {
-      item_id: z.string().describe("Work item ID or display key (e.g. \"MARTIN-94\")"),
-      gmail_query: z.string().optional().describe("Gmail search query for related emails (e.g. \"from:email OR to:email\")"),
-      calendar_tag: z.string().optional().describe("Calendar tag for linking events"),
-    },
-    async (args) => {
-      const item = resolveItem(args.item_id);
-      if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (item.space_type !== "engagement") {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} is not an engagement (space_type="${item.space_type}"). This tool only works on engagement items.` }] };
-      }
-
-      const data = parseEngagementSpaceData(item);
-      if (!data) return { content: [{ type: "text", text: "Error: Could not parse engagement data" }] };
-
-      if (args.gmail_query !== undefined) data.gmail_query = args.gmail_query;
-      if (args.calendar_tag !== undefined) data.calendar_tag = args.calendar_tag;
-
-      const updated = saveEngagementData(item.id, data);
-      if (!updated) return { content: [{ type: "text", text: "Error: Failed to update work item" }] };
-
-      return {
-        content: [{
-          type: "text",
-          text: `Updated engagement settings on ${getWorkItemKey(item)}.\n  Gmail query: ${data.gmail_query || "(not set)"}\n  Calendar tag: ${data.calendar_tag || "(not set)"}`,
-        }],
-      };
-    },
-  );
-
-  // ── Cover Image Helpers ──
-
-  /** Space types that support cover images. */
-  const COVER_SPACE_TYPES = ["song", "engagement"];
-
-  /** Regex matching cover image attachment filenames. */
   const COVER_FILENAME_RE = /^cover\.(png|jpg|jpeg|webp)$/i;
 
-  /**
-   * Delete all existing cover image attachments for a work item.
-   * Returns the number of attachments deleted.
-   */
   function deleteExistingCovers(itemId: string): number {
     const attachments = listAttachments(itemId);
     let deleted = 0;
@@ -1734,8 +1138,9 @@ function createMcpServer(): McpServer {
     async (args) => {
       const item = resolveItem(args.item_id);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (!COVER_SPACE_TYPES.includes(item.space_type)) {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} has space_type="${item.space_type}". Cover images are only supported on: ${COVER_SPACE_TYPES.join(", ")}.` }] };
+      const coverTypes = getCoverSpaceTypes();
+      if (!coverTypes.includes(item.space_type)) {
+        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} has space_type="${item.space_type}". Cover images are only supported on: ${coverTypes.join(", ")}.` }] };
       }
 
       const fileData = Buffer.from(args.data, "base64");
@@ -1743,20 +1148,15 @@ function createMcpServer(): McpServer {
         return { content: [{ type: "text", text: `Error: File exceeds maximum size of ${Math.round(MAX_ATTACHMENT_SIZE / 1024 / 1024)}MB` }] };
       }
 
-      // Determine cover filename from the provided filename or default
       const sourceFilename = args.filename || "cover.jpg";
       const ext = path.extname(sourceFilename).toLowerCase().replace(".", "");
       const validExts = ["png", "jpg", "jpeg", "webp"];
       const finalExt = validExts.includes(ext) ? ext : "jpg";
       const coverFilename = `cover.${finalExt}`;
-
-      // Detect MIME type
       const mimeType = detectMimeType(coverFilename);
 
-      // Delete any existing cover attachments
       const deletedCount = deleteExistingCovers(item.id);
 
-      // Save the new cover image
       const storagePath = path.join("attachments", item.id, coverFilename);
       const fullPath = path.join(STORE_DIR, storagePath);
       fs.mkdirSync(path.dirname(fullPath), { recursive: true });
@@ -1792,12 +1192,12 @@ function createMcpServer(): McpServer {
     async (args) => {
       const item = resolveItem(args.item_id);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (!COVER_SPACE_TYPES.includes(item.space_type)) {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} has space_type="${item.space_type}". Cover images are only supported on: ${COVER_SPACE_TYPES.join(", ")}.` }] };
+      const coverTypes = getCoverSpaceTypes();
+      if (!coverTypes.includes(item.space_type)) {
+        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} has space_type="${item.space_type}". Cover images are only supported on: ${coverTypes.join(", ")}.` }] };
       }
 
-      // Expand leading ~ to home directory
-      const filePath = args.file_path.startsWith("~/")
+      let filePath = args.file_path.startsWith("~/")
         ? path.join(os.homedir(), args.file_path.slice(2))
         : args.file_path;
 
@@ -1805,7 +1205,6 @@ function createMcpServer(): McpServer {
         return { content: [{ type: "text", text: "Error: file_path must be an absolute path" }] };
       }
 
-      // Translate container paths
       let resolvedPath = filePath;
       let wasTranslated = false;
       const translation = translateContainerPath(filePath);
@@ -1827,17 +1226,14 @@ function createMcpServer(): McpServer {
         return { content: [{ type: "text", text: `Error: File exceeds maximum size of ${Math.round(MAX_ATTACHMENT_SIZE / 1024 / 1024)}MB (${formatBytes(stat.size)})` }] };
       }
 
-      // Determine cover filename from the source file extension
       const ext = path.extname(resolvedPath).toLowerCase().replace(".", "");
       const validExts = ["png", "jpg", "jpeg", "webp"];
       const finalExt = validExts.includes(ext) ? ext : "jpg";
       const coverFilename = `cover.${finalExt}`;
       const mimeType = detectMimeType(coverFilename);
 
-      // Delete any existing cover attachments
       const deletedCount = deleteExistingCovers(item.id);
 
-      // Copy the new cover image
       const storagePath = path.join("attachments", item.id, coverFilename);
       const fullPath = path.join(STORE_DIR, storagePath);
       fs.mkdirSync(path.dirname(fullPath), { recursive: true });
@@ -1872,8 +1268,9 @@ function createMcpServer(): McpServer {
     async (args) => {
       const item = resolveItem(args.item_id);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
-      if (!COVER_SPACE_TYPES.includes(item.space_type)) {
-        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} has space_type="${item.space_type}". Cover images are only supported on: ${COVER_SPACE_TYPES.join(", ")}.` }] };
+      const coverTypes = getCoverSpaceTypes();
+      if (!coverTypes.includes(item.space_type)) {
+        return { content: [{ type: "text", text: `Error: Item ${getWorkItemKey(item)} has space_type="${item.space_type}". Cover images are only supported on: ${coverTypes.join(", ")}.` }] };
       }
 
       const deletedCount = deleteExistingCovers(item.id);

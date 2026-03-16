@@ -10,3 +10,4 @@ logs/
 *.log
 .DS_Store
 .tracker_lock
+src/ui/index.html

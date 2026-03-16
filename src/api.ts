@@ -104,109 +104,25 @@ import {
   isSafeToRestart,
 } from "./orchestrator.js";
 import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL, PORT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL } from "./config.js";
+import { getSpacePlugin, getCoverSpaceTypes } from "./spaces/index.js";
+import { sanitizeScheduledSpaceData } from "./spaces/scheduled.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Helpers ──
 
 /**
- * Sanitize space_data JSON for scheduled tasks.
- * Coerces todo/ignore array items to plain strings to prevent "[object Object]".
+ * Sanitize space_data using the appropriate space plugin's sanitizer.
+ * Falls back to the scheduled sanitizer for backward compatibility
+ * (it auto-detects scheduled data by structure, not just by space_type).
  */
-function sanitizeScheduledSpaceData(spaceDataStr: string, spaceType?: string | null): string {
-  try {
-    const parsed = JSON.parse(spaceDataStr);
-    const isScheduled = spaceType === "scheduled" ||
-      (parsed.schedule && typeof parsed.schedule === "object") ||
-      Array.isArray(parsed.todo) || Array.isArray(parsed.ignore);
-    if (!isScheduled) return spaceDataStr;
-
-    const coerceToStrings = (arr: unknown[]): string[] => arr.map((item: unknown) => {
-      if (typeof item === "string") return item;
-      if (item && typeof item === "object") {
-        const obj = item as Record<string, unknown>;
-        return String(obj.text || obj.title || obj.name || obj.content || obj.description || obj.value || JSON.stringify(item));
-      }
-      return String(item);
-    });
-
-    if (Array.isArray(parsed.todo)) parsed.todo = coerceToStrings(parsed.todo);
-    if (Array.isArray(parsed.ignore)) parsed.ignore = coerceToStrings(parsed.ignore);
-    return JSON.stringify(parsed);
-  } catch {
-    return spaceDataStr;
+function sanitizeSpaceData(raw: string, spaceType?: string | null): string {
+  if (spaceType) {
+    const plugin = getSpacePlugin(spaceType);
+    if (plugin?.sanitizeSpaceData) return plugin.sanitizeSpaceData(raw);
   }
-}
-
-/**
- * Parse space_data from a scheduled task work item for API operations.
- * Returns a structured object with todo/ignore arrays, or null on parse failure.
- */
-function parseScheduledSpaceDataForApi(item: { space_type: string; space_data: string | null }): {
-  schedule: Record<string, unknown>;
-  status: Record<string, unknown>;
-  todo: string[];
-  ignore: string[];
-} | null {
-  if (!item.space_data) {
-    return {
-      schedule: { frequency: "daily", time: "09:00", days_of_week: null, timezone: "Australia/Perth", cron_override: null },
-      status: { next_run: null, last_run: null, last_status: null, last_duration_ms: null, run_count: 0 },
-      todo: [],
-      ignore: [],
-    };
-  }
-  try {
-    const parsed = JSON.parse(item.space_data);
-    return {
-      schedule: parsed.schedule || {},
-      status: parsed.status || {},
-      todo: Array.isArray(parsed.todo) ? parsed.todo.map(String) : [],
-      ignore: Array.isArray(parsed.ignore) ? parsed.ignore.map(String) : [],
-    };
-  } catch {
-    return null;
-  }
-}
-
-/** Engagement space_data shape for API parsing. */
-interface EngagementApiData {
-  contractor: { company: string; contact: string; phone: string; mobile: string; email: string; address: string };
-  quote: { reference: string; date: string; expiry: string; status: string; total: number; currency: string; includes_gst: boolean; line_items: { desc: string; amount: number | null }[] };
-  payment: { status: string; deposits: { date: string; amount: number; method: string }[]; invoices: { ref: string; date: string; amount: number }[] };
-  milestones: { label: string; date: string | null; status: string }[];
-  gmail_query: string;
-  calendar_tag: string;
-  comms_log: { direction: string; date: string; subject: string; snippet: string }[];
-}
-
-function parseEngagementSpaceDataForApi(item: { space_type: string; space_data: string | null }): EngagementApiData | null {
-  const defaults: EngagementApiData = {
-    contractor: { company: "", contact: "", phone: "", mobile: "", email: "", address: "" },
-    quote: { reference: "", date: "", expiry: "", status: "pending", total: 0, currency: "AUD", includes_gst: true, line_items: [] },
-    payment: { status: "not_started", deposits: [], invoices: [] },
-    milestones: [],
-    gmail_query: "",
-    calendar_tag: "",
-    comms_log: [],
-  };
-
-  if (!item.space_data) return defaults;
-
-  try {
-    const parsed = JSON.parse(item.space_data);
-    return {
-      contractor: { ...defaults.contractor, ...(parsed.contractor || {}) },
-      quote: { ...defaults.quote, ...(parsed.quote || {}), line_items: (parsed.quote && parsed.quote.line_items) || [] },
-      payment: { ...defaults.payment, ...(parsed.payment || {}), deposits: (parsed.payment && parsed.payment.deposits) || [], invoices: (parsed.payment && parsed.payment.invoices) || [] },
-      milestones: parsed.milestones || [],
-      gmail_query: parsed.gmail_query || "",
-      calendar_tag: parsed.calendar_tag || "",
-      comms_log: parsed.comms_log || [],
-    };
-  } catch {
-    return null;
-  }
+  // Fall back to scheduled sanitizer which auto-detects by structure
+  return sanitizeScheduledSpaceData(raw, spaceType);
 }
 
 function json(res: http.ServerResponse, data: unknown, status = 200): void {
@@ -660,7 +576,7 @@ async function handleApiRequest(
                 : undefined,
             space_type: body.space_type ? String(body.space_type) : undefined,
             space_data: body.space_data !== undefined
-              ? sanitizeScheduledSpaceData(
+              ? sanitizeSpaceData(
                   typeof body.space_data === "string" ? body.space_data : JSON.stringify(body.space_data),
                   body.space_type ? String(body.space_type) : undefined,
                 )
@@ -1187,285 +1103,37 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
         return error(res, "Unsupported Content-Type. Use multipart/form-data or application/json");
       }
 
-      // ── Scheduled Task List Management ──
-
-      // POST /items/:id/scheduled/todo — add TODO items to a scheduled task
-      if (parts.length === 4 && parts[2] === "scheduled" && parts[3] === "todo" && method === "POST") {
-        const item = getWorkItem(itemId);
-        if (!item) return error(res, "Work item not found", 404);
-        if (item.space_type !== "scheduled") {
-          return error(res, `Item is not a scheduled task (space_type="${item.space_type}")`, 400);
+      // ── Space Plugin Route Dispatcher ──
+      // Generic dispatcher replaces ~400 lines of hardcoded scheduled/engagement routes.
+      // Each space plugin defines its own routes in its apiRoutes array.
+      if (parts.length >= 3) {
+        const spaceName = parts[2];
+        const plugin = getSpacePlugin(spaceName);
+        if (plugin?.apiRoutes) {
+          const subPath = parts.slice(3).join("/");
+          const route = plugin.apiRoutes.find(r => r.path === subPath && r.method === method);
+          if (route) {
+            const item = getWorkItem(itemId);
+            if (!item) return error(res, "Work item not found", 404);
+            if (item.space_type !== plugin.name) {
+              return error(res, `Item is not a ${plugin.label} (space_type="${item.space_type}")`, 400);
+            }
+            return route.handler(req, res, item);
+          }
         }
-
-        const body = await parseBody(req);
-        if (!body.items || !Array.isArray(body.items)) return error(res, "items (array of strings) is required");
-
-        const spaceData = parseScheduledSpaceDataForApi(item);
-        if (!spaceData) return error(res, "Could not parse scheduled task data", 500);
-
-        const newItems = (body.items as unknown[]).map((i) => String(i));
-        spaceData.todo.push(...newItems);
-
-        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
-        if (!updated) return error(res, "Failed to update work item", 500);
-        return json(res, { todo: spaceData.todo, added: newItems.length, total: spaceData.todo.length });
-      }
-
-      // DELETE /items/:id/scheduled/todo — remove TODO items by indices
-      if (parts.length === 4 && parts[2] === "scheduled" && parts[3] === "todo" && method === "DELETE") {
-        const item = getWorkItem(itemId);
-        if (!item) return error(res, "Work item not found", 404);
-        if (item.space_type !== "scheduled") {
-          return error(res, `Item is not a scheduled task (space_type="${item.space_type}")`, 400);
-        }
-
-        const body = await parseBody(req);
-        if (!body.indices || !Array.isArray(body.indices)) return error(res, "indices (array of numbers) is required");
-
-        const spaceData = parseScheduledSpaceDataForApi(item);
-        if (!spaceData) return error(res, "Could not parse scheduled task data", 500);
-
-        const indices = (body.indices as unknown[]).map(Number);
-        const invalidIndices = indices.filter((i) => i < 0 || i >= spaceData.todo.length);
-        if (invalidIndices.length > 0) {
-          return error(res, `Invalid indices: ${invalidIndices.join(", ")}. TODO list has ${spaceData.todo.length} items.`, 400);
-        }
-
-        const sortedIndices = [...indices].sort((a, b) => b - a);
-        const removed: string[] = [];
-        for (const idx of sortedIndices) {
-          removed.push(spaceData.todo[idx]);
-          spaceData.todo.splice(idx, 1);
-        }
-
-        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
-        if (!updated) return error(res, "Failed to update work item", 500);
-        return json(res, { todo: spaceData.todo, removed: removed.length, total: spaceData.todo.length });
-      }
-
-      // POST /items/:id/scheduled/ignore — add IGNORE rules to a scheduled task
-      if (parts.length === 4 && parts[2] === "scheduled" && parts[3] === "ignore" && method === "POST") {
-        const item = getWorkItem(itemId);
-        if (!item) return error(res, "Work item not found", 404);
-        if (item.space_type !== "scheduled") {
-          return error(res, `Item is not a scheduled task (space_type="${item.space_type}")`, 400);
-        }
-
-        const body = await parseBody(req);
-        if (!body.rules || !Array.isArray(body.rules)) return error(res, "rules (array of strings) is required");
-
-        const spaceData = parseScheduledSpaceDataForApi(item);
-        if (!spaceData) return error(res, "Could not parse scheduled task data", 500);
-
-        const newRules = (body.rules as unknown[]).map((r) => String(r));
-        spaceData.ignore.push(...newRules);
-
-        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
-        if (!updated) return error(res, "Failed to update work item", 500);
-        return json(res, { ignore: spaceData.ignore, added: newRules.length, total: spaceData.ignore.length });
-      }
-
-      // DELETE /items/:id/scheduled/ignore — remove IGNORE rules by indices
-      if (parts.length === 4 && parts[2] === "scheduled" && parts[3] === "ignore" && method === "DELETE") {
-        const item = getWorkItem(itemId);
-        if (!item) return error(res, "Work item not found", 404);
-        if (item.space_type !== "scheduled") {
-          return error(res, `Item is not a scheduled task (space_type="${item.space_type}")`, 400);
-        }
-
-        const body = await parseBody(req);
-        if (!body.indices || !Array.isArray(body.indices)) return error(res, "indices (array of numbers) is required");
-
-        const spaceData = parseScheduledSpaceDataForApi(item);
-        if (!spaceData) return error(res, "Could not parse scheduled task data", 500);
-
-        const indices = (body.indices as unknown[]).map(Number);
-        const invalidIndices = indices.filter((i) => i < 0 || i >= spaceData.ignore.length);
-        if (invalidIndices.length > 0) {
-          return error(res, `Invalid indices: ${invalidIndices.join(", ")}. IGNORE list has ${spaceData.ignore.length} rules.`, 400);
-        }
-
-        const sortedIndices = [...indices].sort((a, b) => b - a);
-        const removed: string[] = [];
-        for (const idx of sortedIndices) {
-          removed.push(spaceData.ignore[idx]);
-          spaceData.ignore.splice(idx, 1);
-        }
-
-        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
-        if (!updated) return error(res, "Failed to update work item", 500);
-        return json(res, { ignore: spaceData.ignore, removed: removed.length, total: spaceData.ignore.length });
-      }
-
-      // ── Engagement Space Management ──
-
-      // PATCH /items/:id/engagement/contact — update contact details on an engagement
-      if (parts.length === 4 && parts[2] === "engagement" && parts[3] === "contact" && method === "PATCH") {
-        const item = getWorkItem(itemId);
-        if (!item) return error(res, "Work item not found", 404);
-        if (item.space_type !== "engagement") {
-          return error(res, `Item is not an engagement (space_type="${item.space_type}")`, 400);
-        }
-
-        const body = await parseBody(req);
-        const spaceData = parseEngagementSpaceDataForApi(item);
-        if (!spaceData) return error(res, "Could not parse engagement data", 500);
-
-        if (body.company !== undefined) spaceData.contractor.company = String(body.company);
-        if (body.contact !== undefined) spaceData.contractor.contact = String(body.contact);
-        if (body.phone !== undefined) spaceData.contractor.phone = String(body.phone);
-        if (body.mobile !== undefined) spaceData.contractor.mobile = String(body.mobile);
-        if (body.email !== undefined) spaceData.contractor.email = String(body.email);
-        if (body.address !== undefined) spaceData.contractor.address = String(body.address);
-
-        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
-        if (!updated) return error(res, "Failed to update work item", 500);
-        return json(res, { contractor: spaceData.contractor });
-      }
-
-      // PATCH /items/:id/engagement/quote — update quote/financial details on an engagement
-      if (parts.length === 4 && parts[2] === "engagement" && parts[3] === "quote" && method === "PATCH") {
-        const item = getWorkItem(itemId);
-        if (!item) return error(res, "Work item not found", 404);
-        if (item.space_type !== "engagement") {
-          return error(res, `Item is not an engagement (space_type="${item.space_type}")`, 400);
-        }
-
-        const body = await parseBody(req);
-        const spaceData = parseEngagementSpaceDataForApi(item);
-        if (!spaceData) return error(res, "Could not parse engagement data", 500);
-
-        if (body.reference !== undefined) spaceData.quote.reference = String(body.reference);
-        if (body.date !== undefined) spaceData.quote.date = String(body.date);
-        if (body.expiry !== undefined) spaceData.quote.expiry = String(body.expiry);
-        if (body.status !== undefined) spaceData.quote.status = String(body.status);
-        if (body.total !== undefined) spaceData.quote.total = Number(body.total) || 0;
-        if (body.currency !== undefined) spaceData.quote.currency = String(body.currency);
-        if (body.includes_gst !== undefined) spaceData.quote.includes_gst = Boolean(body.includes_gst);
-        if (body.line_items !== undefined && Array.isArray(body.line_items)) {
-          spaceData.quote.line_items = (body.line_items as Array<{ desc?: string; amount?: number | null }>).map(li => ({
-            desc: String(li.desc || ""),
-            amount: li.amount != null ? Number(li.amount) : null,
-          }));
-        }
-        if (body.payment_status !== undefined) spaceData.payment.status = String(body.payment_status);
-
-        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
-        if (!updated) return error(res, "Failed to update work item", 500);
-        return json(res, { quote: spaceData.quote, payment: spaceData.payment });
-      }
-
-      // POST /items/:id/engagement/milestones — add milestones to an engagement
-      if (parts.length === 4 && parts[2] === "engagement" && parts[3] === "milestones" && method === "POST") {
-        const item = getWorkItem(itemId);
-        if (!item) return error(res, "Work item not found", 404);
-        if (item.space_type !== "engagement") {
-          return error(res, `Item is not an engagement (space_type="${item.space_type}")`, 400);
-        }
-
-        const body = await parseBody(req);
-        if (!body.milestones || !Array.isArray(body.milestones)) return error(res, "milestones (array of objects) is required");
-
-        const spaceData = parseEngagementSpaceDataForApi(item);
-        if (!spaceData) return error(res, "Could not parse engagement data", 500);
-
-        const newMs = (body.milestones as Array<{ label?: string; date?: string | null; status?: string }>).map(ms => ({
-          label: String(ms.label || ""),
-          date: ms.date ?? null,
-          status: ms.status || "upcoming",
-        }));
-        spaceData.milestones.push(...newMs);
-
-        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
-        if (!updated) return error(res, "Failed to update work item", 500);
-        return json(res, { milestones: spaceData.milestones, added: newMs.length, total: spaceData.milestones.length });
-      }
-
-      // DELETE /items/:id/engagement/milestones — remove milestones by indices
-      if (parts.length === 4 && parts[2] === "engagement" && parts[3] === "milestones" && method === "DELETE") {
-        const item = getWorkItem(itemId);
-        if (!item) return error(res, "Work item not found", 404);
-        if (item.space_type !== "engagement") {
-          return error(res, `Item is not an engagement (space_type="${item.space_type}")`, 400);
-        }
-
-        const body = await parseBody(req);
-        if (!body.indices || !Array.isArray(body.indices)) return error(res, "indices (array of numbers) is required");
-
-        const spaceData = parseEngagementSpaceDataForApi(item);
-        if (!spaceData) return error(res, "Could not parse engagement data", 500);
-
-        const indices = (body.indices as unknown[]).map(Number);
-        const invalidIndices = indices.filter(i => i < 0 || i >= spaceData.milestones.length);
-        if (invalidIndices.length > 0) {
-          return error(res, `Invalid indices: ${invalidIndices.join(", ")}. Milestones list has ${spaceData.milestones.length} items.`, 400);
-        }
-
-        const sortedIndices = [...indices].sort((a, b) => b - a);
-        for (const idx of sortedIndices) {
-          spaceData.milestones.splice(idx, 1);
-        }
-
-        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
-        if (!updated) return error(res, "Failed to update work item", 500);
-        return json(res, { milestones: spaceData.milestones, total: spaceData.milestones.length });
-      }
-
-      // POST /items/:id/engagement/comms — add communication log entries
-      if (parts.length === 4 && parts[2] === "engagement" && parts[3] === "comms" && method === "POST") {
-        const item = getWorkItem(itemId);
-        if (!item) return error(res, "Work item not found", 404);
-        if (item.space_type !== "engagement") {
-          return error(res, `Item is not an engagement (space_type="${item.space_type}")`, 400);
-        }
-
-        const body = await parseBody(req);
-        if (!body.entries || !Array.isArray(body.entries)) return error(res, "entries (array of objects) is required");
-
-        const spaceData = parseEngagementSpaceDataForApi(item);
-        if (!spaceData) return error(res, "Could not parse engagement data", 500);
-
-        const newEntries = (body.entries as Array<{ direction?: string; date?: string; subject?: string; snippet?: string }>).map(e => ({
-          direction: e.direction || "inbound",
-          date: e.date || "",
-          subject: e.subject || "",
-          snippet: e.snippet || "",
-        }));
-        spaceData.comms_log.push(...newEntries);
-
-        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
-        if (!updated) return error(res, "Failed to update work item", 500);
-        return json(res, { comms_log: spaceData.comms_log, added: newEntries.length, total: spaceData.comms_log.length });
-      }
-
-      // PATCH /items/:id/engagement/settings — update gmail_query and calendar_tag
-      if (parts.length === 4 && parts[2] === "engagement" && parts[3] === "settings" && method === "PATCH") {
-        const item = getWorkItem(itemId);
-        if (!item) return error(res, "Work item not found", 404);
-        if (item.space_type !== "engagement") {
-          return error(res, `Item is not an engagement (space_type="${item.space_type}")`, 400);
-        }
-
-        const body = await parseBody(req);
-        const spaceData = parseEngagementSpaceDataForApi(item);
-        if (!spaceData) return error(res, "Could not parse engagement data", 500);
-
-        if (body.gmail_query !== undefined) spaceData.gmail_query = String(body.gmail_query);
-        if (body.calendar_tag !== undefined) spaceData.calendar_tag = String(body.calendar_tag);
-
-        const updated = updateWorkItem(itemId, { space_data: JSON.stringify(spaceData) });
-        if (!updated) return error(res, "Failed to update work item", 500);
-        return json(res, { gmail_query: spaceData.gmail_query, calendar_tag: spaceData.calendar_tag });
       }
 
       // ── Cover Image Management ──
+      // Cover images use /items/:id/cover (not /items/:id/{spaceName}/cover),
+      // so they stay in core api.ts. The guard uses getCoverSpaceTypes() from
+      // the registry instead of a hardcoded list.
 
-      // PUT /items/:id/cover — set/replace cover image (song and engagement spaces)
+      // PUT /items/:id/cover — set/replace cover image
       if (parts.length === 3 && parts[2] === "cover" && method === "PUT") {
         const item = getWorkItem(itemId);
         if (!item) return error(res, "Work item not found", 404);
 
-        const coverSpaceTypes = ["song", "engagement"];
+        const coverSpaceTypes = getCoverSpaceTypes();
         if (!coverSpaceTypes.includes(item.space_type)) {
           return error(res, `Item has space_type="${item.space_type}". Cover images are only supported on: ${coverSpaceTypes.join(", ")}.`, 400);
         }
@@ -1546,14 +1214,14 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
         return json(res, attachment, 201);
       }
 
-      // DELETE /items/:id/cover — remove cover image (song and engagement spaces)
+      // DELETE /items/:id/cover — remove cover image
       if (parts.length === 3 && parts[2] === "cover" && method === "DELETE") {
         const item = getWorkItem(itemId);
         if (!item) return error(res, "Work item not found", 404);
 
-        const coverSpaceTypes = ["song", "engagement"];
-        if (!coverSpaceTypes.includes(item.space_type)) {
-          return error(res, `Item has space_type="${item.space_type}". Cover images are only supported on: ${coverSpaceTypes.join(", ")}.`, 400);
+        const coverTypes = getCoverSpaceTypes();
+        if (!coverTypes.includes(item.space_type)) {
+          return error(res, `Item has space_type="${item.space_type}". Cover images are only supported on: ${coverTypes.join(", ")}.`, 400);
         }
 
         const existing = listAttachments(itemId);
@@ -1698,7 +1366,7 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
                     const raw = typeof body.space_data === "string" ? body.space_data : JSON.stringify(body.space_data);
                     const existingItem = getWorkItem(itemId);
                     const effectiveSpaceType = body.space_type ? String(body.space_type) : existingItem?.space_type;
-                    return sanitizeScheduledSpaceData(raw, effectiveSpaceType);
+                    return sanitizeSpaceData(raw, effectiveSpaceType);
                   })()
                 : undefined,
             actor: body.actor ? String(body.actor) : undefined,

@@ -5,9 +5,10 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/build-ui.js",
+    "build:ui": "node scripts/build-ui.js",
     "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
+    "dev": "node scripts/build-ui.js && tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
