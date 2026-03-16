@@ -3075,10 +3075,13 @@
         }
         .detail-header .detail-id {
           flex-shrink: 0;
-          flex: 1;
-          min-width: 0;
+        }
+        .detail-header .detail-space-toggle {
+          margin-left: auto;
+          flex-shrink: 0;
         }
         .detail-header .detail-actions {
+          width: 100%;
           gap: 6px;
         }
         .detail-body {
@@ -4452,6 +4455,14 @@
       html.is-ipad .detail-header {
         padding: 12px 14px;
         gap: 8px;
+        flex-wrap: wrap;
+      }
+      html.is-ipad .detail-header .detail-space-toggle {
+        margin-left: auto;
+        flex-shrink: 0;
+      }
+      html.is-ipad .detail-header .detail-actions {
+        width: 100%;
       }
       html.is-ipad .detail-body { padding: 14px; }
       html.is-ipad .detail-row {
@@ -4467,6 +4478,19 @@
         min-height: 32px;
         display: inline-flex;
         align-items: center;
+      }
+
+      /* ── iPad Space Header ── */
+      html.is-ipad .space-header {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      html.is-ipad .space-header .space-view-toggle-btn {
+        margin-left: auto;
+        flex-shrink: 0;
+      }
+      html.is-ipad .space-header .space-header-actions {
+        width: 100%;
       }
 
       /* ── iPad Bottom Navigation Bar ── */
@@ -6144,11 +6168,12 @@
         vertical-align: middle;
       }
 
-      /* Space view button in detail header */
+      /* Space view button in detail header — sits on line 1 next to the ID */
       #detailSpaceViewBtn {
         display: none;
         align-items: center;
         gap: 4px;
+        margin-left: auto;
       }
       #detailSpaceViewBtn .space-type-icon {
         display: inline-flex;
@@ -6251,6 +6276,7 @@
         display: inline-flex;
         align-items: center;
         gap: 4px;
+        margin-left: auto;
       }
       .space-close-btn {
         background: none;
@@ -8013,10 +8039,13 @@
         }
         .space-header .space-key {
           flex-shrink: 0;
-          flex: 1;
-          min-width: 0;
+        }
+        .space-header .space-view-toggle-btn {
+          margin-left: auto;
+          flex-shrink: 0;
         }
         .space-header .space-header-actions {
+          width: 100%;
           gap: 6px;
         }
       }
@@ -8557,8 +8586,8 @@
           &times;
         </button>
         <span class="detail-id" id="detailId"></span>
+        <button class="btn btn-ghost btn-sm detail-space-toggle" id="detailSpaceViewBtn" title="Switch to space view"></button>
         <div class="detail-actions">
-          <button class="btn btn-ghost btn-sm" id="detailSpaceViewBtn" title="Switch to space view"></button>
           <button class="btn btn-ghost btn-sm btn-icon" id="detailShare" title="Share link">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
@@ -8769,8 +8798,8 @@
         <div class="space-header" id="spaceHeader">
           <button class="space-close-btn" id="spaceCloseBtn" title="Close">&times;</button>
           <span class="space-key" id="spaceKey"></span>
+          <button class="space-btn space-view-toggle-btn" id="spaceViewToggleBtn" title="Switch to standard tracker view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 6h6M9 10h6M9 14h4"/></svg> Standard View</button>
           <div class="space-header-actions">
-            <button class="space-btn space-view-toggle-btn" id="spaceViewToggleBtn" title="Switch to standard tracker view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 6h6M9 10h6M9 14h4"/></svg> Standard View</button>
             <button class="space-btn space-share-btn" id="spaceShareBtn" title="Copy link">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
