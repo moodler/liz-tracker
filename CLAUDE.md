@@ -16,7 +16,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | File | Description |
 | --- | --- |
 | `src/index.ts` | Entry point — init DB, start server, optionally start orchestrator |
-| `src/config.ts` | Config from env vars / `.env` file: PORT, STORE_DIR, TRACKER_PUBLIC_URL, TRACKER_SHORT_URL, OPENCODE_SERVER_URL, OPENCODE_PUBLIC_URL, ORCHESTRATOR_ENABLED, ORCHESTRATOR_INTERVAL, OPENCODE_MAX_CONCURRENT, OPENCODE_MAX_PER_PROJECT |
+| `src/config.ts` | Config from env vars / `.env` file: PORT, STORE_DIR, TRACKER_PUBLIC_URL, TRACKER_SHORT_URL, OPENCODE_SERVER_URL, OPENCODE_PUBLIC_URL, ORCHESTRATOR_ENABLED, ORCHESTRATOR_INTERVAL, OPENCODE_MAX_CONCURRENT, OPENCODE_MAX_PER_PROJECT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL |
 | `src/logger.ts` | Pino logger with pino-pretty |
 | `src/db.ts` | SQLite database layer — schema, CRUD, events, migrations |
 | `src/api.ts` | HTTP server — REST API + static file serving + MCP routing |
@@ -94,6 +94,8 @@ All configuration is via `.env` file or environment variables. See `.env.example
 | `CIRCUIT_BREAKER_THRESHOLD` | `2` | Consecutive failures before auto-pause |
 | `CIRCUIT_BREAKER_WINDOW` | `3600000` | Window (ms) for counting failures (1 hour) |
 | `ITEM_DISPATCH_FAILURE_LIMIT` | `3` | Per-item failures before auto-shelving to needs_input |
+| `ANTHROPIC_API_KEY` | (none) | Anthropic API key — enables AI categorization button in the dashboard |
+| `AI_CATEGORIZE_MODEL` | `claude-sonnet-4-20250514` | Model for AI categorization (fast structured extraction) |
 
 ### How it works
 
@@ -249,6 +251,7 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `POST` | `/api/v1/orchestrator/restart` | Request a safe restart (wait/force options) |
 | `DELETE` | `/api/v1/orchestrator/restart` | Cancel a pending restart |
 | `GET` | `/api/v1/orchestrator/safe-to-restart` | Quick check if restart is safe |
+| `POST` | `/api/v1/items/ai-categorize` | AI-powered field extraction from description text (requires `ANTHROPIC_API_KEY`) |
 
 ### MCP Tools
 

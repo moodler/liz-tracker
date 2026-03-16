@@ -22,6 +22,7 @@
  *   Search:    GET /search?q=...&project_id=...
  *   Dispatch:  POST /items/:id/dispatch
  *   Session:   GET /items/:id/session, POST /items/:id/session/abort
+ *   AI:        POST /items/ai-categorize
  *   Orchestrator: GET /orchestrator/status, POST /orchestrator/pause, POST /orchestrator/resume
  */
 
@@ -102,7 +103,7 @@ import {
   cancelRestart,
   isSafeToRestart,
 } from "./orchestrator.js";
-import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL, PORT } from "./config.js";
+import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL, PORT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL } from "./config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -723,7 +724,7 @@ async function handleApiRequest(
     // ── Work Items (direct access) ──
     if (parts[0] === "items") {
       const itemId =
-        parts[1] === "clear-stale-locks" || parts[1] === "recent" ? parts[1] : resolveItemId(parts[1]);
+        parts[1] === "clear-stale-locks" || parts[1] === "recent" || parts[1] === "ai-categorize" ? parts[1] : resolveItemId(parts[1]);
 
       // POST /items/clear-stale-locks (note: before :id routes)
       if (
@@ -767,6 +768,107 @@ async function handleApiRequest(
           return { ...item, key, url: buildItemUrl(key) };
         });
         return json(res, enriched);
+      }
+
+      // POST /items/ai-categorize — AI-powered field extraction from description text
+      if (
+        parts.length === 2 &&
+        parts[1] === "ai-categorize" &&
+        method === "POST"
+      ) {
+        if (!ANTHROPIC_API_KEY) {
+          return error(res, "AI categorization not configured (ANTHROPIC_API_KEY not set)", 501);
+        }
+        const body = await parseBody(req);
+        const description = body.description ? String(body.description) : "";
+        if (!description.trim()) {
+          return error(res, "description is required");
+        }
+        // Optional: pass existing field values so the AI can see what's already set
+        const existingTitle = body.existing_title ? String(body.existing_title) : "";
+        const existingPriority = body.existing_priority ? String(body.existing_priority) : "none";
+        const existingAssignee = body.existing_assignee ? String(body.existing_assignee) : "";
+        const existingDateDue = body.existing_date_due ? String(body.existing_date_due) : "";
+
+        const systemPrompt = `You are an assistant that categorizes project tracker issues. Given a freeform description (which may be rough notes, voice transcription, or a ramble), extract structured fields for a project tracker work item.
+
+Return ONLY valid JSON with these fields:
+- "title": A clear, concise title (max 80 chars) that captures the essence of the issue
+- "description": A cleaned-up, well-structured description in markdown. Keep the original intent but make it clear and actionable. If the original is already good, keep it mostly as-is.
+- "priority": One of "none", "low", "medium", "high", "urgent". Only set higher priorities if the text clearly indicates urgency or importance.
+- "assignee": A person's name if one is mentioned as responsible. Empty string if nobody is mentioned.
+- "date_due": A due date in YYYY-MM-DD format if one is mentioned or implied. Empty string if none.
+- "requires_code": true if this appears to be a code/development task, false if it's a discussion/planning item.
+
+Important rules:
+- Keep the description faithful to the original intent — don't add information that wasn't there
+- For priority, only escalate if the text explicitly suggests urgency (words like "urgent", "critical", "ASAP", "important", "blocking")
+- For assignee, only extract if a specific person is clearly named as being responsible
+- For date_due, only extract if a specific date or deadline is clearly mentioned
+- The title should be specific and descriptive, not generic`;
+
+        const userMessage = `Here is the freeform description to categorize:
+
+---
+${description}
+---
+
+${existingTitle ? `Current title (may be empty or auto-generated): "${existingTitle}"` : "No title set yet."}
+${existingPriority !== "none" ? `Current priority: ${existingPriority}` : ""}
+${existingAssignee ? `Current assignee: ${existingAssignee}` : ""}
+${existingDateDue ? `Current due date: ${existingDateDue}` : ""}
+
+Extract the structured fields from this description. Return ONLY valid JSON.`;
+
+        try {
+          const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": ANTHROPIC_API_KEY,
+              "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+              model: AI_CATEGORIZE_MODEL,
+              max_tokens: 1024,
+              system: systemPrompt,
+              messages: [{ role: "user", content: userMessage }],
+            }),
+          });
+
+          if (!anthropicRes.ok) {
+            const errBody = await anthropicRes.text();
+            logger.error({ status: anthropicRes.status, body: errBody }, "Anthropic API error");
+            return error(res, `AI service error: ${anthropicRes.status}`, 502);
+          }
+
+          const anthropicData = await anthropicRes.json() as {
+            content: Array<{ type: string; text: string }>;
+          };
+          const textContent = anthropicData.content?.find((c: { type: string }) => c.type === "text");
+          if (!textContent || !("text" in textContent)) {
+            return error(res, "AI returned no text content", 502);
+          }
+
+          // Parse JSON from the response (handle markdown code fences)
+          let jsonStr = textContent.text.trim();
+          if (jsonStr.startsWith("```")) {
+            jsonStr = jsonStr.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+          }
+          const result = JSON.parse(jsonStr);
+
+          return json(res, {
+            title: result.title || "",
+            description: result.description || description,
+            priority: VALID_PRIORITIES.includes(result.priority) ? result.priority : "none",
+            assignee: result.assignee || "",
+            date_due: result.date_due || "",
+            requires_code: result.requires_code !== undefined ? !!result.requires_code : true,
+          });
+        } catch (e) {
+          logger.error({ error: e }, "AI categorization failed");
+          return error(res, `AI categorization failed: ${(e as Error).message}`, 500);
+        }
       }
 
       // POST /items/:id/state

@@ -8159,6 +8159,29 @@
         }
       }
 
+      /* ── AI Categorize Button ── */
+      .ai-categorize-btn {
+        color: var(--text-muted);
+        transition: color 0.2s, background 0.2s;
+        border: 1px solid transparent;
+      }
+      .ai-categorize-btn:hover {
+        color: var(--highlight);
+        border-color: var(--highlight);
+        background: rgba(var(--highlight-rgb, 233, 69, 96), 0.1);
+      }
+      .ai-categorize-btn.loading {
+        pointer-events: none;
+        opacity: 0.7;
+      }
+      .ai-categorize-btn.loading svg {
+        animation: ai-spin 1s linear infinite;
+      }
+      @keyframes ai-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
     </style>
   </head>
   <body>
@@ -8808,13 +8831,25 @@
               "
             >
               <label style="margin: 0">Description</label>
-              <button
-                class="btn btn-ghost btn-sm"
-                id="descToggle"
-                style="font-size: 0.8rem; padding: 2px 8px"
-              >
-                Edit
-              </button>
+              <div style="display: flex; gap: 4px; align-items: center;">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm ai-categorize-btn"
+                  id="detailAiCategorize"
+                  title="AI: Extract title, priority, and fields from description"
+                  style="font-size: 0.8rem; padding: 2px 10px; display: flex; align-items: center; gap: 4px;"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg>
+                  AI
+                </button>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  id="descToggle"
+                  style="font-size: 0.8rem; padding: 2px 8px"
+                >
+                  Edit
+                </button>
+              </div>
             </div>
             <div
               id="descView"
@@ -8953,11 +8988,23 @@
             />
           </div>
           <div class="field">
-            <label>Description</label>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+              <label style="margin: 0">Description</label>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm ai-categorize-btn"
+                id="createAiCategorize"
+                title="AI: Extract title, priority, and fields from description"
+                style="font-size: 0.8rem; padding: 2px 10px; display: flex; align-items: center; gap: 4px;"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg>
+                AI
+              </button>
+            </div>
             <textarea
               id="createDescription"
               rows="3"
-              placeholder="Optional description..."
+              placeholder="Describe the issue in your own words — then press AI to extract title, priority, and other fields..."
             ></textarea>
           </div>
           <div style="display: flex; gap: 12px">
@@ -16835,6 +16882,98 @@
           }
         }
 
+        // ── AI Categorize ──
+        async function aiCategorize(descriptionEl, titleEl, priorityEl, assigneeEl, dateDueEl, botDispatchEl, requiresCodeEl, btn) {
+          const description = descriptionEl.value.trim();
+          if (!description) {
+            toast("Write a description first, then press AI to categorize", "error");
+            return;
+          }
+
+          // Show loading state
+          btn.classList.add("loading");
+          const origHTML = btn.innerHTML;
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg> ...';
+
+          try {
+            const result = await apiPost("/items/ai-categorize", {
+              description,
+              existing_title: titleEl ? titleEl.value : "",
+              existing_priority: priorityEl ? priorityEl.value : "none",
+              existing_assignee: assigneeEl ? assigneeEl.value : "",
+              existing_date_due: dateDueEl ? dateDueEl.value : "",
+            });
+
+            // Populate fields with AI suggestions
+            if (result.title && titleEl) {
+              titleEl.value = result.title;
+            }
+            if (result.description && descriptionEl) {
+              descriptionEl.value = result.description;
+            }
+            if (result.priority && priorityEl) {
+              priorityEl.value = result.priority;
+            }
+            if (result.assignee && assigneeEl) {
+              assigneeEl.value = result.assignee;
+            }
+            if (result.date_due && dateDueEl) {
+              dateDueEl.value = result.date_due;
+              // Show the clear button if we have a date
+              const clearBtn = dateDueEl.parentElement?.querySelector(".date-due-clear");
+              if (clearBtn) clearBtn.style.display = "";
+            }
+            if (botDispatchEl && result.requires_code !== undefined) {
+              botDispatchEl.checked = result.requires_code;
+            }
+            if (requiresCodeEl && result.requires_code !== undefined) {
+              requiresCodeEl.checked = !result.requires_code;
+            }
+
+            // Trigger dirty tracking
+            descriptionEl.dispatchEvent(new Event("input", { bubbles: true }));
+            if (titleEl) titleEl.dispatchEvent(new Event("input", { bubbles: true }));
+            if (priorityEl) priorityEl.dispatchEvent(new Event("change", { bubbles: true }));
+
+            toast("AI categorization applied");
+          } catch (e) {
+            toast("AI categorization failed: " + e.message, "error");
+          } finally {
+            btn.classList.remove("loading");
+            btn.innerHTML = origHTML;
+          }
+        }
+
+        // Wire up Create Modal AI button
+        $("#createAiCategorize").addEventListener("click", () => {
+          aiCategorize(
+            $("#createDescription"),
+            $("#createTitle"),
+            $("#createPriority"),
+            $("#createAssignee"),
+            $("#createDateDue"),
+            $("#createBotDispatch"),
+            $("#createRequiresCode"),
+            $("#createAiCategorize")
+          );
+        });
+
+        // Wire up Detail Panel AI button
+        $("#detailAiCategorize").addEventListener("click", () => {
+          // Switch to edit mode if in view mode
+          if (!descEditMode) showDescEdit();
+          aiCategorize(
+            $("#detailDescription"),
+            $("#detailTitle"),
+            $("#detailPriority"),
+            $("#detailAssignee"),
+            $("#detailDateDue"),
+            null,
+            null,
+            $("#detailAiCategorize")
+          );
+        });
+
         // ── Create Item Modal ──
         function openCreateModal(state) {
           $("#createState").value = state;
@@ -16876,7 +17015,7 @@
           initCreateBlockerPicker();
           createModalDirty = false;
           createModal.classList.add("open");
-          setTimeout(() => $("#createTitle").focus(), 100);
+          setTimeout(() => $("#createDescription").focus(), 100);
         }
 
         function updateCreateSpaceTypeSelector(projectId) {

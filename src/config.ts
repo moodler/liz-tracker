@@ -306,6 +306,24 @@ export const ITEM_DISPATCH_FAILURE_LIMIT = parseInt(
   10,
 );
 
+// ── AI Categorization ──
+
+/**
+ * Anthropic API key for AI-powered item categorization.
+ * When set, enables the "AI Categorize" button in the dashboard that
+ * extracts title, priority, assignee, due date, and improved description
+ * from freeform text using Claude Haiku.
+ * Set via ANTHROPIC_API_KEY env var or .env file.
+ */
+export const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
+
+/**
+ * Model to use for AI categorization. Should be fast and cheap.
+ * Default: claude-sonnet-4-20250514 (fast, good at structured extraction).
+ */
+export const AI_CATEGORIZE_MODEL =
+  process.env.AI_CATEGORIZE_MODEL || "claude-sonnet-4-20250514";
+
 // ── OpenCode deep link helpers ──
 
 /**
