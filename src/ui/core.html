@@ -13277,6 +13277,189 @@
           }
         });
 
+        // ── Inline Comments (CriticMarkup) — Shared ──
+
+        /** Show the floating comment toolbar when text is selected in a textarea. */
+        function showCommentToolbar(textarea) {
+          hideCommentToolbar();
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          if (start === end) return; // No selection
+          if (textarea.disabled) return;
+
+          let toolbar = document.getElementById("inlineCommentToolbar");
+          if (!toolbar) {
+            toolbar = document.createElement("div");
+            toolbar.id = "inlineCommentToolbar";
+            toolbar.className = "text-comment-toolbar";
+            toolbar.innerHTML = '<span class="text-comment-toolbar-icon">💬</span><span class="text-comment-toolbar-label">Comment</span>';
+            document.body.appendChild(toolbar);
+          }
+          // Rebind click to current textarea (toolbar is reused across spaces)
+          toolbar.onclick = () => {
+            hideCommentToolbar();
+            showCommentInput(textarea);
+          };
+
+          const pos = getTextareaCaretCoords(textarea);
+          toolbar.style.left = pos.x + "px";
+          toolbar.style.top = (pos.y - 36) + "px";
+          toolbar.style.display = "flex";
+        }
+
+        /** Hide the floating comment toolbar. */
+        function hideCommentToolbar() {
+          const toolbar = document.getElementById("inlineCommentToolbar");
+          if (toolbar) toolbar.style.display = "none";
+        }
+
+        /** Show the comment input popover for adding an inline comment. */
+        function showCommentInput(textarea) {
+          hideCommentToolbar();
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          if (textarea.disabled) return;
+
+          const selStart = start;
+          const selEnd = end;
+
+          let popover = document.getElementById("inlineCommentPopover");
+          if (!popover) {
+            popover = document.createElement("div");
+            popover.id = "inlineCommentPopover";
+            popover.className = "text-comment-input-popover";
+            popover.innerHTML = `
+              <textarea id="inlineCommentNoteInput" placeholder="Add your comment..." rows="2"></textarea>
+              <div class="text-comment-input-actions">
+                <button class="comment-cancel-btn" id="inlineCommentCancelBtn">Cancel</button>
+                <button class="comment-add-btn" id="inlineCommentAddBtn">Add Comment</button>
+              </div>
+            `;
+            document.body.appendChild(popover);
+          }
+
+          const pos = getTextareaCaretCoords(textarea);
+          popover.style.left = Math.max(10, Math.min(pos.x - 60, window.innerWidth - 380)) + "px";
+          popover.style.top = (pos.y - 100) + "px";
+          popover.style.display = "flex";
+
+          const noteInput = document.getElementById("inlineCommentNoteInput");
+          noteInput.value = "";
+          noteInput.focus();
+
+          // Replace buttons to remove old listeners
+          const addBtn = document.getElementById("inlineCommentAddBtn");
+          const cancelBtn = document.getElementById("inlineCommentCancelBtn");
+          const newAddBtn = addBtn.cloneNode(true);
+          const newCancelBtn = cancelBtn.cloneNode(true);
+          addBtn.replaceWith(newAddBtn);
+          cancelBtn.replaceWith(newCancelBtn);
+
+          const submit = () => {
+            const note = noteInput.value.trim();
+            if (!note) return;
+            insertCriticComment(textarea, selStart, selEnd, note);
+            popover.style.display = "none";
+          };
+
+          newAddBtn.addEventListener("click", submit);
+          newCancelBtn.addEventListener("click", () => { popover.style.display = "none"; });
+          noteInput.addEventListener("keydown", (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              popover.style.display = "none";
+              textarea.focus();
+            }
+          });
+        }
+
+        /** Insert a CriticMarkup comment into a textarea at the given selection range. */
+        function insertCriticComment(textarea, selStart, selEnd, note) {
+          const text = textarea.value;
+          const hasSelection = selStart !== selEnd;
+          let newText;
+          let cursorPos;
+
+          if (hasSelection) {
+            const selected = text.slice(selStart, selEnd);
+            const insertion = `{==${selected}==}{>> ${note} <<}`;
+            newText = text.slice(0, selStart) + insertion + text.slice(selEnd);
+            cursorPos = selStart + insertion.length;
+          } else {
+            const insertion = `{>> ${note} <<}`;
+            newText = text.slice(0, selStart) + insertion + text.slice(selStart);
+            cursorPos = selStart + insertion.length;
+          }
+
+          textarea.value = newText;
+          textarea.selectionStart = cursorPos;
+          textarea.selectionEnd = cursorPos;
+          textarea.focus();
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+
+        /** Get approximate screen coordinates for a textarea caret position (for positioning popovers). */
+        function getTextareaCaretCoords(textarea) {
+          const mirror = document.createElement("div");
+          const style = window.getComputedStyle(textarea);
+          for (const prop of ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing",
+            "wordSpacing", "textIndent", "whiteSpace", "wordWrap", "overflowWrap",
+            "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+            "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth"]) {
+            mirror.style[prop] = style[prop];
+          }
+          mirror.style.position = "absolute";
+          mirror.style.left = "-9999px";
+          mirror.style.top = "-9999px";
+          mirror.style.width = textarea.clientWidth + "px";
+          mirror.style.overflow = "hidden";
+          mirror.style.visibility = "hidden";
+
+          const textBefore = textarea.value.substring(0, textarea.selectionStart);
+          const textNode = document.createTextNode(textBefore);
+          mirror.appendChild(textNode);
+
+          const marker = document.createElement("span");
+          marker.textContent = "|";
+          mirror.appendChild(marker);
+
+          document.body.appendChild(mirror);
+          const mirrorRect = mirror.getBoundingClientRect();
+          const markerRect = marker.getBoundingClientRect();
+          document.body.removeChild(mirror);
+
+          const taRect = textarea.getBoundingClientRect();
+          const scrollTop = textarea.scrollTop;
+          const scrollLeft = textarea.scrollLeft;
+
+          return {
+            x: taRect.left + (markerRect.left - mirrorRect.left) - scrollLeft,
+            y: taRect.top + (markerRect.top - mirrorRect.top) - scrollTop,
+          };
+        }
+
+        /** Hide comment toolbar/popover when clicking outside (shared across spaces) */
+        document.addEventListener("mousedown", (e) => {
+          const toolbar = document.getElementById("inlineCommentToolbar");
+          const popover = document.getElementById("inlineCommentPopover");
+          if (toolbar && toolbar.style.display !== "none" && !toolbar.contains(e.target)) {
+            // Check if click is on any space textarea that supports inline comments
+            const textTa = document.getElementById("textEditorTextarea");
+            const songTa = document.getElementById("songLyricsTextarea");
+            const inTextarea = (textTa && textTa.contains(e.target)) || (songTa && songTa.contains(e.target));
+            if (!inTextarea) {
+              hideCommentToolbar();
+            }
+          }
+          if (popover && popover.style.display !== "none" && !popover.contains(e.target)) {
+            popover.style.display = "none";
+          }
+        });
+
         // __SPACE_PLUGINS__
 
         // ── Detail Panel ──

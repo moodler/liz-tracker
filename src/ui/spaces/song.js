@@ -16,6 +16,7 @@ function renderSpaceSong(item) {
           </div>
           <button class="space-btn text-revert-btn" id="songRevertBtn" title="Revert to this version" style="display:none;">Revert</button>
           <div class="toolbar-spacer"></div>
+          <span class="text-comment-count" id="songCommentCount" title="Inline comments"></span>
           <span class="copy-btn-wrap"><button class="space-btn" id="songCopyBtn" title="Copy lyrics to clipboard">Copy</button><span class="copy-popup" id="songCopyPopup">Copied!</span></span>
           <button class="space-btn" id="songPreviewToggle" title="Toggle preview">Preview</button>
           <span class="text-save-indicator" id="songSaveIndicator"></span>
@@ -88,6 +89,9 @@ function renderSpaceSong(item) {
   // Populate discussion thread
   renderSongDiscussion(item.comments || []);
 
+  // Update inline comment count
+  updateSongCommentCount(description);
+
   // Load attachments (for cover image and styles.md)
   loadSongAttachments();
 
@@ -114,15 +118,44 @@ function renderSpaceSong(item) {
   textarea.addEventListener("input", () => {
     saveIndicator.textContent = "Unsaved changes...";
     saveIndicator.className = "text-save-indicator";
+    updateSongCommentCount(textarea.value);
     if (spaceSaveTimer) clearTimeout(spaceSaveTimer);
     spaceSaveTimer = setTimeout(() => saveSongLyrics(), 2000);
   });
 
   // Cmd+S / Ctrl+S — manual save + version snapshot
+  // Cmd+Shift+M — add inline comment at selection
   textarea.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "s") {
       e.preventDefault();
       saveSongLyrics(true);
+    }
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "m" || e.key === "M")) {
+      e.preventDefault();
+      showCommentInput(textarea);
+    }
+  });
+
+  // Selection-based inline comment toolbar
+  textarea.addEventListener("mouseup", () => {
+    setTimeout(() => showCommentToolbar(textarea), 10);
+  });
+  textarea.addEventListener("keyup", (e) => {
+    if (e.shiftKey || e.key === "Shift") {
+      setTimeout(() => showCommentToolbar(textarea), 10);
+    }
+  });
+
+  // Comment count — click to scroll to first comment in textarea
+  $("#songCommentCount").addEventListener("click", () => {
+    const match = textarea.value.match(/\{>>/);
+    if (match) {
+      textarea.focus();
+      textarea.selectionStart = match.index;
+      textarea.selectionEnd = match.index;
+      const linesBefore = textarea.value.substring(0, match.index).split("\n").length;
+      const lineHeight = parseFloat(window.getComputedStyle(textarea).lineHeight) || 24;
+      textarea.scrollTop = Math.max(0, (linesBefore - 3) * lineHeight);
     }
   });
 
@@ -520,7 +553,7 @@ async function saveSongStyles() {
   }
 }
 
-/** Render lyrics with syntax highlighting for section markers and stage directions. */
+/** Render lyrics with syntax highlighting for section markers, stage directions, and CriticMarkup comments. */
 function renderLyricsPreview(text) {
   const sectionTags = ["verse", "chorus", "bridge", "intro", "outro", "silence", "solo", "drop", "pre-chorus", "hook", "interlude"];
   const lines = text.split("\n");
@@ -540,7 +573,19 @@ function renderLyricsPreview(text) {
       html += `<div><span class="lyric-stage-direction">[${esc(stageMatch[1])}]</span></div>`;
       continue;
     }
-    html += `<div>${line.trim() === "" ? "&nbsp;" : esc(line)}</div>`;
+    // Render CriticMarkup inline comments within the line
+    let rendered = esc(line);
+    // CriticMarkup: highlight+comment combo {== text ==}{>> note <<}
+    rendered = rendered.replace(
+      /\{==(.+?)==\}\{&gt;&gt;(.+?)&lt;&lt;\}/g,
+      (_, text, note) => `<mark class="critic-highlight">${text.trim()}</mark><span class="critic-comment-badge" tabindex="0">💬<span class="critic-comment-popover">${note.trim()}</span></span>`
+    );
+    // CriticMarkup: standalone comment {>> note <<}
+    rendered = rendered.replace(
+      /\{&gt;&gt;(.+?)&lt;&lt;\}/g,
+      (_, note) => `<span class="critic-comment-badge" tabindex="0">💬<span class="critic-comment-popover">${note.trim()}</span></span>`
+    );
+    html += `<div>${line.trim() === "" ? "&nbsp;" : rendered}</div>`;
   }
   return html;
 }
@@ -653,6 +698,16 @@ async function submitSongComment() {
 }
 
 
+/** Update inline comment count display for song space. */
+function updateSongCommentCount(text) {
+  const el = $("#songCommentCount");
+  if (!el) return;
+  const matches = text.match(/\{>>.+?<<\}/g);
+  const count = matches ? matches.length : 0;
+  el.textContent = count > 0 ? `💬 ${count} comment${count !== 1 ? "s" : ""}` : "";
+  el.title = count > 0 ? `${count} inline comment${count !== 1 ? "s" : ""} — click to scroll to first` : "";
+}
+
 registerSpacePlugin({
   name: "song",
   label: "Song",
@@ -668,5 +723,9 @@ registerSpacePlugin({
       document.removeEventListener("paste", spaceBody._songPasteHandler);
       spaceBody._songPasteHandler = null;
     }
+    const commentToolbar = document.getElementById("inlineCommentToolbar");
+    if (commentToolbar) commentToolbar.style.display = "none";
+    const commentPopover = document.getElementById("inlineCommentPopover");
+    if (commentPopover) commentPopover.style.display = "none";
   },
 });
