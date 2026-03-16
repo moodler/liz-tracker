@@ -7260,6 +7260,177 @@
         padding: 0 4px;
       }
 
+      /* CriticMarkup inline comments */
+      .text-comment-count {
+        font-size: 0.7rem;
+        color: #f0a040;
+        padding: 0 4px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .text-comment-count:hover {
+        color: #ffc040;
+      }
+      .critic-highlight {
+        background: rgba(240, 180, 60, 0.18);
+        border-bottom: 2px solid rgba(240, 180, 60, 0.5);
+        padding: 1px 2px;
+        border-radius: 2px;
+        cursor: pointer;
+        position: relative;
+      }
+      .critic-highlight:hover {
+        background: rgba(240, 180, 60, 0.3);
+      }
+      .critic-comment-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        background: rgba(240, 180, 60, 0.15);
+        border: 1px solid rgba(240, 180, 60, 0.35);
+        color: #f0a040;
+        font-size: 0.72rem;
+        padding: 1px 6px;
+        border-radius: 10px;
+        margin: 0 2px;
+        cursor: pointer;
+        vertical-align: middle;
+        line-height: 1.4;
+        position: relative;
+        transition: background 150ms ease, border-color 150ms ease;
+      }
+      .critic-comment-badge:hover {
+        background: rgba(240, 180, 60, 0.3);
+        border-color: rgba(240, 180, 60, 0.6);
+      }
+      .critic-comment-popover {
+        display: none;
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1e2a42;
+        border: 1px solid rgba(240, 180, 60, 0.35);
+        border-radius: var(--radius);
+        padding: 8px 12px;
+        font-size: 0.82rem;
+        color: var(--text);
+        max-width: 300px;
+        min-width: 120px;
+        white-space: normal;
+        word-break: break-word;
+        z-index: 1000;
+        box-shadow: var(--shadow-md);
+        pointer-events: auto;
+      }
+      .critic-comment-popover::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border: 6px solid transparent;
+        border-top-color: rgba(240, 180, 60, 0.35);
+      }
+      .critic-comment-badge:hover .critic-comment-popover,
+      .critic-comment-badge.active .critic-comment-popover {
+        display: block;
+      }
+
+      /* Floating comment toolbar for text selection */
+      .text-comment-toolbar {
+        position: fixed;
+        display: none;
+        align-items: center;
+        gap: 4px;
+        background: #1e2a42;
+        border: 1px solid rgba(240, 180, 60, 0.4);
+        border-radius: var(--radius);
+        padding: 4px 8px;
+        box-shadow: var(--shadow-lg);
+        z-index: 10001;
+        cursor: pointer;
+        transition: opacity 150ms ease;
+      }
+      .text-comment-toolbar:hover {
+        background: #253450;
+        border-color: rgba(240, 180, 60, 0.7);
+      }
+      .text-comment-toolbar-icon {
+        font-size: 0.85rem;
+        line-height: 1;
+      }
+      .text-comment-toolbar-label {
+        font-size: 0.75rem;
+        color: #f0a040;
+        white-space: nowrap;
+      }
+
+      /* Comment input popover */
+      .text-comment-input-popover {
+        position: fixed;
+        display: none;
+        flex-direction: column;
+        gap: 6px;
+        background: #1e2a42;
+        border: 1px solid rgba(240, 180, 60, 0.4);
+        border-radius: var(--radius);
+        padding: 10px 12px;
+        box-shadow: var(--shadow-lg);
+        z-index: 10002;
+        min-width: 260px;
+        max-width: 360px;
+      }
+      .text-comment-input-popover textarea {
+        width: 100%;
+        background: rgba(0, 0, 0, 0.25);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--text);
+        font-size: 0.82rem;
+        line-height: 1.4;
+        padding: 6px 8px;
+        resize: vertical;
+        min-height: 50px;
+        max-height: 120px;
+        outline: none;
+        font-family: inherit;
+      }
+      .text-comment-input-popover textarea:focus {
+        border-color: rgba(240, 180, 60, 0.5);
+      }
+      .text-comment-input-popover textarea::placeholder {
+        color: var(--text-dim);
+      }
+      .text-comment-input-actions {
+        display: flex;
+        gap: 6px;
+        justify-content: flex-end;
+      }
+      .text-comment-input-actions button {
+        font-size: 0.75rem;
+        padding: 3px 10px;
+        border-radius: var(--radius-sm);
+        border: none;
+        cursor: pointer;
+        transition: background 150ms ease;
+      }
+      .text-comment-input-actions .comment-cancel-btn {
+        background: transparent;
+        color: var(--text-muted);
+      }
+      .text-comment-input-actions .comment-cancel-btn:hover {
+        color: var(--text);
+      }
+      .text-comment-input-actions .comment-add-btn {
+        background: rgba(240, 180, 60, 0.25);
+        color: #f0a040;
+        border: 1px solid rgba(240, 180, 60, 0.35);
+      }
+      .text-comment-input-actions .comment-add-btn:hover {
+        background: rgba(240, 180, 60, 0.4);
+      }
+
       /* Mobile: text space responsive */
       @media (max-width: 768px) {
         .text-space {
@@ -9643,6 +9814,8 @@
           if (!s) return "";
           // Strip markdown: code blocks, inline code, images, links, emphasis, headings, lists, blockquotes, hrs
           let plain = s
+            .replace(/\{==(.+?)==\}\{>>(.+?)<<\}/g, "$1") // CriticMarkup highlight+comment → just text
+            .replace(/\{>>(.+?)<<\}/g, "")                // CriticMarkup standalone comments → remove
             .replace(/```[\s\S]*?```/g, "") // fenced code blocks
             .replace(/`([^`]*)`/g, "$1") // inline code
             .replace(/!\[[^\]]*\]\([^)]*\)/g, "") // images
@@ -9702,7 +9875,7 @@
                 },
               );
             // Auto-linkify bare URLs (skip text inside <a> and <code> tags)
-            return result.replace(/(<a\s[^>]*>.*?<\/a>)|(<code>[^<]*<\/code>)|https?:\/\/[^\s<"']+/g,
+            let linked = result.replace(/(<a\s[^>]*>.*?<\/a>)|(<code>[^<]*<\/code>)|https?:\/\/[^\s<"']+/g,
               (match, anchor, code) => {
                 if (anchor || code) return match; // Already a link or in code, leave it
                 // Strip trailing punctuation that's unlikely part of the URL
@@ -9726,6 +9899,18 @@
                 return `<a href="${decoded}" target="_blank" rel="noopener">${url}</a>${trailing}`;
               },
             );
+            // CriticMarkup: highlight+comment combo {== text ==}{>> note <<}
+            // After HTML-escaping, >> becomes &gt;&gt; and << becomes &lt;&lt;
+            linked = linked.replace(
+              /\{==(.+?)==\}\{&gt;&gt;(.+?)&lt;&lt;\}/g,
+              (_, text, note) => `<mark class="critic-highlight">${text.trim()}</mark><span class="critic-comment-badge" tabindex="0">💬<span class="critic-comment-popover">${note.trim()}</span></span>`
+            );
+            // CriticMarkup: standalone comment {>> note <<}
+            linked = linked.replace(
+              /\{&gt;&gt;(.+?)&lt;&lt;\}/g,
+              (_, note) => `<span class="critic-comment-badge" tabindex="0">💬<span class="critic-comment-popover">${note.trim()}</span></span>`
+            );
+            return linked;
           }
 
           for (let i = 0; i < lines.length; i++) {
@@ -13015,6 +13200,11 @@
             document.removeEventListener("paste", spaceBody._songPasteHandler);
             spaceBody._songPasteHandler = null;
           }
+          // Clean up inline comment floating elements
+          const commentToolbar = document.getElementById("textCommentToolbar");
+          if (commentToolbar) commentToolbar.style.display = "none";
+          const commentPopover = document.getElementById("textCommentInputPopover");
+          if (commentPopover) commentPopover.style.display = "none";
           spaceBody.innerHTML = "";
           delete $("#spaceModal").dataset.theme;
           // Clear URL hash
@@ -13754,6 +13944,7 @@
                   <button class="space-btn text-revert-btn" id="textRevertBtn" title="Revert to this version" style="display:none;">Revert</button>
                   <div class="toolbar-spacer"></div>
                   <span class="text-word-count" id="textWordCount"></span>
+                  <span class="text-comment-count" id="textCommentCount" title="Inline comments"></span>
                   <span class="copy-btn-wrap"><button class="space-btn" id="textCopyBtn" title="Copy text to clipboard">Copy</button><span class="copy-popup" id="textCopyPopup">Copied!</span></span>
                   <button class="space-btn" id="textPreviewToggle" title="Toggle preview">Preview</button>
                   <span class="text-save-indicator" id="textSaveIndicator"></span>
@@ -13788,8 +13979,9 @@
           // Populate discussion thread
           renderTextDiscussion(item.comments || []);
 
-          // Update word count
+          // Update word count and comment count
           updateTextWordCount(description);
+          updateTextCommentCount(description);
 
           // ── Sidebar tab switching ──
           $$("#textSpace .text-sidebar-tab").forEach(tab => {
@@ -13812,15 +14004,45 @@
             saveIndicator.textContent = "Unsaved changes...";
             saveIndicator.className = "text-save-indicator";
             updateTextWordCount(textarea.value);
+            updateTextCommentCount(textarea.value);
             if (textSaveTimer) clearTimeout(textSaveTimer);
             textSaveTimer = setTimeout(() => saveTextContent(), 2000);
           });
 
           // Cmd+S / Ctrl+S — manual save + version snapshot
+          // Cmd+Shift+M — add inline comment at selection
           textarea.addEventListener("keydown", (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "s") {
               e.preventDefault();
               saveTextContent(true);
+            }
+            if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "m" || e.key === "M")) {
+              e.preventDefault();
+              showTextCommentInput(textarea);
+            }
+          });
+
+          // Selection-based inline comment toolbar
+          textarea.addEventListener("mouseup", () => {
+            setTimeout(() => showTextCommentToolbar(textarea), 10);
+          });
+          textarea.addEventListener("keyup", (e) => {
+            if (e.shiftKey || e.key === "Shift") {
+              setTimeout(() => showTextCommentToolbar(textarea), 10);
+            }
+          });
+
+          // Comment count — click to scroll to first comment in textarea
+          $("#textCommentCount").addEventListener("click", () => {
+            const match = textarea.value.match(/\{>>/);
+            if (match) {
+              textarea.focus();
+              textarea.selectionStart = match.index;
+              textarea.selectionEnd = match.index;
+              // Scroll the textarea to bring the comment into view
+              const linesBefore = textarea.value.substring(0, match.index).split("\n").length;
+              const lineHeight = parseFloat(window.getComputedStyle(textarea).lineHeight) || 24;
+              textarea.scrollTop = Math.max(0, (linesBefore - 3) * lineHeight);
             }
           });
 
@@ -13925,13 +14147,221 @@
 
         }
 
-        /** Update word count display for text space. */
+        /** Update word count display for text space (excludes CriticMarkup annotations). */
         function updateTextWordCount(text) {
           const el = $("#textWordCount");
           if (!el) return;
-          const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+          // Strip CriticMarkup annotations before counting words
+          const clean = text
+            .replace(/\{==(.+?)==\}\{>>(.+?)<<\}/g, "$1") // highlight+comment → just the highlighted text
+            .replace(/\{>>(.+?)<<\}/g, "");                // standalone comments → remove
+          const words = clean.trim() ? clean.trim().split(/\s+/).length : 0;
           el.textContent = `${words} word${words !== 1 ? "s" : ""}`;
         }
+
+        /** Update inline comment count display for text space. */
+        function updateTextCommentCount(text) {
+          const el = $("#textCommentCount");
+          if (!el) return;
+          const matches = text.match(/\{>>.+?<<\}/g);
+          const count = matches ? matches.length : 0;
+          el.textContent = count > 0 ? `💬 ${count} comment${count !== 1 ? "s" : ""}` : "";
+          el.title = count > 0 ? `${count} inline comment${count !== 1 ? "s" : ""} — click to scroll to first` : "";
+        }
+
+        // ── Inline Comments (CriticMarkup) ──
+
+        /** Show the floating comment toolbar when text is selected in the textarea. */
+        function showTextCommentToolbar(textarea) {
+          hideTextCommentToolbar();
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          if (start === end) return; // No selection
+          if (textarea.disabled) return;
+
+          // Get or create toolbar element
+          let toolbar = document.getElementById("textCommentToolbar");
+          if (!toolbar) {
+            toolbar = document.createElement("div");
+            toolbar.id = "textCommentToolbar";
+            toolbar.className = "text-comment-toolbar";
+            toolbar.innerHTML = '<span class="text-comment-toolbar-icon">💬</span><span class="text-comment-toolbar-label">Comment</span>';
+            document.body.appendChild(toolbar);
+            toolbar.addEventListener("click", () => {
+              hideTextCommentToolbar();
+              showTextCommentInput(textarea);
+            });
+          }
+
+          // Position near the selection using textarea caret coordinates
+          const pos = getTextareaSelectionCoords(textarea);
+          toolbar.style.left = pos.x + "px";
+          toolbar.style.top = (pos.y - 36) + "px";
+          toolbar.style.display = "flex";
+        }
+
+        /** Hide the floating comment toolbar. */
+        function hideTextCommentToolbar() {
+          const toolbar = document.getElementById("textCommentToolbar");
+          if (toolbar) toolbar.style.display = "none";
+        }
+
+        /** Show the comment input popover for adding an inline comment. */
+        function showTextCommentInput(textarea) {
+          hideTextCommentToolbar();
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          if (textarea.disabled) return;
+
+          // Store selection for when the popover submits
+          const selStart = start;
+          const selEnd = end;
+          const hasSelection = selStart !== selEnd;
+
+          // Get or create input popover
+          let popover = document.getElementById("textCommentInputPopover");
+          if (!popover) {
+            popover = document.createElement("div");
+            popover.id = "textCommentInputPopover";
+            popover.className = "text-comment-input-popover";
+            popover.innerHTML = `
+              <textarea id="textCommentNoteInput" placeholder="Add your comment..." rows="2"></textarea>
+              <div class="text-comment-input-actions">
+                <button class="comment-cancel-btn" id="textCommentCancelBtn">Cancel</button>
+                <button class="comment-add-btn" id="textCommentAddBtn">Add Comment</button>
+              </div>
+            `;
+            document.body.appendChild(popover);
+          }
+
+          // Position near the selection
+          const pos = getTextareaSelectionCoords(textarea);
+          popover.style.left = Math.max(10, Math.min(pos.x - 60, window.innerWidth - 380)) + "px";
+          popover.style.top = (pos.y - 100) + "px";
+          popover.style.display = "flex";
+
+          const noteInput = document.getElementById("textCommentNoteInput");
+          noteInput.value = "";
+          noteInput.focus();
+
+          // Remove old listeners by replacing elements
+          const addBtn = document.getElementById("textCommentAddBtn");
+          const cancelBtn = document.getElementById("textCommentCancelBtn");
+          const newAddBtn = addBtn.cloneNode(true);
+          const newCancelBtn = cancelBtn.cloneNode(true);
+          addBtn.replaceWith(newAddBtn);
+          cancelBtn.replaceWith(newCancelBtn);
+
+          const submit = () => {
+            const note = noteInput.value.trim();
+            if (!note) return;
+            insertCriticComment(textarea, selStart, selEnd, note);
+            popover.style.display = "none";
+          };
+
+          newAddBtn.addEventListener("click", submit);
+          newCancelBtn.addEventListener("click", () => { popover.style.display = "none"; });
+          noteInput.addEventListener("keydown", (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              popover.style.display = "none";
+              textarea.focus();
+            }
+          });
+        }
+
+        /** Insert a CriticMarkup comment into the textarea at the given selection range. */
+        function insertCriticComment(textarea, selStart, selEnd, note) {
+          const text = textarea.value;
+          const hasSelection = selStart !== selEnd;
+          let newText;
+          let cursorPos;
+
+          if (hasSelection) {
+            // Wrap selection: {== selected text ==}{>> note <<}
+            const selected = text.slice(selStart, selEnd);
+            const insertion = `{==${selected}==}{>> ${note} <<}`;
+            newText = text.slice(0, selStart) + insertion + text.slice(selEnd);
+            cursorPos = selStart + insertion.length;
+          } else {
+            // No selection: insert standalone {>> note <<} at cursor
+            const insertion = `{>> ${note} <<}`;
+            newText = text.slice(0, selStart) + insertion + text.slice(selStart);
+            cursorPos = selStart + insertion.length;
+          }
+
+          textarea.value = newText;
+          textarea.selectionStart = cursorPos;
+          textarea.selectionEnd = cursorPos;
+          textarea.focus();
+
+          // Trigger input event for auto-save and count updates
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+
+        /** Get approximate screen coordinates for a textarea selection (for positioning popovers). */
+        function getTextareaSelectionCoords(textarea) {
+          // Create a mirror div to measure the position
+          const mirror = document.createElement("div");
+          const style = window.getComputedStyle(textarea);
+          // Copy relevant styles
+          for (const prop of ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing",
+            "wordSpacing", "textIndent", "whiteSpace", "wordWrap", "overflowWrap",
+            "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+            "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth"]) {
+            mirror.style[prop] = style[prop];
+          }
+          mirror.style.position = "absolute";
+          mirror.style.left = "-9999px";
+          mirror.style.top = "-9999px";
+          mirror.style.width = textarea.clientWidth + "px";
+          mirror.style.overflow = "hidden";
+          mirror.style.visibility = "hidden";
+
+          // Text up to the selection start
+          const textBefore = textarea.value.substring(0, textarea.selectionStart);
+          const textNode = document.createTextNode(textBefore);
+          mirror.appendChild(textNode);
+
+          // Marker span at the selection position
+          const marker = document.createElement("span");
+          marker.textContent = "|";
+          mirror.appendChild(marker);
+
+          document.body.appendChild(mirror);
+          const mirrorRect = mirror.getBoundingClientRect();
+          const markerRect = marker.getBoundingClientRect();
+          document.body.removeChild(mirror);
+
+          // Now offset relative to the textarea position
+          const taRect = textarea.getBoundingClientRect();
+          const scrollTop = textarea.scrollTop;
+          const scrollLeft = textarea.scrollLeft;
+
+          return {
+            x: taRect.left + (markerRect.left - mirrorRect.left) - scrollLeft,
+            y: taRect.top + (markerRect.top - mirrorRect.top) - scrollTop,
+          };
+        }
+
+        /** Hide all comment popovers when clicking outside */
+        document.addEventListener("mousedown", (e) => {
+          const toolbar = document.getElementById("textCommentToolbar");
+          const popover = document.getElementById("textCommentInputPopover");
+          if (toolbar && toolbar.style.display !== "none" && !toolbar.contains(e.target)) {
+            const textarea = document.getElementById("textEditorTextarea");
+            if (!textarea || !textarea.contains(e.target)) {
+              hideTextCommentToolbar();
+            }
+          }
+          if (popover && popover.style.display !== "none" && !popover.contains(e.target)) {
+            popover.style.display = "none";
+          }
+        });
 
         /** Render discussion thread (comments) in text space. */
         function renderTextDiscussion(comments) {
