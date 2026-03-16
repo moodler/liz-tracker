@@ -6199,36 +6199,21 @@
       .space-header {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        padding: 10px 20px;
+        gap: 12px;
+        padding: 16px 20px;
         border-bottom: 1px solid var(--border);
         flex-shrink: 0;
         min-height: 52px;
       }
-      .space-header-left {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        min-width: 0;
-        flex: 1;
-      }
-      .space-header-right {
+      .space-header-actions {
+        margin-left: auto;
         display: flex;
         align-items: center;
         gap: 8px;
-        flex-shrink: 0;
       }
 
-      .space-title {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: var(--text);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
       .space-key {
-        font-size: 0.75rem;
+        font-size: 0.94rem;
         color: var(--text-dim);
         font-family: monospace;
       }
@@ -6271,10 +6256,15 @@
         background: none;
         border: none;
         color: var(--text-muted);
-        font-size: 1.4rem;
+        font-size: 1.5rem;
         cursor: pointer;
-        padding: 2px 8px;
+        min-width: 44px;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         border-radius: var(--radius-sm);
+        flex-shrink: 0;
         transition: color 0.15s;
       }
       .space-close-btn:hover {
@@ -8014,10 +8004,20 @@
           max-width: 180px;
         }
         .space-header {
-          padding: 8px 12px;
+          padding: 10px 12px;
+          gap: 6px;
+          flex-wrap: wrap;
         }
-        .space-title {
-          font-size: 0.95rem;
+        .space-header .space-close-btn {
+          flex-shrink: 0;
+        }
+        .space-header .space-key {
+          flex-shrink: 0;
+          flex: 1;
+          min-width: 0;
+        }
+        .space-header .space-header-actions {
+          gap: 6px;
         }
       }
 
@@ -8767,20 +8767,17 @@
     <div class="space-overlay" id="spaceOverlay">
       <div class="space-modal" id="spaceModal">
         <div class="space-header" id="spaceHeader">
-          <div class="space-header-left">
-            <span class="space-title" id="spaceTitle"></span>
-            <span class="space-key" id="spaceKey"></span>
-          </div>
-          <div class="space-header-right">
-            <select class="space-state-select" id="spaceStateSelect"></select>
+          <button class="space-close-btn" id="spaceCloseBtn" title="Close">&times;</button>
+          <span class="space-key" id="spaceKey"></span>
+          <div class="space-header-actions">
+            <button class="space-btn space-view-toggle-btn" id="spaceViewToggleBtn" title="Switch to standard tracker view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 6h6M9 10h6M9 14h4"/></svg> Standard View</button>
             <button class="space-btn space-share-btn" id="spaceShareBtn" title="Copy link">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
               </svg>
             </button>
-            <button class="space-btn space-view-toggle-btn" id="spaceViewToggleBtn" title="Switch to standard tracker view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 6h6M9 10h6M9 14h4"/></svg> Standard View</button>
-            <button class="space-close-btn" id="spaceCloseBtn" title="Close">&times;</button>
+            <select class="space-state-select" id="spaceStateSelect"></select>
           </div>
         </div>
         <div class="space-body" id="spaceBody">
@@ -12663,7 +12660,6 @@
             const item = await apiGet(`/items/${itemId}`);
             spaceItemData = item;
             // Populate header
-            $("#spaceTitle").textContent = item.title;
             $("#spaceKey").textContent = item.key || "";
             // State select
             const stateSelect = $("#spaceStateSelect");
