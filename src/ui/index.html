@@ -605,6 +605,22 @@
         flex-direction: column;
         gap: 6px;
       }
+      .done-show-more {
+        width: 100%;
+        padding: 8px;
+        background: transparent;
+        border: 1px dashed var(--border);
+        color: var(--text-dim);
+        font-size: 0.8rem;
+        cursor: pointer;
+        border-radius: 6px;
+        margin-top: 4px;
+        flex-shrink: 0;
+      }
+      .done-show-more:hover {
+        background: rgba(255,255,255,0.05);
+        color: var(--text);
+      }
 
       /* ── Cards ── */
       .card {
@@ -10000,6 +10016,7 @@
           isAttentionView = false;
           isTodayDashboardView = false;
           currentProjectId = projectId;
+          showAllDoneTracker = false; // reset done column expansion on project switch
           try {
             localStorage.setItem(STORAGE_KEY, projectId);
             localStorage.setItem(STORAGE_LAST_PROJECT_KEY, projectId);
@@ -10550,6 +10567,11 @@
         const STORAGE_SCHEDULED_PREFIX = "tracker_show_scheduled_";
         let showScheduledItems = true; // default: show all
 
+        // ── Done Column Truncation ──
+        const DONE_COLUMN_LIMIT = 20;
+        let showAllDoneTracker = false;  // session-only flag for per-project kanban
+        let showAllDoneOverview = false; // session-only flag for overview/attention kanban
+
         /** Get per-project localStorage key for the scheduled toggle */
         function scheduledStorageKey(projectId) {
           return STORAGE_SCHEDULED_PREFIX + projectId;
@@ -10708,6 +10730,15 @@
             }
             // Sort based on current sort mode
             sortItems(items, currentSortMode);
+
+            // Done column truncation: show only DONE_COLUMN_LIMIT items by default
+            let totalDoneCount = items.length;
+            let doneTruncated = false;
+            if (dcol.id === "done" && !showAllDoneTracker && items.length > DONE_COLUMN_LIMIT) {
+              items = items.slice(0, DONE_COLUMN_LIMIT);
+              doneTruncated = true;
+            }
+
             const col = document.createElement("div");
             col.className = "column";
             col.dataset.state = dcol.dropState;
@@ -10733,14 +10764,25 @@
             const emptyInterstitialHtml = isMobileCarousel && isEmpty
               ? `<div class="column-empty-interstitial">No items in ${dcol.label}</div>`
               : "";
+            // Done column: show truncated count in header and "Show more" button
+            const doneCountHtml = dcol.id === "done" && totalDoneCount > 0
+              ? (doneTruncated
+                ? ` <span style="font-size:0.75rem;color:var(--text-dim)">(${DONE_COLUMN_LIMIT} of ${totalDoneCount})</span>`
+                : ` <span style="font-size:0.75rem;color:var(--text-dim)">(${totalDoneCount})</span>`)
+              : "";
+            const showMoreHtml = doneTruncated
+              ? `<button class="done-show-more" data-view="tracker">Show ${totalDoneCount - DONE_COLUMN_LIMIT} more\u2026</button>`
+              : (dcol.id === "done" && showAllDoneTracker && totalDoneCount > DONE_COLUMN_LIMIT
+                ? `<button class="done-show-more" data-view="tracker">Show fewer</button>`
+                : "");
             col.innerHTML = `
       <div class="column-header">
         <div class="column-color" style="background:${dcol.color}"></div>
-        <div class="column-title">${dcol.label}</div>
+        <div class="column-title">${dcol.label}${doneCountHtml}</div>
         ${cancelledToggle}
         <button class="column-add" data-state="${dcol.dropState}" title="Add item">+</button>
       </div>
-      <div class="column-cards">${emptyInterstitialHtml}${items.map(renderCard).join("")}</div>
+      <div class="column-cards">${emptyInterstitialHtml}${items.map(renderCard).join("")}${showMoreHtml}</div>
     `;
             trackerEl.appendChild(col);
           });
@@ -10770,6 +10812,14 @@
               e.stopPropagation();
               showCancelledCb.checked = cb.checked;
               mobileShowCancelled.checked = cb.checked;
+              renderTracker();
+            });
+          });
+          // Wire up "Show more/fewer" button in Done column
+          $$('.done-show-more[data-view="tracker"]', trackerEl).forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              showAllDoneTracker = !showAllDoneTracker;
               renderTracker();
             });
           });
@@ -11808,6 +11858,14 @@
             // Sort based on current sort mode
             sortItems(items, currentSortMode);
 
+            // Done column truncation: show only DONE_COLUMN_LIMIT items by default
+            let totalDoneCount = items.length;
+            let doneTruncated = false;
+            if (dcol.id === "done" && !showAllDoneOverview && items.length > DONE_COLUMN_LIMIT) {
+              items = items.slice(0, DONE_COLUMN_LIMIT);
+              doneTruncated = true;
+            }
+
             const col = document.createElement("div");
             col.className = "column";
             col.dataset.state = dcol.dropState;
@@ -11827,14 +11885,25 @@
             const emptyInterstitialHtml = isMobileCarousel && isEmpty
               ? `<div class="column-empty-interstitial">No items in ${dcol.label}</div>`
               : "";
+            // Done column: show truncated count in header and "Show more" button
+            const doneCountHtml = dcol.id === "done" && totalDoneCount > 0
+              ? (doneTruncated
+                ? ` <span style="font-size:0.75rem;color:var(--text-dim)">(${DONE_COLUMN_LIMIT} of ${totalDoneCount})</span>`
+                : ` <span style="font-size:0.75rem;color:var(--text-dim)">(${totalDoneCount})</span>`)
+              : "";
+            const showMoreHtml = doneTruncated
+              ? `<button class="done-show-more" data-view="overview">Show ${totalDoneCount - DONE_COLUMN_LIMIT} more\u2026</button>`
+              : (dcol.id === "done" && showAllDoneOverview && totalDoneCount > DONE_COLUMN_LIMIT
+                ? `<button class="done-show-more" data-view="overview">Show fewer</button>`
+                : "");
             col.innerHTML = `
               <div class="column-header">
                 <div class="column-color" style="background:${dcol.color}"></div>
-                <div class="column-title">${dcol.label}</div>
+                <div class="column-title">${dcol.label}${doneCountHtml}</div>
                 ${cancelledToggle}
                 <button class="column-add" data-state="${dcol.dropState}" title="Add item">+</button>
               </div>
-              <div class="column-cards">${emptyInterstitialHtml}${items.map((item) => renderOverviewCard(item, projectLookup)).join("")}</div>
+              <div class="column-cards">${emptyInterstitialHtml}${items.map((item) => renderOverviewCard(item, projectLookup)).join("")}${showMoreHtml}</div>
             `;
             attentionView.appendChild(col);
           });
@@ -11866,6 +11935,14 @@
               e.stopPropagation();
               showCancelledCb.checked = cb.checked;
               if (typeof mobileShowCancelled !== "undefined") mobileShowCancelled.checked = cb.checked;
+              renderAttention();
+            });
+          });
+          // Wire up "Show more/fewer" button in Done column
+          $$('.done-show-more[data-view="overview"]', attentionView).forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              showAllDoneOverview = !showAllDoneOverview;
               renderAttention();
             });
           });
