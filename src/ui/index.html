@@ -7546,6 +7546,68 @@
       .engagement-save-indicator.saving { color: var(--highlight); }
       .engagement-save-indicator.saved { color: #00b894; }
 
+      /* Engagement field help tooltips */
+      .engagement-field-help {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+      }
+      .engagement-field-help-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--text-dim);
+        font-size: 0.65rem;
+        font-weight: 700;
+        cursor: pointer;
+        flex-shrink: 0;
+        padding: 0;
+        margin-left: 4px;
+        transition: all var(--transition);
+        line-height: 1;
+      }
+      .engagement-field-help-btn:hover {
+        color: var(--text);
+        border-color: var(--text-muted);
+      }
+      .engagement-field-help-popup {
+        display: none;
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 50%;
+        transform: translateX(-50%);
+        width: 280px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        padding: 10px 12px;
+        z-index: 100;
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        line-height: 1.5;
+      }
+      .engagement-field-help-popup.open {
+        display: block;
+      }
+      .engagement-field-help-popup strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .engagement-field-help-popup code {
+        background: rgba(99, 110, 114, 0.2);
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-family: monospace;
+        font-size: 0.85em;
+        color: var(--text);
+      }
+
       /* Engagement cover image header */
       .engagement-header {
         display: flex;
@@ -13877,16 +13939,16 @@
                   <div style="flex:1;overflow-y:auto;padding:14px;">
                     <div class="engagement-edit-row">
                       <label>Description</label>
+                      <span class="engagement-save-indicator" id="engagementDescSaveIndicator"></span>
                     </div>
-                    <textarea id="engagementDescTextarea" style="width:100%;min-height:80px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px;font-size:0.83rem;resize:vertical;outline:none;margin-bottom:12px;font-family:inherit;">${esc(item.description || "")}</textarea>
-                    <span class="engagement-save-indicator" id="engagementDescSaveIndicator"></span>
+                    <textarea id="engagementDescTextarea" style="width:100%;min-height:160px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px;font-size:0.83rem;resize:vertical;outline:none;margin-bottom:12px;font-family:inherit;">${esc(item.description || "")}</textarea>
                     <div style="margin-top:8px;">
                       <div class="engagement-edit-row">
-                        <label>Email query</label>
+                        <label>Email query <span class="engagement-field-help"><button class="engagement-field-help-btn" data-help="gmail">?</button><div class="engagement-field-help-popup" id="engagementHelpGmail"><strong>Gmail Search Query</strong><br>Used by Harmoni to find related emails during scheduled checks. Uses Gmail search syntax.<br><br>Examples:<br><code>from:john@example.com</code><br><code>from:email OR to:email</code><br><code>subject:invoice project</code></div></span></label>
                         <input id="engagementGmailQuery" value="${esc(sd.gmail_query)}" placeholder="from:email OR to:email" />
                       </div>
                       <div class="engagement-edit-row">
-                        <label>Calendar tag</label>
+                        <label>Calendar tag <span class="engagement-field-help"><button class="engagement-field-help-btn" data-help="calendar">?</button><div class="engagement-field-help-popup" id="engagementHelpCalendar"><strong>Calendar Tag</strong><br>Used by Harmoni to find related calendar events. Set this to a keyword or issue key that appears in event titles.<br><br>Example:<br><code>MARTIN-94</code> or <code>ProjectName</code></div></span></label>
                         <input id="engagementCalendarTag" value="${esc(sd.calendar_tag)}" placeholder="ISSUE-KEY" />
                       </div>
                     </div>
@@ -13970,6 +14032,25 @@
             const el = $(`#${id}`);
             if (el) {
               el.addEventListener("change", () => saveEngagementSpaceData());
+            }
+          });
+
+          // Field help tooltip toggles
+          $$("#engagementSpace .engagement-field-help-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const popup = btn.nextElementSibling;
+              if (!popup) return;
+              const wasOpen = popup.classList.contains("open");
+              // Close all other popups first
+              $$("#engagementSpace .engagement-field-help-popup").forEach(p => p.classList.remove("open"));
+              if (!wasOpen) popup.classList.add("open");
+            });
+          });
+          // Close popups when clicking elsewhere
+          document.addEventListener("click", (e) => {
+            if (!e.target.closest(".engagement-field-help")) {
+              $$("#engagementSpace .engagement-field-help-popup").forEach(p => p.classList.remove("open"));
             }
           });
         }
