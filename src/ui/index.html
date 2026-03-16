@@ -1774,6 +1774,28 @@
       .comment-form-row input {
         flex: 1;
       }
+      .comment-author-display {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 1;
+        font-size: 0.75rem;
+        color: var(--text-secondary, #999);
+      }
+      .comment-author-display .author-edit-btn {
+        background: none;
+        border: none;
+        color: var(--text-secondary, #999);
+        cursor: pointer;
+        font-size: 0.7rem;
+        padding: 0 2px;
+        opacity: 0.7;
+        text-decoration: underline;
+      }
+      .comment-author-display .author-edit-btn:hover {
+        opacity: 1;
+        color: var(--text-primary, #ccc);
+      }
 
       /* ── Markers Done / Approve Buttons ── */
       .markers-done-wrapper {
@@ -8852,12 +8874,18 @@
               rows="4"
             ></textarea>
             <div class="comment-form-row">
-              <input
-                type="text"
-                id="commentAuthor"
-                placeholder="Your name"
-                value=""
-              />
+              <div id="commentAuthorWrapper" style="flex:1;display:flex;align-items:center">
+                <input
+                  type="text"
+                  id="commentAuthor"
+                  placeholder="Your name"
+                  value=""
+                />
+                <span class="comment-author-display" id="commentAuthorDisplay" style="display:none">
+                  Commenting as: <strong id="commentAuthorName"></strong>
+                  <button class="author-edit-btn" id="commentAuthorEditBtn" type="button">edit</button>
+                </span>
+              </div>
               <button class="btn btn-primary btn-sm" id="commentSubmit">
                 Comment
               </button>
@@ -16456,6 +16484,10 @@
           try {
             localStorage.setItem(STORAGE_AUTHOR_KEY, author);
           } catch {}
+          // Switch to display mode after commenting
+          if (author && author !== DEFAULT_AUTHOR) {
+            showCommentAuthorDisplay(author);
+          }
           try {
             await apiPost(`/items/${detailItemId}/comments`, { body, author });
             $("#commentBody").value = "";
@@ -16477,6 +16509,31 @@
             try {
               localStorage.setItem(STORAGE_AUTHOR_KEY, name);
             } catch {}
+            showCommentAuthorDisplay(name);
+          }
+        });
+
+        // Comment author display toggle helpers
+        function showCommentAuthorDisplay(name) {
+          $("#commentAuthor").style.display = "none";
+          $("#commentAuthorName").textContent = name;
+          $("#commentAuthorDisplay").style.display = "";
+        }
+        function showCommentAuthorInput() {
+          $("#commentAuthorDisplay").style.display = "none";
+          $("#commentAuthor").style.display = "";
+          $("#commentAuthor").focus();
+        }
+        // Edit button to switch back to input
+        $("#commentAuthorEditBtn").addEventListener("click", () => {
+          showCommentAuthorInput();
+        });
+        // When input loses focus with a value, switch back to display mode
+        $("#commentAuthor").addEventListener("blur", () => {
+          const name = $("#commentAuthor").value.trim();
+          if (name) {
+            try { localStorage.setItem(STORAGE_AUTHOR_KEY, name); } catch {}
+            showCommentAuthorDisplay(name);
           }
         });
 
@@ -19243,6 +19300,7 @@
             const savedAuthor = localStorage.getItem(STORAGE_AUTHOR_KEY);
             if (savedAuthor) {
               $("#commentAuthor").value = savedAuthor;
+              showCommentAuthorDisplay(savedAuthor);
             }
           } catch {}
           // Initialize bottom nav visibility for phone
