@@ -9619,7 +9619,7 @@
             }
           }
           function inline(text) {
-            return text
+            const result = text
               .replace(/&/g, "&amp;")
               .replace(/</g, "&lt;")
               .replace(/>/g, "&gt;")
@@ -9638,6 +9638,31 @@
                   return `${label} (${url})`;
                 },
               );
+            // Auto-linkify bare URLs (skip text inside <a> and <code> tags)
+            return result.replace(/(<a\s[^>]*>.*?<\/a>)|(<code>[^<]*<\/code>)|https?:\/\/[^\s<"']+/g,
+              (match, anchor, code) => {
+                if (anchor || code) return match; // Already a link or in code, leave it
+                // Strip trailing punctuation that's unlikely part of the URL
+                let url = match;
+                const trailingMatch = url.match(/[).,;:!?]+$/);
+                let trailing = "";
+                if (trailingMatch) {
+                  // Keep balanced parens (common in Wikipedia URLs)
+                  const opens = (url.match(/\(/g) || []).length;
+                  const closes = (url.match(/\)/g) || []).length;
+                  if (closes > opens) {
+                    const idx = url.lastIndexOf(")");
+                    trailing = url.slice(idx) ;
+                    url = url.slice(0, idx);
+                  } else if (!/\)$/.test(url)) {
+                    trailing = trailingMatch[0];
+                    url = url.slice(0, -trailing.length);
+                  }
+                }
+                const decoded = url.replace(/&amp;/g, "&");
+                return `<a href="${decoded}" target="_blank" rel="noopener">${url}</a>${trailing}`;
+              },
+            );
           }
 
           for (let i = 0; i < lines.length; i++) {
