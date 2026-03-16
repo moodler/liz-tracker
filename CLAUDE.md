@@ -265,6 +265,13 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `tracker_remove_scheduled_todo` | Remove TODO items from a scheduled task by index |
 | `tracker_add_scheduled_ignore` | Add IGNORE rules to a scheduled task (simple string array) |
 | `tracker_remove_scheduled_ignore` | Remove IGNORE rules from a scheduled task by index |
+| `tracker_update_engagement_contact` | Update contact/contractor details on an engagement item (partial update) |
+| `tracker_update_engagement_quote` | Update quote/financial details on an engagement item (partial update) |
+| `tracker_add_engagement_milestone` | Add milestones to an engagement item |
+| `tracker_remove_engagement_milestone` | Remove milestones from an engagement item by index |
+| `tracker_update_engagement_milestone` | Update an existing milestone's label, date, or status |
+| `tracker_add_engagement_comms` | Add communication log entries to an engagement item |
+| `tracker_update_engagement_settings` | Update engagement settings (gmail_query, calendar_tag) |
 | `tracker_set_cover_image` | Set/replace cover image on a song or engagement item (base64 data) |
 | `tracker_set_cover_image_from_path` | Set/replace cover image from a local file path |
 | `tracker_remove_cover_image` | Remove cover image from a song or engagement item |
@@ -383,6 +390,38 @@ Agents should use these simpler tools instead of constructing `space_data` JSON 
 
 These tools handle the GET→parse→modify→save cycle internally and only accept plain strings, making it impossible to accidentally create `[object Object]` entries.
 
+#### Engagement `space_data` Format
+
+Engagement items store structured data in `space_data` as a JSON string:
+
+```json
+{
+  "contractor": { "company": "", "contact": "", "phone": "", "mobile": "", "email": "", "address": "" },
+  "quote": { "reference": "", "date": "", "expiry": "", "status": "pending", "total": 0, "currency": "AUD", "includes_gst": true, "line_items": [{ "desc": "Item description", "amount": 100.00 }] },
+  "payment": { "status": "not_started", "deposits": [], "invoices": [] },
+  "milestones": [{ "label": "Milestone name", "date": "2026-03-15", "status": "upcoming" }],
+  "gmail_query": "from:email OR to:email",
+  "calendar_tag": "ISSUE-KEY",
+  "comms_log": [{ "direction": "inbound", "date": "2026-03-15", "subject": "Subject line", "snippet": "Brief excerpt" }]
+}
+```
+
+**Preferred: Use dedicated MCP tools instead of raw `space_data` updates.**
+
+Agents should use these simpler tools instead of constructing `space_data` JSON manually:
+
+| MCP Tool | Description |
+| --- | --- |
+| `tracker_update_engagement_contact` | Update contact details — pass individual fields (`company`, `contact`, `phone`, `mobile`, `email`, `address`). Only provided fields are updated. |
+| `tracker_update_engagement_quote` | Update quote/financial — pass individual fields (`reference`, `total`, `currency`, `status`, `line_items`, `payment_status`). Only provided fields are updated. |
+| `tracker_add_engagement_milestone` | Add milestones — pass `milestones` array of `{ label, date?, status? }` objects |
+| `tracker_remove_engagement_milestone` | Remove milestones — pass `indices` array of index numbers |
+| `tracker_update_engagement_milestone` | Update a milestone — pass `index` and the fields to change |
+| `tracker_add_engagement_comms` | Add comms log entries — pass `entries` array of `{ direction, date, subject, snippet? }` |
+| `tracker_update_engagement_settings` | Update `gmail_query` and `calendar_tag` |
+
+These tools handle the GET→parse→modify→save cycle internally, so agents never need to construct the full `space_data` JSON.
+
 ### API Endpoints
 
 - `PATCH /items/:id` — accepts `space_type`, `space_data`, and `project_id` fields. Passing `project_id` moves the item to another project (allocates new seq_number, resets space if needed).
@@ -393,6 +432,12 @@ These tools handle the GET→parse→modify→save cycle internally and only acc
 - `DELETE /items/:id/scheduled/todo` — remove TODO items (`{ indices: [0, 2] }`)
 - `POST /items/:id/scheduled/ignore` — add IGNORE rules (`{ rules: ["rule1"] }`)
 - `DELETE /items/:id/scheduled/ignore` — remove IGNORE rules (`{ indices: [0] }`)
+- `PATCH /items/:id/engagement/contact` — update engagement contact details (`{ company?, contact?, phone?, ... }`)
+- `PATCH /items/:id/engagement/quote` — update engagement quote/financial (`{ reference?, total?, currency?, line_items?, payment_status?, ... }`)
+- `POST /items/:id/engagement/milestones` — add engagement milestones (`{ milestones: [{ label, date?, status? }] }`)
+- `DELETE /items/:id/engagement/milestones` — remove engagement milestones (`{ indices: [0, 2] }`)
+- `POST /items/:id/engagement/comms` — add engagement comms log (`{ entries: [{ direction, date, subject, snippet? }] }`)
+- `PATCH /items/:id/engagement/settings` — update engagement settings (`{ gmail_query?, calendar_tag? }`)
 - `PUT /items/:id/cover` — set/replace cover image on song or engagement items (multipart/form-data or JSON with base64 `data`)
 - `DELETE /items/:id/cover` — remove cover image from song or engagement items
 
