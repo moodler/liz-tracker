@@ -790,7 +790,10 @@ async function handleApiRequest(
         const existingAssignee = body.existing_assignee ? String(body.existing_assignee) : "";
         const existingDateDue = body.existing_date_due ? String(body.existing_date_due) : "";
 
+        const today = new Date().toISOString().slice(0, 10);
         const systemPrompt = `You are an assistant that categorizes project tracker issues. Given a freeform description (which may be rough notes, voice transcription, or a ramble), extract structured fields for a project tracker work item.
+
+Today's date is ${today}. Use this as the default year when dates are mentioned without an explicit year.
 
 Return ONLY valid JSON with these fields:
 - "title": A clear, concise title (max 80 chars) that captures the essence of the issue
@@ -804,7 +807,7 @@ Important rules:
 - Keep the description faithful to the original intent — don't add information that wasn't there
 - For priority, only escalate if the text explicitly suggests urgency (words like "urgent", "critical", "ASAP", "important", "blocking")
 - For assignee, only extract if a specific person is clearly named as being responsible
-- For date_due, only extract if a specific date or deadline is clearly mentioned
+- For date_due, only extract if a specific date or deadline is clearly mentioned. When a date is mentioned without a year, use the current year (${today.slice(0, 4)})
 - The title should be specific and descriptive, not generic`;
 
         const userMessage = `Here is the freeform description to categorize:

@@ -16319,6 +16319,9 @@
           if (location.hash) {
             history.replaceState(null, "", location.pathname + location.search);
           }
+          // Clear AI auto-trigger timer
+          clearTimeout(_aiDetailTimer);
+          _aiDetailTimer = null;
         }
 
         detailOverlay.addEventListener("click", closeDetail);
@@ -16883,6 +16886,7 @@
         }
 
         // ── AI Categorize ──
+        let _aiSuppressAutoTrigger = false; // suppress auto-trigger while AI populates fields
         async function aiCategorize(descriptionEl, titleEl, priorityEl, assigneeEl, dateDueEl, botDispatchEl, requiresCodeEl, btn) {
           const description = descriptionEl.value.trim();
           if (!description) {
@@ -16903,6 +16907,9 @@
               existing_assignee: assigneeEl ? assigneeEl.value : "",
               existing_date_due: dateDueEl ? dateDueEl.value : "",
             });
+
+            // Suppress auto-trigger while populating AI results
+            _aiSuppressAutoTrigger = true;
 
             // Populate fields with AI suggestions
             if (result.title && titleEl) {
@@ -16934,6 +16941,8 @@
             descriptionEl.dispatchEvent(new Event("input", { bubbles: true }));
             if (titleEl) titleEl.dispatchEvent(new Event("input", { bubbles: true }));
             if (priorityEl) priorityEl.dispatchEvent(new Event("change", { bubbles: true }));
+
+            _aiSuppressAutoTrigger = false;
 
             toast("AI categorization applied");
           } catch (e) {
@@ -16971,6 +16980,71 @@
             null,
             null,
             $("#detailAiCategorize")
+          );
+        });
+
+        // ── AI Auto-trigger (5s debounce) ──
+        // Auto-trigger AI categorization after 5 seconds of inactivity in description field
+        let _aiCreateTimer = null;
+        let _aiDetailTimer = null;
+
+        function setupAiAutoTrigger(descEl, timerKey, triggerFn) {
+          descEl.addEventListener("input", () => {
+            // Don't restart timer when AI is populating results
+            if (_aiSuppressAutoTrigger) return;
+            // Clear any existing timer
+            if (timerKey === "create") {
+              clearTimeout(_aiCreateTimer);
+              _aiCreateTimer = null;
+            } else {
+              clearTimeout(_aiDetailTimer);
+              _aiDetailTimer = null;
+            }
+            // Only auto-trigger if there's meaningful content (>20 chars)
+            const text = descEl.value.trim();
+            if (text.length < 20) return;
+            // Set new timer — triggers after 5s of inactivity
+            const timer = setTimeout(() => {
+              // Check the field still has content and dialog is still open
+              if (descEl.value.trim().length >= 20 && descEl.offsetParent !== null) {
+                triggerFn();
+              }
+            }, 5000);
+            if (timerKey === "create") _aiCreateTimer = timer;
+            else _aiDetailTimer = timer;
+          });
+        }
+
+        // Auto-trigger for Create Modal description field
+        setupAiAutoTrigger($("#createDescription"), "create", () => {
+          const btn = $("#createAiCategorize");
+          if (btn.classList.contains("loading")) return; // already running
+          aiCategorize(
+            $("#createDescription"),
+            $("#createTitle"),
+            $("#createPriority"),
+            $("#createAssignee"),
+            $("#createDateDue"),
+            $("#createBotDispatch"),
+            $("#createRequiresCode"),
+            btn
+          );
+        });
+
+        // Auto-trigger for Detail Panel description field
+        setupAiAutoTrigger($("#detailDescription"), "detail", () => {
+          const btn = $("#detailAiCategorize");
+          if (btn.classList.contains("loading")) return; // already running
+          if (!descEditMode) return; // only in edit mode
+          aiCategorize(
+            $("#detailDescription"),
+            $("#detailTitle"),
+            $("#detailPriority"),
+            $("#detailAssignee"),
+            $("#detailDateDue"),
+            null,
+            null,
+            btn
           );
         });
 
@@ -17054,6 +17128,9 @@
           createModal.classList.remove("open");
           createModalDirty = false;
           if (createBlockerPickerInstance) createBlockerPickerInstance.reset();
+          // Clear AI auto-trigger timer
+          clearTimeout(_aiCreateTimer);
+          _aiCreateTimer = null;
         }
 
         function markCreateModalDirty() {
