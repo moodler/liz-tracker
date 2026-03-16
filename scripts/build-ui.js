@@ -59,7 +59,9 @@ if (!html.includes(MARKER)) {
   console.error(`Error: Marker "${MARKER}" not found in core.html`);
   process.exit(1);
 }
-html = html.replace(MARKER, pluginBlock);
+// Use a function replacement to avoid $$ being treated as a special pattern
+// (String.replace interprets $$ as a literal $ in the replacement string)
+html = html.replace(MARKER, () => pluginBlock);
 
 // Write combined output
 writeFileSync(outputFile, html);
