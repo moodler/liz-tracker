@@ -3087,8 +3087,18 @@
           flex-shrink: 0;
         }
         .detail-header .detail-actions {
-          width: 100%;
           gap: 6px;
+          margin-left: auto;
+        }
+        /* When no space toggle button, keep save/delete on line 1 */
+        .detail-header.no-space-toggle .detail-actions {
+          width: auto;
+        }
+        /* When space toggle is shown, force actions to line 2 right-aligned */
+        .detail-header:not(.no-space-toggle) .detail-actions {
+          width: 100%;
+          display: flex;
+          justify-content: flex-end;
         }
         .detail-body {
           padding: 14px;
@@ -4468,7 +4478,15 @@
         flex-shrink: 0;
       }
       html.is-ipad .detail-header .detail-actions {
+        margin-left: auto;
+      }
+      html.is-ipad .detail-header.no-space-toggle .detail-actions {
+        width: auto;
+      }
+      html.is-ipad .detail-header:not(.no-space-toggle) .detail-actions {
         width: 100%;
+        display: flex;
+        justify-content: flex-end;
       }
       html.is-ipad .detail-body { padding: 14px; }
       html.is-ipad .detail-row {
@@ -4497,6 +4515,8 @@
       }
       html.is-ipad .space-header .space-header-actions {
         width: 100%;
+        display: flex;
+        justify-content: flex-end;
       }
 
       /* ── iPad Bottom Navigation Bar ── */
@@ -8053,6 +8073,8 @@
         .space-header .space-header-actions {
           width: 100%;
           gap: 6px;
+          display: flex;
+          justify-content: flex-end;
         }
       }
 
@@ -15519,14 +15541,18 @@
           populateDetailSpaceType(item);
           // Space view toggle — show "Song View" button for non-standard space types
           const spaceViewBtn = $("#detailSpaceViewBtn");
+          const detailHeader = $(".detail-header");
           if (item.space_type && item.space_type !== "standard" && SPACE_TYPES[item.space_type]) {
             const spaceInfo = SPACE_TYPES[item.space_type];
             spaceViewBtn.innerHTML = `<span class="space-type-icon">${spaceInfo.icon}</span> ${esc(spaceInfo.label)} View`;
             spaceViewBtn.title = `Switch to ${spaceInfo.label.toLowerCase()} view`;
             spaceViewBtn.style.display = "inline-flex";
             spaceViewBtn.dataset.itemId = item.id;
+            detailHeader.classList.remove("no-space-toggle");
           } else {
             spaceViewBtn.style.display = "none";
+            // No space toggle — save/delete can stay on line 1 (more room)
+            detailHeader.classList.add("no-space-toggle");
           }
           detailSnapshot = snapshotDetail();
           $("#detailSave").disabled = true;
