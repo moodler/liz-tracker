@@ -40,12 +40,14 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/spaces/text.ts` | Parser (minimal — no routes/tools) |
 | `src/spaces/engagement.ts` | Parser, 6 API routes, 7 MCP tools |
 | `src/spaces/scheduled.ts` | Parser, sanitizer, 4 API routes, 4 MCP tools |
+| `src/spaces/travel.ts` | Parser, sanitizer, deep merge, 4 API routes, 4 MCP tools, cover image |
 | `src/ui/core.html` | Dashboard shell + space plugin registry + overlay shell |
 | `src/ui/spaces/standard.js` | Registry entry only (~15 lines) |
 | `src/ui/spaces/song.js` | Song UI renderer (~670 lines) |
 | `src/ui/spaces/text.js` | Text UI renderer + inline comments (~560 lines) |
 | `src/ui/spaces/engagement.js` | Engagement UI renderer (~680 lines) |
 | `src/ui/spaces/scheduled.js` | Scheduled UI renderer (~850 lines) |
+| `src/ui/spaces/travel.js` | Travel UI renderer — day-by-day timeline, gap detection, segment cards (~880 lines) |
 | `scripts/build-ui.js` | UI pre-compilation script (~60 lines, zero dependencies) |
 
 ## Development
@@ -304,6 +306,10 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `tracker_set_cover_image` | Set/replace cover image on a song or engagement item (base64 data) |
 | `tracker_set_cover_image_from_path` | Set/replace cover image from a local file path |
 | `tracker_remove_cover_image` | Remove cover image from a song or engagement item |
+| `tracker_update_travel_trip` | Update trip metadata (destination, purpose, travelers, default_timezone) on a travel item |
+| `tracker_add_travel_segment` | Add segments to a travel itinerary (auto-generates IDs, dedup by confirmation+provider) |
+| `tracker_update_travel_segment` | Update a travel segment by ID (deep merge for nested objects) |
+| `tracker_remove_travel_segment` | Remove travel segments by their IDs |
 
 ### Per-project setup
 
@@ -373,6 +379,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 | `text` | text lines (SVG) | Writing workspace — markdown editor + conversation for articles, blogs, long-form text |
 | `engagement` | briefcase (SVG) | Coordination workspace for contractors, services, and external engagements — structured dashboard (contact, quote, milestones, documents, comms log) + discussion sidebar. Uses `space_data` JSON for all structured content. |
 | `scheduled` | clock (SVG) | Scheduled task workspace — schedule config (frequency, time, days), live status panel (next/last run, run count), task instructions editor, TODO list, IGNORE list + run history sidebar. Used by the HARMONI project for recurring automated tasks. `space_data` stores a JSON string (see format below). |
+| `travel` | plane (SVG) | Trip planning workspace — day-by-day itinerary with timezone-aware segments (flights, lodging, transport, activities, restaurants, meetings, notes), gap detection, cover image support, and MCP tools for programmatic segment management. `space_data` stores trip metadata + segments array as JSON. |
 
 #### Scheduled Task `space_data` Format
 
@@ -469,6 +476,10 @@ These tools handle the GET→parse→modify→save cycle internally, so agents n
 - `PATCH /items/:id/engagement/settings` — update engagement settings (`{ gmail_query?, calendar_tag? }`)
 - `PUT /items/:id/cover` — set/replace cover image on song or engagement items (multipart/form-data or JSON with base64 `data`)
 - `DELETE /items/:id/cover` — remove cover image from song or engagement items
+- `PATCH /items/:id/travel/trip` — update travel trip metadata (`{ destination?, purpose?, travelers?, default_timezone?, notes? }`)
+- `POST /items/:id/travel/segments` — add travel segments (`{ segments: [...] }`)
+- `PATCH /items/:id/travel/segments` — update a travel segment by ID (`{ id: "seg_abc", ...fields }`) — deep merge for nested objects
+- `DELETE /items/:id/travel/segments` — remove travel segments (`{ ids: ["seg_abc", ...] }`)
 
 ### UI Sections
 
@@ -482,6 +493,7 @@ These tools handle the GET→parse→modify→save cycle internally, so agents n
 - `text.js` — Text space renderer (markdown editor, conversation, inline comments)
 - `engagement.js` — Engagement space renderer (contact card, quote/financial, milestones, documents, comms log + discussion sidebar)
 - `scheduled.js` — Scheduled task space renderer (schedule config, status panel, task instructions + run history sidebar)
+- `travel.js` — Travel space renderer (day-by-day timeline, segment cards, gap detection, add/edit forms)
 - `standard.js` — Registry entry only (standard items use the default detail panel)
 
 ### How It Works
