@@ -12796,6 +12796,14 @@
             spaceItemData = item;
             // Populate header
             $("#spaceKey").textContent = item.key || "";
+            // Update toggle button to show current view name (e.g. "Engagement View")
+            const spaceType_ = item.space_type || "standard";
+            const spaceInfo_ = SPACE_TYPES[spaceType_];
+            if (spaceInfo_) {
+              const toggleBtn = $("#spaceViewToggleBtn");
+              toggleBtn.innerHTML = `${spaceInfo_.icon} ${esc(spaceInfo_.label)} View`;
+              toggleBtn.title = "Switch to standard tracker view";
+            }
             // State select
             const stateSelect = $("#spaceStateSelect");
             stateSelect.innerHTML = "";
@@ -15648,13 +15656,13 @@
           populateDetailLink(item.link);
           // Space type selector
           populateDetailSpaceType(item);
-          // Space view toggle — show "Song View" button for non-standard space types
+          // Space view toggle — show current view label (button shows what you're looking at now)
           const spaceViewBtn = $("#detailSpaceViewBtn");
           const detailHeader = $(".detail-header");
           if (item.space_type && item.space_type !== "standard" && SPACE_TYPES[item.space_type]) {
-            const spaceInfo = SPACE_TYPES[item.space_type];
-            spaceViewBtn.innerHTML = `<span class="space-type-icon">${spaceInfo.icon}</span> ${esc(spaceInfo.label)} View`;
-            spaceViewBtn.title = `Switch to ${spaceInfo.label.toLowerCase()} view`;
+            const standardInfo = SPACE_TYPES["standard"];
+            spaceViewBtn.innerHTML = `<span class="space-type-icon">${standardInfo.icon}</span> Standard View`;
+            spaceViewBtn.title = `Switch to ${SPACE_TYPES[item.space_type].label.toLowerCase()} view`;
             spaceViewBtn.style.display = "inline-flex";
             spaceViewBtn.dataset.itemId = item.id;
             detailHeader.classList.remove("no-space-toggle");
