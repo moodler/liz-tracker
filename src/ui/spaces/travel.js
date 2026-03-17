@@ -830,8 +830,8 @@ function openTravelAddSeg(date, sd) {
     <div class="engagement-edit-row"><label>Timezone</label><input id="tsTz" value="${esc(tz)}" placeholder="Asia/Tokyo" /></div>
     <div class="engagement-edit-row"><label>Status</label><select id="tsStatus"><option value="confirmed">Confirmed</option><option value="pending" selected>Pending</option><option value="cancelled">Cancelled</option></select></div>
     <div style="display:flex;gap:8px;margin-top:10px;">
-      <button class="engagement-edit-btn" id="tsAdd" style="border-color:var(--highlight);color:var(--highlight);">Add</button>
-      <button class="engagement-edit-btn" id="tsCancel">Cancel</button>
+      <button type="button" class="engagement-edit-btn" id="tsAdd" style="border-color:var(--highlight);color:var(--highlight);">Add</button>
+      <button type="button" class="engagement-edit-btn" id="tsCancel">Cancel</button>
     </div></div>`;
   document.body.appendChild(m);
   m.querySelector(".travel-form-backdrop").addEventListener("click", () => m.remove());
@@ -953,13 +953,16 @@ function openTravelSegEdit(seg) {
     <div class="travel-form-title">${st.icon} Edit: ${esc(seg.title || st.label)}</div>
     ${fields}
     <div style="display:flex;gap:8px;margin-top:10px;">
-      <button class="engagement-edit-btn" id="teSave" style="border-color:var(--highlight);color:var(--highlight);">Save</button>
-      <button class="engagement-edit-btn" id="teCancel">Cancel</button>
+      <button type="button" class="engagement-edit-btn" id="teSave" style="border-color:var(--highlight);color:var(--highlight);">Save</button>
+      <button type="button" class="engagement-edit-btn" id="teCancel">Cancel</button>
     </div></div>`;
   document.body.appendChild(m);
-  m.querySelector(".travel-form-backdrop").addEventListener("click", () => m.remove());
-  m.querySelector("#teCancel").addEventListener("click", () => m.remove());
-  m.querySelector("#teSave").addEventListener("click", async () => {
+  m.querySelector(".travel-form-backdrop").onclick = () => m.remove();
+  m.querySelector("#teCancel").onclick = () => m.remove();
+  const saveBtn = m.querySelector("#teSave");
+  if (!saveBtn) { console.error("TRAVEL BUG: #teSave not found in modal DOM"); toast("Error: Save button not found in form", "error"); return; }
+  saveBtn.onclick = async function(e) {
+    e.preventDefault();
     try {
       const gv = id => (m.querySelector(`#${id}`) || {}).value || "";
       const gn = id => { const v = gv(id); return v ? Number(v) : null; };
@@ -980,7 +983,7 @@ function openTravelSegEdit(seg) {
         tags: tagsStr ? tagsStr.split(",").map(s => s.trim()).filter(Boolean) : [],
         cost: costAmt ? { amount: costAmt, currency: gv("teCostCur") || "AUD" } : null,
       };
-      switch (seg.type) {
+      switch (gv("teType") || seg.type) {
         case "flight":
           changes.flight_number = gv("teFlightNum");
           changes.departure = { datetime: gdt("teDepDt"), timezone: gv("teDepTz"), location: gv("teDepLoc"), detail: gv("teDepDet") };
@@ -1024,8 +1027,8 @@ function openTravelSegEdit(seg) {
       spaceItemData = item;
       renderSpaceTravel(item);
       toast("Segment updated");
-    } catch (e) { toast("Error: " + e.message, "error"); }
-  });
+    } catch (e) { toast("Error saving: " + e.message, "error"); }
+  };
 }
 
 // ── Helpers ──
