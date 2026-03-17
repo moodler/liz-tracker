@@ -162,14 +162,350 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
   return target;
 }
 
+// ── Coercion: Map Common Aliases and Fix Malformed Data ──
+// Agents (especially Harmoni) sometimes bypass the MCP tools and write raw space_data
+// with wrong field names, flat date strings instead of TimePoint objects, etc.
+// This coercion layer gracefully handles those cases.
+
+/** Map of type aliases to canonical SEGMENT_TYPES values. */
+const TYPE_ALIASES: Record<string, SegmentType> = {
+  layover: "activity",
+  stopover: "activity",
+  transfer: "transport",
+  taxi: "transport",
+  shuttle: "transport",
+  train: "transport",
+  bus: "transport",
+  ferry: "transport",
+  car_rental: "transport",
+  rideshare: "transport",
+  hotel: "lodging",
+  airbnb: "lodging",
+  hostel: "lodging",
+  resort: "lodging",
+  accommodation: "lodging",
+  tour: "activity",
+  excursion: "activity",
+  museum: "activity",
+  show: "activity",
+  concert: "activity",
+  sightseeing: "activity",
+  dining: "restaurant",
+  meal: "restaurant",
+  lunch: "restaurant",
+  dinner: "restaurant",
+  breakfast: "restaurant",
+  reminder: "note",
+  info: "note",
+  visa: "note",
+};
+
+/** Map of status aliases to canonical SEGMENT_STATUSES values. */
+const STATUS_ALIASES: Record<string, SegmentStatus> = {
+  booked: "confirmed",
+  reserved: "confirmed",
+  active: "confirmed",
+  tentative: "pending",
+  unconfirmed: "pending",
+  waitlisted: "pending",
+  canceled: "cancelled",
+};
+
+/**
+ * Parse an ISO datetime string (possibly with timezone offset) into a TimePoint.
+ * Handles formats like:
+ *   "2026-03-22T06:40:00+08:00" → { datetime: "2026-03-22T06:40", timezone: "Etc/GMT-8" }
+ *   "2026-03-22T06:40" → { datetime: "2026-03-22T06:40", timezone: defaultTz }
+ *   "2026-03-22" → { datetime: "2026-03-22T00:00", timezone: defaultTz }
+ */
+function parseIsoToTimePoint(value: unknown, defaultTz: string): TimePoint | null {
+  if (!value) return null;
+  // Already a TimePoint object
+  if (typeof value === "object" && value !== null) {
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.datetime === "string" && typeof obj.timezone === "string") {
+      return value as TimePoint;
+    }
+  }
+  if (typeof value !== "string") return null;
+  const s = value.trim();
+  if (!s) return null;
+
+  // Try to parse offset from ISO string like "2026-03-22T06:40:00+08:00"
+  const offsetMatch = s.match(/([+-])(\d{2}):?(\d{2})$/);
+  let datetime = s;
+  let timezone = defaultTz;
+
+  if (offsetMatch) {
+    // Strip offset from datetime, keep just the local time portion
+    datetime = s.replace(/[+-]\d{2}:?\d{2}$/, "");
+    // Convert offset to Etc/GMT timezone (note: Etc/GMT sign is inverted)
+    const sign = offsetMatch[1];
+    const hours = parseInt(offsetMatch[2], 10);
+    const minutes = parseInt(offsetMatch[3], 10);
+    if (minutes === 0) {
+      // Etc/GMT+N means UTC-N (inverted!)
+      timezone = `Etc/GMT${sign === "+" ? "-" : "+"}${hours}`;
+    } else {
+      // For non-whole-hour offsets, we can't use Etc/GMT — keep default
+      timezone = defaultTz;
+    }
+  }
+
+  // Strip seconds if present ("2026-03-22T06:40:00" → "2026-03-22T06:40")
+  datetime = datetime.replace(/:\d{2}(\.\d+)?$/, "");
+
+  // If just a date "2026-03-22", add a default time
+  if (/^\d{4}-\d{2}-\d{2}$/.test(datetime)) {
+    datetime = datetime + "T00:00";
+  }
+
+  // Validate the format
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(datetime)) {
+    return null;
+  }
+
+  return { datetime, timezone };
+}
+
+/** Parse a value into a LocationTimePoint, extracting location if present. */
+function parseIsoToLocationTimePoint(value: unknown, defaultTz: string, locationHint?: string): LocationTimePoint | null {
+  // Already a LocationTimePoint object
+  if (typeof value === "object" && value !== null) {
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.datetime === "string" && typeof obj.timezone === "string") {
+      return {
+        datetime: String(obj.datetime),
+        timezone: String(obj.timezone),
+        location: String(obj.location || locationHint || ""),
+        detail: obj.detail ? String(obj.detail) : undefined,
+      };
+    }
+  }
+  const tp = parseIsoToTimePoint(value, defaultTz);
+  if (!tp) return null;
+  return { ...tp, location: locationHint || "" };
+}
+
+/**
+ * Coerce a malformed segment into the correct structure.
+ * Maps common field aliases and converts flat strings to TimePoint objects.
+ * This is the key resilience layer — it handles data written by agents
+ * that bypassed the MCP tools and wrote raw space_data.
+ */
+function coerceSegment(seg: Record<string, unknown>, tripDefaultTz: string): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...seg };
+  const defaultTz = tripDefaultTz || "UTC";
+
+  // Map field aliases for common base fields
+  if (!result.provider && result.carrier) { result.provider = result.carrier; delete result.carrier; }
+  if (!result.provider && result.airline) { result.provider = result.airline; delete result.airline; }
+  if (!result.provider && result.operator) { result.provider = result.operator; delete result.operator; }
+  if (!result.confirmation && result.booking_ref) { result.confirmation = result.booking_ref; delete result.booking_ref; }
+  if (!result.title && result.restaurant_name) { result.title = result.restaurant_name; delete result.restaurant_name; }
+  if (!result.title && result.property_name) { result.title = result.property_name; delete result.property_name; }
+  if (!result.notes && typeof result.text === "string") { result.notes = result.text; delete result.text; }
+
+  // Resolve type aliases
+  const rawType = String(result.type || "note").toLowerCase();
+  if (!SEGMENT_TYPES.includes(rawType as SegmentType)) {
+    result.type = TYPE_ALIASES[rawType] || "note";
+  }
+
+  // Resolve status aliases
+  const rawStatus = String(result.status || "pending").toLowerCase();
+  if (!SEGMENT_STATUSES.includes(rawStatus as SegmentStatus)) {
+    result.status = STATUS_ALIASES[rawStatus] || "pending";
+  }
+
+  const type = String(result.type);
+
+  // ── Flight-specific coercion ──
+  if (type === "flight") {
+    // Map flat departure/arrival fields to LocationTimePoint objects
+    if (!isTimePointObject(result.departure)) {
+      const dt = result.departure_time || result.depart_time || result.departure_datetime;
+      const loc = result.departure_location || result.depart_location || result.from_airport || result.from;
+      const detail = result.departure_terminal || result.departure_gate || result.departure_detail;
+      const tp = parseIsoToLocationTimePoint(dt, defaultTz, extractLocationCode(loc));
+      if (tp) {
+        if (detail) tp.detail = String(detail);
+        result.departure = tp;
+      }
+      // Clean up flat fields
+      for (const k of ["departure_time", "depart_time", "departure_datetime", "departure_location",
+        "depart_location", "from_airport", "from", "departure_terminal", "departure_gate", "departure_detail"]) {
+        delete result[k];
+      }
+    }
+    if (!isTimePointObject(result.arrival)) {
+      const dt = result.arrival_time || result.arrive_time || result.arrival_datetime;
+      const loc = result.arrival_location || result.arrive_location || result.to_airport || result.to;
+      const detail = result.arrival_terminal || result.arrival_gate || result.arrival_detail;
+      const tp = parseIsoToLocationTimePoint(dt, defaultTz, extractLocationCode(loc));
+      if (tp) {
+        if (detail) tp.detail = String(detail);
+        result.arrival = tp;
+      }
+      for (const k of ["arrival_time", "arrive_time", "arrival_datetime", "arrival_location",
+        "arrive_location", "to_airport", "to", "arrival_terminal", "arrival_gate", "arrival_detail"]) {
+        delete result[k];
+      }
+    }
+    // Map flight_number from flight alias
+    if (!result.flight_number && result.flight) { result.flight_number = result.flight; delete result.flight; }
+  }
+
+  // ── Lodging-specific coercion ──
+  if (type === "lodging") {
+    if (!isTimePointObject(result.check_in)) {
+      const tp = parseIsoToTimePoint(result.check_in || result.checkin || result.check_in_date, defaultTz);
+      if (tp) result.check_in = tp;
+      for (const k of ["checkin", "check_in_date"]) delete result[k];
+    }
+    if (!isTimePointObject(result.check_out)) {
+      const tp = parseIsoToTimePoint(result.check_out || result.checkout || result.check_out_date, defaultTz);
+      if (tp) result.check_out = tp;
+      for (const k of ["checkout", "check_out_date"]) delete result[k];
+    }
+  }
+
+  // ── Transport-specific coercion ──
+  if (type === "transport") {
+    if (!isTimePointObject(result.origin)) {
+      const dt = result.departure_time || result.origin_time || result.origin_datetime;
+      const loc = result.departure_location || result.origin_location || result.from;
+      const tp = parseIsoToLocationTimePoint(dt, defaultTz, extractLocationCode(loc));
+      if (tp) result.origin = tp;
+      for (const k of ["departure_time", "origin_time", "origin_datetime", "departure_location",
+        "origin_location", "from"]) delete result[k];
+    }
+    if (!isTimePointObject(result.destination)) {
+      const dt = result.arrival_time || result.destination_time || result.destination_datetime;
+      const loc = result.arrival_location || result.destination_location || result.to;
+      const tp = parseIsoToLocationTimePoint(dt, defaultTz, extractLocationCode(loc));
+      if (tp) result.destination = tp;
+      for (const k of ["arrival_time", "destination_time", "destination_datetime", "arrival_location",
+        "destination_location", "to"]) delete result[k];
+    }
+    // Map transport subtype aliases to transport_type field
+    if (!result.transport_type && TYPE_ALIASES[rawType] === "transport" && rawType !== "transport") {
+      result.transport_type = rawType;
+    }
+  }
+
+  // ── Activity-specific coercion ──
+  if (type === "activity") {
+    if (!isTimePointObject(result.start)) {
+      let dt = result.start_time || result.start_datetime;
+      const dateFallback = result.date;
+      // Handle "HH:MM" time + separate "YYYY-MM-DD" date
+      if (typeof dt === "string" && /^\d{2}:\d{2}$/.test(dt as string) && typeof dateFallback === "string") {
+        dt = dateFallback + "T" + dt;
+      }
+      const tp = parseIsoToTimePoint(dt || dateFallback, defaultTz);
+      if (tp) result.start = tp;
+      for (const k of ["start_time", "start_datetime"]) delete result[k];
+    }
+    if (!isTimePointObject(result.end)) {
+      let dt = result.end_time || result.end_datetime;
+      const dateFallback = result.date;
+      // Handle "HH:MM" time + separate "YYYY-MM-DD" date
+      if (typeof dt === "string" && /^\d{2}:\d{2}$/.test(dt as string) && typeof dateFallback === "string") {
+        dt = dateFallback + "T" + dt;
+      }
+      const tp = parseIsoToTimePoint(dt, defaultTz);
+      if (tp) result.end = tp;
+      for (const k of ["end_time", "end_datetime"]) delete result[k];
+    }
+    // Map activity subtype aliases
+    if (!result.activity_type && TYPE_ALIASES[rawType] === "activity" && rawType !== "activity") {
+      result.activity_type = rawType;
+    }
+  }
+
+  // ── Restaurant-specific coercion ──
+  if (type === "restaurant") {
+    if (!isTimePointObject(result.reservation)) {
+      const dt = result.reservation_time || result.reservation_datetime || result.date;
+      const tp = parseIsoToTimePoint(dt, defaultTz);
+      if (tp) result.reservation = tp;
+      for (const k of ["reservation_time", "reservation_datetime"]) delete result[k];
+    }
+  }
+
+  // ── Meeting-specific coercion ──
+  if (type === "meeting") {
+    if (!isTimePointObject(result.start)) {
+      let dt = result.start_time || result.start_datetime;
+      const dateFallback = result.date;
+      if (typeof dt === "string" && /^\d{2}:\d{2}$/.test(dt as string) && typeof dateFallback === "string") {
+        dt = dateFallback + "T" + dt;
+      }
+      const tp = parseIsoToTimePoint(dt || dateFallback, defaultTz);
+      if (tp) result.start = tp;
+      for (const k of ["start_time", "start_datetime"]) delete result[k];
+    }
+    if (!isTimePointObject(result.end)) {
+      let dt = result.end_time || result.end_datetime;
+      const dateFallback = result.date;
+      if (typeof dt === "string" && /^\d{2}:\d{2}$/.test(dt as string) && typeof dateFallback === "string") {
+        dt = dateFallback + "T" + dt;
+      }
+      const tp = parseIsoToTimePoint(dt, defaultTz);
+      if (tp) result.end = tp;
+      for (const k of ["end_time", "end_datetime"]) delete result[k];
+    }
+  }
+
+  // ── Note-specific coercion ──
+  if (type === "note") {
+    if (!isTimePointObject(result.datetime)) {
+      const dt = result.date || result.date_time;
+      const tp = parseIsoToTimePoint(dt, defaultTz);
+      if (tp) result.datetime = tp;
+      for (const k of ["date_time"]) delete result[k];
+    }
+  }
+
+  // Clean up the generic "date" field if it was consumed by coercion above
+  // Only delete if it's a simple date string (not an object) — type-specific handlers may have used it
+  if (typeof result.date === "string" && result.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    delete result.date;
+  }
+
+  return result;
+}
+
+/** Check if a value is already a TimePoint object (has datetime + timezone strings). */
+function isTimePointObject(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const obj = value as Record<string, unknown>;
+  return typeof obj.datetime === "string" && typeof obj.timezone === "string";
+}
+
+/** Extract a short location code from a string like "Perth (PER)" or "Singapore (SIN T3)". */
+function extractLocationCode(value: unknown): string {
+  if (!value || typeof value !== "string") return "";
+  // Try to find an IATA-like code in parentheses: "Perth (PER)" → "PER"
+  const match = String(value).match(/\((\w{3})\b/);
+  if (match) return match[1];
+  // Otherwise just return the raw string (truncated for display)
+  return String(value).slice(0, 40);
+}
+
 /** Parse the space_data JSON from a travel work item. */
 function parseTravelSpaceData(raw: string | null): TravelSpaceData {
   if (!raw) return { trip: { ...TRIP_DEFAULTS }, segments: [] };
   try {
     const parsed = JSON.parse(raw);
+    const trip = { ...TRIP_DEFAULTS, ...(parsed.trip || {}) };
+    const defaultTz = trip.default_timezone || "UTC";
     return {
-      trip: { ...TRIP_DEFAULTS, ...(parsed.trip || {}) },
-      segments: Array.isArray(parsed.segments) ? parsed.segments.map(normalizeSegment) : [],
+      trip,
+      segments: Array.isArray(parsed.segments)
+        ? parsed.segments.map((s: Record<string, unknown>) => normalizeSegment(coerceSegment(s, defaultTz)))
+        : [],
     };
   } catch {
     return { trip: { ...TRIP_DEFAULTS }, segments: [] };
@@ -215,7 +551,12 @@ function normalizeSegment(seg: Record<string, unknown>): TravelSegment {
   return base;
 }
 
-/** Sanitize space_data JSON for travel items. */
+/**
+ * Sanitize space_data JSON for travel items.
+ * This runs on EVERY write to space_data (via tracker_update_item, API PATCH, etc.).
+ * It performs full coercion + normalization to fix malformed data from agents that
+ * bypassed the dedicated MCP tools.
+ */
 function sanitizeTravelSpaceData(raw: string): string {
   try {
     const parsed = JSON.parse(raw);
@@ -229,20 +570,16 @@ function sanitizeTravelSpaceData(raw: string): string {
       parsed.trip.travelers = [];
     }
 
-    // Ensure segments is an array with valid IDs and types
+    const defaultTz = parsed.trip.default_timezone || "UTC";
+
+    // Ensure segments is an array, then fully coerce + normalize each one
     if (!Array.isArray(parsed.segments)) {
       parsed.segments = [];
     }
     parsed.segments = parsed.segments.map((seg: Record<string, unknown>) => {
-      if (!seg.id || typeof seg.id !== "string") seg.id = generateSegmentId();
-      if (!SEGMENT_TYPES.includes(seg.type as SegmentType)) seg.type = "note";
-      if (!SEGMENT_STATUSES.includes(seg.status as SegmentStatus)) seg.status = "pending";
-      if (seg.tags && !Array.isArray(seg.tags)) seg.tags = [];
-      if (seg.cost && typeof seg.cost === "object") {
-        const cost = seg.cost as Record<string, unknown>;
-        seg.cost = { amount: Number(cost.amount) || 0, currency: String(cost.currency || "AUD") };
-      }
-      return seg;
+      // Full coercion pipeline: map aliases → fix datetime formats → normalize
+      const coerced = coerceSegment(seg, defaultTz);
+      return normalizeSegment(coerced);
     });
 
     return JSON.stringify(parsed);
@@ -319,25 +656,28 @@ const travelApiRoutes: SpaceApiRoute[] = [
       }
 
       const spaceData = parseTravelSpaceData(item.space_data);
+      const defaultTz = spaceData.trip.default_timezone || "UTC";
       const added: TravelSegment[] = [];
 
       for (const rawSeg of body.segments as Record<string, unknown>[]) {
+        // Coerce malformed data before processing
+        const coerced = coerceSegment(rawSeg, defaultTz);
         // Dedup: check for existing segment with same confirmation + provider
-        const conf = String(rawSeg.confirmation || "");
-        const prov = String(rawSeg.provider || "");
+        const conf = String(coerced.confirmation || "");
+        const prov = String(coerced.provider || "");
         if (conf && prov) {
           const existing = spaceData.segments.find(
             s => s.confirmation === conf && s.provider === prov
           );
           if (existing) {
             // Update existing instead of adding duplicate
-            deepMerge(existing as unknown as Record<string, unknown>, rawSeg);
+            deepMerge(existing as unknown as Record<string, unknown>, coerced);
             added.push(existing);
             continue;
           }
         }
 
-        const seg = normalizeSegment(rawSeg);
+        const seg = normalizeSegment(coerced);
         if (!seg.id || seg.id === SEGMENT_BASE_DEFAULTS.id) seg.id = generateSegmentId();
         spaceData.segments.push(seg);
         added.push(seg);
@@ -469,31 +809,36 @@ MEETING: { type: "meeting", title: "Client meeting", location: "Tokyo Office", s
 
 NOTE: { type: "note", title: "Visa reminder", datetime: { datetime: "2026-04-14T09:00", timezone: "Australia/Sydney" }, notes: "Check visa requirements" }
 
-Common fields on ALL segments: type, title, status (confirmed/pending/cancelled), confirmation, provider, provider_url, cost ({amount, currency}), notes, address, location, tags ([]), image_url, source_email.`,
+Common fields on ALL segments: type, title, status (confirmed/pending/cancelled), confirmation, provider, provider_url, cost ({amount, currency}), notes, address, location, tags ([]), image_url, source_email.
+
+RESILIENCE: The tool auto-corrects common mistakes: "carrier"→"provider", "booking_ref"→"confirmation", "booked"→"confirmed", "layover"→"activity". ISO datetime strings like "2026-03-22T06:40:00+08:00" are parsed into TimePoint format. However, using the correct format above is strongly preferred.`,
     schema: {
       item_id: z.string().describe("Work item ID or display key (e.g. \"MARTIN-96\")"),
       segments: z.array(z.record(z.unknown())).describe("Array of segment objects. Each must have 'type' (flight/lodging/transport/activity/restaurant/meeting/note) and 'title'. Datetimes use { datetime: \"YYYY-MM-DDTHH:MM\", timezone: \"IANA/Timezone\" } format. Flights need departure/arrival as { datetime, timezone, location, detail }. Lodging needs check_in/check_out as { datetime, timezone }. Activities need start (and optionally end) as { datetime, timezone }. See tool description for full examples."),
     },
     handler: async (args, item) => {
       const data = parseTravelSpaceData(item.space_data);
+      const defaultTz = data.trip.default_timezone || "UTC";
       const rawSegments = args.segments as Record<string, unknown>[];
       const added: string[] = [];
 
       for (const rawSeg of rawSegments) {
-        const conf = String(rawSeg.confirmation || "");
-        const prov = String(rawSeg.provider || "");
+        // Coerce malformed data before processing
+        const coerced = coerceSegment(rawSeg, defaultTz);
+        const conf = String(coerced.confirmation || "");
+        const prov = String(coerced.provider || "");
         if (conf && prov) {
           const existing = data.segments.find(
             s => s.confirmation === conf && s.provider === prov
           );
           if (existing) {
-            deepMerge(existing as unknown as Record<string, unknown>, rawSeg);
+            deepMerge(existing as unknown as Record<string, unknown>, coerced);
             added.push(`Updated: ${existing.title} (dedup)`);
             continue;
           }
         }
 
-        const seg = normalizeSegment(rawSeg);
+        const seg = normalizeSegment(coerced);
         if (!seg.id) seg.id = generateSegmentId();
         data.segments.push(seg);
         added.push(`Added: ${seg.title}`);

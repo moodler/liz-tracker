@@ -22,11 +22,185 @@ function parseTravelData(item) {
   if (!item.space_data) return defaults;
   try {
     const parsed = typeof item.space_data === "string" ? JSON.parse(item.space_data) : item.space_data;
+    const trip = { ...defaults.trip, ...(parsed.trip || {}) };
+    const defaultTz = trip.default_timezone || "UTC";
     return {
-      trip: { ...defaults.trip, ...(parsed.trip || {}) },
-      segments: Array.isArray(parsed.segments) ? parsed.segments : [],
+      trip,
+      segments: Array.isArray(parsed.segments)
+        ? parsed.segments.map(s => coerceTravelSegment(s, defaultTz))
+        : [],
     };
   } catch { return defaults; }
+}
+
+/**
+ * Client-side coercion: fix malformed segment data written by agents that bypassed MCP tools.
+ * Maps common field aliases and converts flat date strings to TimePoint objects.
+ */
+function coerceTravelSegment(seg, defaultTz) {
+  const r = { ...seg };
+  // Field aliases
+  if (!r.provider && r.carrier) { r.provider = r.carrier; delete r.carrier; }
+  if (!r.provider && r.airline) { r.provider = r.airline; delete r.airline; }
+  if (!r.provider && r.operator) { r.provider = r.operator; delete r.operator; }
+  if (!r.confirmation && r.booking_ref) { r.confirmation = r.booking_ref; delete r.booking_ref; }
+  if (!r.notes && typeof r.text === "string") { r.notes = r.text; delete r.text; }
+
+  // Type aliases
+  const TYPE_MAP = { layover: "activity", stopover: "activity", transfer: "transport", hotel: "lodging", accommodation: "lodging", dining: "restaurant", meal: "restaurant", reminder: "note", info: "note" };
+  const VALID_TYPES = ["flight", "lodging", "transport", "activity", "restaurant", "meeting", "note"];
+  if (r.type && !VALID_TYPES.includes(r.type)) r.type = TYPE_MAP[r.type] || "note";
+
+  // Status aliases
+  const STATUS_MAP = { booked: "confirmed", reserved: "confirmed", active: "confirmed", tentative: "pending", canceled: "cancelled" };
+  const VALID_STATUSES = ["confirmed", "pending", "cancelled"];
+  if (r.status && !VALID_STATUSES.includes(r.status)) r.status = STATUS_MAP[r.status] || "pending";
+
+  // Ensure ID
+  if (!r.id) r.id = travelSegId();
+
+  const _parseIso = (val) => {
+    if (!val) return null;
+    if (typeof val === "object" && val.datetime && val.timezone) return val;
+    if (typeof val !== "string") return null;
+    let dt = val.trim(), tz = defaultTz;
+    const offMatch = dt.match(/([+-])(\d{2}):?(\d{2})$/);
+    if (offMatch) {
+      dt = dt.replace(/[+-]\d{2}:?\d{2}$/, "");
+      const h = parseInt(offMatch[2], 10);
+      if (parseInt(offMatch[3], 10) === 0) tz = `Etc/GMT${offMatch[1] === "+" ? "-" : "+"}${h}`;
+    }
+    dt = dt.replace(/:\d{2}(\.\d+)?$/, "");
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dt)) dt += "T00:00";
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dt)) return null;
+    return { datetime: dt, timezone: tz };
+  };
+
+  const _parseLtp = (val, locHint) => {
+    if (typeof val === "object" && val !== null && val.datetime && val.timezone) {
+      return { datetime: val.datetime, timezone: val.timezone, location: val.location || locHint || "", detail: val.detail };
+    }
+    const tp = _parseIso(val);
+    if (!tp) return null;
+    return { ...tp, location: locHint || "" };
+  };
+
+  const _extractCode = (v) => {
+    if (!v || typeof v !== "string") return "";
+    const m = v.match(/\((\w{3})\b/);
+    return m ? m[1] : v.slice(0, 40);
+  };
+
+  // Flight coercion
+  if (r.type === "flight") {
+    if (!r.departure || typeof r.departure !== "object" || !r.departure.datetime) {
+      const dt = r.departure_time || r.depart_time || r.departure_datetime;
+      const loc = r.departure_location || r.depart_location || r.from;
+      const tp = _parseLtp(dt, _extractCode(loc));
+      if (tp) { if (r.departure_terminal) tp.detail = r.departure_terminal; r.departure = tp; }
+    }
+    if (!r.arrival || typeof r.arrival !== "object" || !r.arrival.datetime) {
+      const dt = r.arrival_time || r.arrive_time || r.arrival_datetime;
+      const loc = r.arrival_location || r.arrive_location || r.to;
+      const tp = _parseLtp(dt, _extractCode(loc));
+      if (tp) { if (r.arrival_terminal) tp.detail = r.arrival_terminal; r.arrival = tp; }
+    }
+  }
+
+  // Lodging coercion
+  if (r.type === "lodging") {
+    if (!r.check_in || typeof r.check_in !== "object" || !r.check_in.datetime) {
+      const tp = _parseIso(r.check_in || r.checkin || r.check_in_date);
+      if (tp) r.check_in = tp;
+    }
+    if (!r.check_out || typeof r.check_out !== "object" || !r.check_out.datetime) {
+      const tp = _parseIso(r.check_out || r.checkout || r.check_out_date);
+      if (tp) r.check_out = tp;
+    }
+  }
+
+  // Transport coercion
+  if (r.type === "transport") {
+    if (!r.origin || typeof r.origin !== "object" || !r.origin.datetime) {
+      const dt = r.departure_time || r.origin_time;
+      const loc = r.departure_location || r.origin_location || r.from;
+      const tp = _parseLtp(dt, _extractCode(loc));
+      if (tp) r.origin = tp;
+    }
+    if (!r.destination || typeof r.destination !== "object" || !r.destination.datetime) {
+      const dt = r.arrival_time || r.destination_time;
+      const loc = r.arrival_location || r.destination_location || r.to;
+      const tp = _parseLtp(dt, _extractCode(loc));
+      if (tp) r.destination = tp;
+    }
+  }
+
+  // Activity coercion
+  if (r.type === "activity") {
+    if (!r.start || typeof r.start !== "object" || !r.start.datetime) {
+      let dt = r.start_time || r.start_datetime;
+      // Handle "HH:MM" time + separate "YYYY-MM-DD" date
+      if (typeof dt === "string" && /^\d{2}:\d{2}$/.test(dt) && typeof r.date === "string") {
+        dt = r.date + "T" + dt;
+      }
+      if (!dt) dt = r.date;
+      const tp = _parseIso(dt);
+      if (tp) r.start = tp;
+    }
+    if (!r.end || typeof r.end !== "object" || !r.end.datetime) {
+      let dt = r.end_time || r.end_datetime;
+      // Handle "HH:MM" time + separate "YYYY-MM-DD" date
+      if (typeof dt === "string" && /^\d{2}:\d{2}$/.test(dt) && typeof r.date === "string") {
+        dt = r.date + "T" + dt;
+      }
+      const tp = _parseIso(dt);
+      if (tp) r.end = tp;
+    }
+  }
+
+  // Restaurant coercion
+  if (r.type === "restaurant") {
+    if (!r.reservation || typeof r.reservation !== "object" || !r.reservation.datetime) {
+      let dt = r.reservation_time;
+      if (typeof dt === "string" && /^\d{2}:\d{2}$/.test(dt) && typeof r.date === "string") {
+        dt = r.date + "T" + dt;
+      }
+      if (!dt) dt = r.date;
+      const tp = _parseIso(dt);
+      if (tp) r.reservation = tp;
+    }
+  }
+
+  // Meeting coercion
+  if (r.type === "meeting") {
+    if (!r.start || typeof r.start !== "object" || !r.start.datetime) {
+      let dt = r.start_time;
+      if (typeof dt === "string" && /^\d{2}:\d{2}$/.test(dt) && typeof r.date === "string") {
+        dt = r.date + "T" + dt;
+      }
+      if (!dt) dt = r.date;
+      const tp = _parseIso(dt);
+      if (tp) r.start = tp;
+    }
+    if (!r.end || typeof r.end !== "object" || !r.end.datetime) {
+      let dt = r.end_time;
+      if (typeof dt === "string" && /^\d{2}:\d{2}$/.test(dt) && typeof r.date === "string") {
+        dt = r.date + "T" + dt;
+      }
+      const tp = _parseIso(dt);
+      if (tp) r.end = tp;
+    }
+  }
+
+  // Note coercion
+  if (r.type === "note") {
+    if (!r.datetime || typeof r.datetime !== "object" || !r.datetime.datetime) {
+      const tp = _parseIso(r.date || r.date_time);
+      if (tp) r.datetime = tp;
+    }
+  }
+
+  return r;
 }
 
 function travelSegId() {
