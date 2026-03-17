@@ -145,6 +145,25 @@ function generateSegmentId(): string {
   return "seg_" + crypto.randomBytes(6).toString("hex");
 }
 
+/** Build the composite dedup key for a segment.
+ *  Flights include flight_number, lodging/transport include title,
+ *  all others use confirmation+provider only.
+ *  Returns null if confirmation or provider is missing (no dedup). */
+function dedupKey(seg: Record<string, unknown>): string | null {
+  const conf = String(seg.confirmation || "");
+  const prov = String(seg.provider || "");
+  if (!conf || !prov) return null;
+
+  const type = String(seg.type || "");
+  let extra = "";
+  if (type === "flight") {
+    extra = String(seg.flight_number || "");
+  } else if (type === "lodging" || type === "transport") {
+    extra = String(seg.title || "");
+  }
+  return extra ? `${conf}\0${prov}\0${extra}` : `${conf}\0${prov}`;
+}
+
 /** Deep merge source into target. Objects are merged recursively; arrays and primitives are replaced. */
 function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
   for (const key of Object.keys(source)) {
@@ -662,12 +681,12 @@ const travelApiRoutes: SpaceApiRoute[] = [
       for (const rawSeg of body.segments as Record<string, unknown>[]) {
         // Coerce malformed data before processing
         const coerced = coerceSegment(rawSeg, defaultTz);
-        // Dedup: check for existing segment with same confirmation + provider
-        const conf = String(coerced.confirmation || "");
-        const prov = String(coerced.provider || "");
-        if (conf && prov) {
+        // Dedup: check for existing segment with same composite key
+        // (confirmation+provider, plus flight_number for flights, title for lodging/transport)
+        const newKey = dedupKey(coerced);
+        if (newKey) {
           const existing = spaceData.segments.find(
-            s => s.confirmation === conf && s.provider === prov
+            s => dedupKey(s as unknown as Record<string, unknown>) === newKey
           );
           if (existing) {
             // Update existing instead of adding duplicate
@@ -789,7 +808,7 @@ const travelMcpTools: SpaceMcpTool[] = [
   },
   {
     name: "tracker_add_travel_segment",
-    description: `Add one or more segments to a travel itinerary. Auto-generates segment IDs. Deduplicates by confirmation+provider (updates existing if found).
+    description: `Add one or more segments to a travel itinerary. Auto-generates segment IDs. Deduplicates by confirmation+provider, with type-specific disambiguation: flights also match on flight_number, lodging/transport also match on title. Falls back to confirmation+provider only when the extra field is absent.
 
 IMPORTANT: Datetimes must use the TimePoint/LocationTimePoint format — NOT flat strings.
 
@@ -825,11 +844,11 @@ RESILIENCE: The tool auto-corrects common mistakes: "carrier"→"provider", "boo
       for (const rawSeg of rawSegments) {
         // Coerce malformed data before processing
         const coerced = coerceSegment(rawSeg, defaultTz);
-        const conf = String(coerced.confirmation || "");
-        const prov = String(coerced.provider || "");
-        if (conf && prov) {
+        // Dedup: type-aware composite key
+        const newKey = dedupKey(coerced);
+        if (newKey) {
           const existing = data.segments.find(
-            s => s.confirmation === conf && s.provider === prov
+            s => dedupKey(s as unknown as Record<string, unknown>) === newKey
           );
           if (existing) {
             deepMerge(existing as unknown as Record<string, unknown>, coerced);
@@ -998,7 +1017,13 @@ Every datetime is stored as **local time + IANA timezone**, never bare UTC. This
 
 ### Deduplication
 
-When adding segments, the system deduplicates by \`confirmation\` + \`provider\`. If a segment with the same confirmation number and provider already exists, it's **updated** instead of duplicated. This is important when parsing forwarded booking emails — the same booking may be processed multiple times.
+When adding segments, the system deduplicates using a type-aware composite key:
+- **Flights:** \`confirmation\` + \`provider\` + \`flight_number\` — so multiple flight legs under one PNR are stored separately
+- **Lodging:** \`confirmation\` + \`provider\` + \`title\` — so multiple properties under one booking are stored separately
+- **Transport:** \`confirmation\` + \`provider\` + \`title\` — so multiple legs under one booking are stored separately
+- **All other types:** \`confirmation\` + \`provider\` only
+
+If the type-specific field (flight_number/title) is absent, it falls back to \`confirmation\` + \`provider\` only. When a match is found, the existing segment is **updated** (deep merged) instead of duplicated. This is important when parsing forwarded booking emails — the same booking may be processed multiple times.
 
 ### Resilience / Auto-Coercion
 
@@ -1017,7 +1042,7 @@ However, using the correct format is strongly preferred.
 | Tool | Description |
 | --- | --- |
 | \`tracker_update_travel_trip\` | Update trip metadata — pass \`destination\`, \`purpose\`, \`travelers\` (array), \`default_timezone\`, \`notes\`. Only provided fields are updated. |
-| \`tracker_add_travel_segment\` | Add segments — pass \`segments\` array. Each needs \`type\` and \`title\` at minimum. Auto-generates IDs. Deduplicates by \`confirmation\` + \`provider\`. |
+| \`tracker_add_travel_segment\` | Add segments — pass \`segments\` array. Each needs \`type\` and \`title\` at minimum. Auto-generates IDs. Deduplicates by \`confirmation\` + \`provider\`, with type-specific disambiguation (flights: +flight_number, lodging/transport: +title). |
 | \`tracker_update_travel_segment\` | Update a segment by ID — pass \`segment_id\` and \`changes\` object. **Deep merges** nested objects (e.g. \`{ departure: { detail: "Gate 55" } }\` only updates the detail, preserving datetime and timezone). |
 | \`tracker_remove_travel_segment\` | Remove segments — pass \`ids\` array of segment ID strings. Use \`tracker_get_item\` first to see available IDs. |
 
@@ -1076,9 +1101,13 @@ tracker_update_travel_segment(item_id="...", segment_id="seg_a1b2c3d4e5f6",
 
 When forwarded confirmation emails are detected (via gmail_query or manual forward):
 1. Parse the email to extract: segment type, dates/times/timezones, confirmation number, provider, seat/room details
-2. Call \`tracker_add_travel_segment\` (dedup by confirmation + provider handles re-sends)
+2. Call \`tracker_add_travel_segment\` (type-aware dedup handles re-sends)
 3. Add a comment: "Parsed QF21 confirmation — added flight segment"
 4. Set \`source_email\` on the segment for traceability`;
+
+// ── Exported for testing ──
+
+export { dedupKey as _dedupKey };
 
 // ── Plugin Export ──
 

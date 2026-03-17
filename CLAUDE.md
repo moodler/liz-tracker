@@ -307,7 +307,7 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `tracker_set_cover_image_from_path` | Set/replace cover image from a local file path |
 | `tracker_remove_cover_image` | Remove cover image from a song or engagement item |
 | `tracker_update_travel_trip` | Update trip metadata (destination, purpose, travelers, default_timezone) on a travel item |
-| `tracker_add_travel_segment` | Add segments to a travel itinerary (auto-generates IDs, dedup by confirmation+provider) |
+| `tracker_add_travel_segment` | Add segments to a travel itinerary (auto-generates IDs, type-aware dedup: confirmation+provider+flight_number for flights, +title for lodging/transport) |
 | `tracker_update_travel_segment` | Update a travel segment by ID (deep merge for nested objects) |
 | `tracker_remove_travel_segment` | Remove travel segments by their IDs |
 | `tracker_agent_reference` | Get comprehensive agent-facing reference for all space types (data formats, tools, examples). Reads from space plugin registry — always up to date. |
@@ -505,7 +505,7 @@ Agents should **always** use these tools instead of constructing `space_data` JS
 | MCP Tool | Description |
 | --- | --- |
 | `tracker_update_travel_trip` | Update trip metadata — pass `destination`, `purpose`, `travelers`, `default_timezone`, `notes`. Only provided fields are updated. |
-| `tracker_add_travel_segment` | Add segments — pass `segments` array of objects. Each needs `type` and `title` at minimum. Datetimes must use `{ datetime, timezone }` format. Auto-generates IDs. Deduplicates by `confirmation` + `provider`. |
+| `tracker_add_travel_segment` | Add segments — pass `segments` array of objects. Each needs `type` and `title` at minimum. Datetimes must use `{ datetime, timezone }` format. Auto-generates IDs. Deduplicates by `confirmation` + `provider`, with type-specific disambiguation: flights also match on `flight_number`, lodging/transport also match on `title`. Falls back to `confirmation` + `provider` only when the extra field is absent. |
 | `tracker_update_travel_segment` | Update a segment — pass `segment_id` and `changes` object. Deep merges nested objects (e.g. `{ departure: { detail: "Gate 55" } }` only updates the detail). |
 | `tracker_remove_travel_segment` | Remove segments — pass `ids` array of segment ID strings. |
 
