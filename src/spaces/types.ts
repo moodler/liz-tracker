@@ -92,6 +92,15 @@ export interface SpacePlugin {
   /** Optional: sanitize/coerce incoming space_data before storage. */
   sanitizeSpaceData?(raw: string): string;
 
+  // ── Agent Reference ──
+  /**
+   * Markdown string providing comprehensive agent-facing documentation
+   * for this space type. Returned by the tracker_agent_reference MCP tool.
+   * Should include data formats, examples, and important caveats.
+   * Omit for spaces with no complex data formats (e.g. standard, text).
+   */
+  agentReference?: string;
+
   // ── Server Extensions ──
   /** REST API routes under /items/:id/{name}/... */
   apiRoutes?: SpaceApiRoute[];

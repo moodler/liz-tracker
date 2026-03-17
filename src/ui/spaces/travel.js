@@ -818,14 +818,15 @@ async function saveTravelSettings() {
 
 function openTravelAddSeg(date, sd) {
   const tz = sd.trip.default_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const dt = date ? date + "T09:00" : "";
+  const addDate = date || "";
+  const addTime = "09:00";
   const m = document.createElement("div");
   m.className = "travel-form-modal";
   m.innerHTML = `<div class="travel-form-backdrop"></div><div class="travel-form-content">
     <div class="travel-form-title">Add Segment</div>
     <div class="engagement-edit-row"><label>Type</label><select id="tsType">${TRAVEL_SEGMENT_TYPES.map(t => `<option value="${t.value}">${t.icon} ${t.label}</option>`).join("")}</select></div>
     <div class="engagement-edit-row"><label>Title</label><input id="tsTitle" placeholder="e.g. QF 21 SYD to NRT" /></div>
-    <div class="engagement-edit-row"><label>Date/Time</label><input id="tsDt" type="datetime-local" value="${esc(dt)}" /></div>
+    <div class="engagement-edit-row"><label>Date/Time</label><input id="tsDtD" type="date" value="${esc(addDate)}" style="flex:1;" /><input id="tsDtT" type="time" value="${esc(addTime)}" style="flex:0 0 90px;" /></div>
     <div class="engagement-edit-row"><label>Timezone</label><input id="tsTz" value="${esc(tz)}" placeholder="Asia/Tokyo" /></div>
     <div class="engagement-edit-row"><label>Status</label><select id="tsStatus"><option value="confirmed">Confirmed</option><option value="pending" selected>Pending</option><option value="cancelled">Cancelled</option></select></div>
     <div style="display:flex;gap:8px;margin-top:10px;">
@@ -839,7 +840,9 @@ function openTravelAddSeg(date, sd) {
     const type = m.querySelector("#tsType").value;
     const title = m.querySelector("#tsTitle").value.trim();
     if (!title) { toast("Title required", "error"); return; }
-    const datetime = m.querySelector("#tsDt").value;
+    const dateVal = (m.querySelector("#tsDtD") || {}).value || "";
+    const timeVal = (m.querySelector("#tsDtT") || {}).value || "";
+    const datetime = dateVal ? dateVal + "T" + (timeVal || "00:00") : "";
     const timezone = m.querySelector("#tsTz").value.trim() || "UTC";
     const status = m.querySelector("#tsStatus").value;
     const seg = { id: travelSegId(), type, title, status };
@@ -881,8 +884,16 @@ function openTravelSegEdit(seg) {
     <div class="engagement-edit-row"><label>Provider URL</label><input id="teUrl" value="${esc(seg.provider_url || "")}" /></div>
     <div class="engagement-edit-row"><label>Tags</label><input id="teTags" value="${esc((seg.tags || []).join(", "))}" placeholder="Comma-separated" /></div>`;
 
-  // Type-specific fields
-  const tp = (label, idDt, idTz, obj) => `<div class="engagement-edit-row"><label>${label}</label><input id="${idDt}" type="datetime-local" value="${esc(obj?.datetime || "")}" /><input id="${idTz}" value="${esc(obj?.timezone || "")}" style="flex:0 0 130px;" placeholder="Timezone" /></div>`;
+  // Type-specific fields — separate date + time inputs to avoid browser picker issues
+  const _dtParts = (dt) => {
+    if (!dt) return { d: "", t: "" };
+    const m = (dt || "").match(/^(\d{4}-\d{2}-\d{2})T?(\d{2}:\d{2})?/);
+    return m ? { d: m[1] || "", t: m[2] || "" } : { d: "", t: "" };
+  };
+  const tp = (label, idDt, idTz, obj) => {
+    const p = _dtParts(obj?.datetime);
+    return `<div class="engagement-edit-row"><label>${label}</label><input id="${idDt}D" type="date" value="${esc(p.d)}" style="flex:1;" /><input id="${idDt}T" type="time" value="${esc(p.t)}" style="flex:0 0 90px;" /><input id="${idTz}" value="${esc(obj?.timezone || "")}" style="flex:0 0 130px;" placeholder="Timezone" /></div>`;
+  };
   const ltp = (label, idDt, idTz, idLoc, idDet, obj) => tp(label, idDt, idTz, obj) + `<div class="engagement-edit-row"><label>${label} Loc</label><input id="${idLoc}" value="${esc(obj?.location || "")}" style="flex:0 0 80px;" /><input id="${idDet}" value="${esc(obj?.detail || "")}" placeholder="Terminal/Gate" /></div>`;
   const txt = (label, id, val) => `<div class="engagement-edit-row"><label>${label}</label><input id="${id}" value="${esc(val || "")}" /></div>`;
 
@@ -949,57 +960,64 @@ function openTravelSegEdit(seg) {
   m.querySelector(".travel-form-backdrop").addEventListener("click", () => m.remove());
   m.querySelector("#teCancel").addEventListener("click", () => m.remove());
   m.querySelector("#teSave").addEventListener("click", async () => {
-    const gv = id => (m.querySelector(`#${id}`) || {}).value || "";
-    const gn = id => { const v = gv(id); return v ? Number(v) : null; };
-    const tagsStr = gv("teTags");
-    const costAmt = gn("teCostAmt");
-    const changes = {
-      id: seg.id, type: gv("teType"), title: gv("teTitle"), status: gv("teStatus"),
-      provider: gv("teProvider"), confirmation: gv("teConf"),
-      address: gv("teAddr"), location: gv("teLoc"), notes: gv("teNotes"),
-      provider_url: gv("teUrl"),
-      tags: tagsStr ? tagsStr.split(",").map(s => s.trim()).filter(Boolean) : [],
-      cost: costAmt ? { amount: costAmt, currency: gv("teCostCur") || "AUD" } : null,
-    };
-    switch (seg.type) {
-      case "flight":
-        changes.flight_number = gv("teFlightNum");
-        changes.departure = { datetime: gv("teDepDt"), timezone: gv("teDepTz"), location: gv("teDepLoc"), detail: gv("teDepDet") };
-        changes.arrival = { datetime: gv("teArrDt"), timezone: gv("teArrTz"), location: gv("teArrLoc"), detail: gv("teArrDet") };
-        changes.seat = gv("teSeat"); changes.cabin = gv("teCabin");
-        changes.aircraft = gv("teAircraft"); changes.ticket_number = gv("teTicket");
-        break;
-      case "lodging":
-        changes.check_in = { datetime: gv("teCiDt"), timezone: gv("teCiTz") };
-        changes.check_out = { datetime: gv("teCoDt"), timezone: gv("teCoTz") };
-        changes.property_type = gv("tePropType"); changes.room_type = gv("teRoomType");
-        break;
-      case "transport":
-        changes.transport_type = gv("teTransType");
-        changes.origin = { datetime: gv("teOrigDt"), timezone: gv("teOrigTz"), location: gv("teOrigLoc"), detail: gv("teOrigDet") };
-        changes.destination = { datetime: gv("teDestDt"), timezone: gv("teDestTz"), location: gv("teDestLoc"), detail: gv("teDestDet") };
-        changes.route_number = gv("teRouteNum"); changes.seat = gv("teTransSeat"); changes.car_type = gv("teCarType");
-        break;
-      case "activity":
-        changes.activity_type = gv("teActType");
-        changes.start = { datetime: gv("teActStartDt"), timezone: gv("teActStartTz") };
-        changes.end = { datetime: gv("teActEndDt"), timezone: gv("teActEndTz") };
-        changes.duration_minutes = gn("teActDur"); changes.venue = gv("teVenue");
-        break;
-      case "restaurant":
-        changes.reservation = { datetime: gv("teResDt"), timezone: gv("teResTz") };
-        changes.cuisine = gv("teCuisine"); changes.party_size = gn("tePartySize");
-        break;
-      case "meeting":
-        changes.start = { datetime: gv("teMtgStartDt"), timezone: gv("teMtgStartTz") };
-        changes.end = { datetime: gv("teMtgEndDt"), timezone: gv("teMtgEndTz") };
-        changes.meeting_url = gv("teMtgUrl"); changes.duration_minutes = gn("teMtgDur"); changes.attendees = gv("teAttendees");
-        break;
-      case "note":
-        changes.datetime = { datetime: gv("teNoteDt"), timezone: gv("teNoteTz") };
-        break;
-    }
     try {
+      const gv = id => (m.querySelector(`#${id}`) || {}).value || "";
+      const gn = id => { const v = gv(id); return v ? Number(v) : null; };
+      // Combine separate date + time inputs into "YYYY-MM-DDTHH:MM" datetime string
+      const gdt = (idBase) => {
+        const d = gv(idBase + "D"), t = gv(idBase + "T");
+        if (d && t) return d + "T" + t;
+        if (d) return d + "T00:00";
+        return "";
+      };
+      const tagsStr = gv("teTags");
+      const costAmt = gn("teCostAmt");
+      const changes = {
+        id: seg.id, type: gv("teType"), title: gv("teTitle"), status: gv("teStatus"),
+        provider: gv("teProvider"), confirmation: gv("teConf"),
+        address: gv("teAddr"), location: gv("teLoc"), notes: gv("teNotes"),
+        provider_url: gv("teUrl"),
+        tags: tagsStr ? tagsStr.split(",").map(s => s.trim()).filter(Boolean) : [],
+        cost: costAmt ? { amount: costAmt, currency: gv("teCostCur") || "AUD" } : null,
+      };
+      switch (seg.type) {
+        case "flight":
+          changes.flight_number = gv("teFlightNum");
+          changes.departure = { datetime: gdt("teDepDt"), timezone: gv("teDepTz"), location: gv("teDepLoc"), detail: gv("teDepDet") };
+          changes.arrival = { datetime: gdt("teArrDt"), timezone: gv("teArrTz"), location: gv("teArrLoc"), detail: gv("teArrDet") };
+          changes.seat = gv("teSeat"); changes.cabin = gv("teCabin");
+          changes.aircraft = gv("teAircraft"); changes.ticket_number = gv("teTicket");
+          break;
+        case "lodging":
+          changes.check_in = { datetime: gdt("teCiDt"), timezone: gv("teCiTz") };
+          changes.check_out = { datetime: gdt("teCoDt"), timezone: gv("teCoTz") };
+          changes.property_type = gv("tePropType"); changes.room_type = gv("teRoomType");
+          break;
+        case "transport":
+          changes.transport_type = gv("teTransType");
+          changes.origin = { datetime: gdt("teOrigDt"), timezone: gv("teOrigTz"), location: gv("teOrigLoc"), detail: gv("teOrigDet") };
+          changes.destination = { datetime: gdt("teDestDt"), timezone: gv("teDestTz"), location: gv("teDestLoc"), detail: gv("teDestDet") };
+          changes.route_number = gv("teRouteNum"); changes.seat = gv("teTransSeat"); changes.car_type = gv("teCarType");
+          break;
+        case "activity":
+          changes.activity_type = gv("teActType");
+          changes.start = { datetime: gdt("teActStartDt"), timezone: gv("teActStartTz") };
+          changes.end = { datetime: gdt("teActEndDt"), timezone: gv("teActEndTz") };
+          changes.duration_minutes = gn("teActDur"); changes.venue = gv("teVenue");
+          break;
+        case "restaurant":
+          changes.reservation = { datetime: gdt("teResDt"), timezone: gv("teResTz") };
+          changes.cuisine = gv("teCuisine"); changes.party_size = gn("tePartySize");
+          break;
+        case "meeting":
+          changes.start = { datetime: gdt("teMtgStartDt"), timezone: gv("teMtgStartTz") };
+          changes.end = { datetime: gdt("teMtgEndDt"), timezone: gv("teMtgEndTz") };
+          changes.meeting_url = gv("teMtgUrl"); changes.duration_minutes = gn("teMtgDur"); changes.attendees = gv("teAttendees");
+          break;
+        case "note":
+          changes.datetime = { datetime: gdt("teNoteDt"), timezone: gv("teNoteTz") };
+          break;
+      }
       await apiPatch(`/items/${spaceItemId}/travel/segments`, changes);
       m.remove();
       const item = await apiGet(`/items/${spaceItemId}`);
