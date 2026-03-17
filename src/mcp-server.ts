@@ -283,7 +283,7 @@ function createMcpServer(): McpServer {
       date_due: z.string().optional().describe("Due date in YYYY-MM-DD format (optional)"),
       link: z.string().optional().describe("Optional URL link associated with this item"),
       space_type: z.string().optional().describe('Space type for specialized UI (e.g. "standard", "song", "engagement", "scheduled"). Default: "standard"'),
-      space_data: z.string().optional().describe('JSON string for space-specific custom fields. For scheduled tasks, prefer the dedicated tracker_add_scheduled_todo/tracker_remove_scheduled_todo tools. For engagement items, prefer the dedicated tracker_update_engagement_contact/tracker_update_engagement_quote/tracker_add_engagement_milestone/tracker_add_engagement_comms tools — they handle the GET-parse-modify-save cycle automatically.'),
+      space_data: z.string().optional().describe('JSON string for space-specific custom fields. For scheduled tasks, prefer the dedicated tracker_add_scheduled_todo/tracker_remove_scheduled_todo tools. For engagement items, prefer the dedicated tracker_update_engagement_contact/tracker_update_engagement_quote/tracker_add_engagement_milestone/tracker_add_engagement_comms tools. For travel items, prefer tracker_update_travel_trip and tracker_add_travel_segment tools — they handle the GET-parse-modify-save cycle automatically and validate segment structure.'),
       created_by: z.string().optional().describe("Ignored — MCP items are always attributed to Harmoni for security (TRACK-213)"),
       blocked_by: z.array(z.string()).optional().describe('Item IDs or display keys (e.g. "TRACK-5") that block this item. The blocked item cannot be worked on until all blockers are done/testing/cancelled.'),
     },
@@ -410,7 +410,7 @@ function createMcpServer(): McpServer {
       date_due: z.string().optional().describe("Due date in YYYY-MM-DD format. Pass empty string to clear."),
       link: z.string().optional().describe("Optional URL link associated with this item. Pass empty string to clear."),
       space_type: z.string().optional().describe('Space type for specialized UI (e.g. "standard", "song", "engagement", "scheduled")'),
-      space_data: z.string().optional().describe('JSON string for space-specific custom fields. For scheduled tasks, prefer the dedicated tracker_add_scheduled_todo/tracker_remove_scheduled_todo tools. For engagement items, prefer the dedicated tracker_update_engagement_contact/tracker_update_engagement_quote/tracker_add_engagement_milestone/tracker_add_engagement_comms tools — they handle the GET-parse-modify-save cycle automatically.'),
+      space_data: z.string().optional().describe('JSON string for space-specific custom fields. For scheduled tasks, prefer the dedicated tracker_add_scheduled_todo/tracker_remove_scheduled_todo tools. For engagement items, prefer the dedicated tracker_update_engagement_contact/tracker_update_engagement_quote/tracker_add_engagement_milestone/tracker_add_engagement_comms tools. For travel items, prefer tracker_update_travel_trip and tracker_add_travel_segment tools — they handle the GET-parse-modify-save cycle automatically and validate segment structure.'),
       actor: z.string().optional().describe("Who made this change"),
     },
     async (args) => {

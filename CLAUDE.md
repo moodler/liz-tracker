@@ -458,6 +458,76 @@ Agents should use these simpler tools instead of constructing `space_data` JSON 
 
 These tools handle the GET→parse→modify→save cycle internally, so agents never need to construct the full `space_data` JSON.
 
+#### Travel `space_data` Format
+
+Travel items store trip metadata and segments in `space_data` as a JSON string:
+
+```json
+{
+  "trip": {
+    "destination": "Tokyo, Japan",
+    "purpose": "business",
+    "travelers": ["Martin"],
+    "default_timezone": "Asia/Tokyo",
+    "notes": "Vegetarian meals. Aisle seat."
+  },
+  "segments": [
+    {
+      "id": "seg_a1b2c3d4e5f6",
+      "type": "flight",
+      "title": "QF21 SYD → NRT",
+      "status": "confirmed",
+      "confirmation": "ABC123",
+      "provider": "Qantas",
+      "departure": { "datetime": "2026-04-15T21:00", "timezone": "Australia/Sydney", "location": "SYD", "detail": "Terminal 1" },
+      "arrival": { "datetime": "2026-04-16T06:00", "timezone": "Asia/Tokyo", "location": "NRT" },
+      "flight_number": "QF 21",
+      "seat": "34A",
+      "cabin": "business"
+    }
+  ]
+}
+```
+
+**Critical: Datetime format.** All datetimes use structured objects, NOT flat strings:
+- **TimePoint**: `{ "datetime": "2026-04-15T14:00", "timezone": "Asia/Tokyo" }` — for lodging check_in/check_out, activity start/end, restaurant reservation, meeting start/end, note datetime
+- **LocationTimePoint**: `{ "datetime": "2026-04-15T21:00", "timezone": "Australia/Sydney", "location": "SYD", "detail": "Terminal 1" }` — for flight departure/arrival, transport origin/destination
+
+**Segment types:** `flight`, `lodging`, `transport`, `activity`, `restaurant`, `meeting`, `note`
+**Status values:** `confirmed`, `pending`, `cancelled`
+**Common base fields (all types):** `id`, `type`, `title`, `status`, `confirmation`, `provider`, `provider_url`, `cost` ({ amount, currency }), `notes`, `address`, `location`, `tags` ([]), `image_url`, `source_email`
+
+**Preferred: Use dedicated MCP tools instead of raw `space_data` updates.**
+
+Agents should **always** use these tools instead of constructing `space_data` JSON manually:
+
+| MCP Tool | Description |
+| --- | --- |
+| `tracker_update_travel_trip` | Update trip metadata — pass `destination`, `purpose`, `travelers`, `default_timezone`, `notes`. Only provided fields are updated. |
+| `tracker_add_travel_segment` | Add segments — pass `segments` array of objects. Each needs `type` and `title` at minimum. Datetimes must use `{ datetime, timezone }` format. Auto-generates IDs. Deduplicates by `confirmation` + `provider`. |
+| `tracker_update_travel_segment` | Update a segment — pass `segment_id` and `changes` object. Deep merges nested objects (e.g. `{ departure: { detail: "Gate 55" } }` only updates the detail). |
+| `tracker_remove_travel_segment` | Remove segments — pass `ids` array of segment ID strings. |
+
+**Example: Adding a flight segment via MCP tool:**
+```
+tracker_add_travel_segment({
+  item_id: "MARTIN-96",
+  segments: [{
+    type: "flight",
+    title: "SQ224 PER → SIN",
+    status: "confirmed",
+    provider: "Singapore Airlines",
+    confirmation: "DXNRYI",
+    departure: { datetime: "2026-03-22T06:40", timezone: "Australia/Perth", location: "PER" },
+    arrival: { datetime: "2026-03-22T11:55", timezone: "Asia/Singapore", location: "SIN", detail: "Terminal 3" },
+    flight_number: "SQ224",
+    cabin: "business",
+    ticket_number: "618-2473418908",
+    notes: "Boeing 787"
+  }]
+})
+```
+
 ### API Endpoints
 
 - `PATCH /items/:id` — accepts `space_type`, `space_data`, and `project_id` fields. Passing `project_id` moves the item to another project (allocates new seq_number, resets space if needed).

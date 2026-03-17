@@ -410,14 +410,14 @@ const travelApiRoutes: SpaceApiRoute[] = [
 const travelMcpTools: SpaceMcpTool[] = [
   {
     name: "tracker_update_travel_trip",
-    description: "Update trip metadata on a travel space item (destination, purpose, travelers, default_timezone, notes). Only provided fields are updated.",
+    description: "Update trip metadata on a travel space item. Only provided fields are updated. Use this to set the destination, purpose, travelers, and default timezone for the trip.",
     schema: {
-      item_id: z.string().describe("Work item ID or display key (e.g. \"TRACK-99\")"),
-      destination: z.string().optional().describe("Trip destination (e.g. \"Tokyo, Japan\")"),
-      purpose: z.string().optional().describe("Trip purpose (e.g. \"business\", \"leisure\")"),
-      travelers: z.array(z.string()).optional().describe("List of traveler names"),
-      default_timezone: z.string().optional().describe("Default IANA timezone (e.g. \"Asia/Tokyo\")"),
-      notes: z.string().optional().describe("Trip notes"),
+      item_id: z.string().describe("Work item ID or display key (e.g. \"MARTIN-96\")"),
+      destination: z.string().optional().describe("Trip destination (e.g. \"Tokyo, Japan\" or \"Shenzhen → Suzhou → Guangzhou\")"),
+      purpose: z.string().optional().describe("Trip purpose (e.g. \"business\", \"leisure\", \"conference + tech visit\")"),
+      travelers: z.array(z.string()).optional().describe("List of traveler names (e.g. [\"Martin\"])"),
+      default_timezone: z.string().optional().describe("Default IANA timezone for the trip (e.g. \"Asia/Tokyo\", \"Asia/Shanghai\", \"Australia/Perth\")"),
+      notes: z.string().optional().describe("Trip notes (free text — meal preferences, seat preferences, visa info, etc.)"),
     },
     handler: async (args, item) => {
       const data = parseTravelSpaceData(item.space_data);
@@ -449,10 +449,30 @@ const travelMcpTools: SpaceMcpTool[] = [
   },
   {
     name: "tracker_add_travel_segment",
-    description: "Add one or more segments to a travel itinerary. Auto-generates segment IDs. Deduplicates by confirmation+provider (updates existing if found). Each segment needs at minimum: type and title.",
+    description: `Add one or more segments to a travel itinerary. Auto-generates segment IDs. Deduplicates by confirmation+provider (updates existing if found).
+
+IMPORTANT: Datetimes must use the TimePoint/LocationTimePoint format — NOT flat strings.
+
+Segment types and their key fields:
+
+FLIGHT: { type: "flight", title: "QF21 SYD→NRT", provider: "Qantas", confirmation: "ABC123", status: "confirmed", departure: { datetime: "2026-04-15T21:00", timezone: "Australia/Sydney", location: "SYD", detail: "Terminal 1" }, arrival: { datetime: "2026-04-16T06:00", timezone: "Asia/Tokyo", location: "NRT", detail: "Terminal 2" }, flight_number: "QF 21", seat: "34A", cabin: "business", ticket_number: "618-123456" }
+
+LODGING: { type: "lodging", title: "Park Hyatt Tokyo", provider: "Park Hyatt", confirmation: "9169182", status: "confirmed", location: "Shinjuku, Tokyo", address: "3-7-1-2 Nishi Shinjuku", check_in: { datetime: "2026-04-15T15:00", timezone: "Asia/Tokyo" }, check_out: { datetime: "2026-04-18T11:00", timezone: "Asia/Tokyo" }, property_type: "hotel", room_type: "Deluxe King" }
+
+ACTIVITY: { type: "activity", title: "MoodleMoot China 2026", location: "XJTLU, Suzhou", start: { datetime: "2026-03-26T08:00", timezone: "Asia/Shanghai" }, end: { datetime: "2026-03-26T22:00", timezone: "Asia/Shanghai" }, activity_type: "conference", venue: "XJTLU Campus" }
+
+TRANSPORT: { type: "transport", title: "Transfer WUX→XJTLU", transport_type: "shuttle", origin: { datetime: "2026-03-25T11:00", timezone: "Asia/Shanghai", location: "Wuxi Airport" }, destination: { datetime: "2026-03-25T14:00", timezone: "Asia/Shanghai", location: "XJTLU Campus" } }
+
+RESTAURANT: { type: "restaurant", title: "Sushi Saito", location: "Minato, Tokyo", reservation: { datetime: "2026-04-16T19:00", timezone: "Asia/Tokyo" }, cuisine: "Japanese", party_size: 2 }
+
+MEETING: { type: "meeting", title: "Client meeting", location: "Tokyo Office", start: { datetime: "2026-04-17T10:00", timezone: "Asia/Tokyo" }, end: { datetime: "2026-04-17T11:30", timezone: "Asia/Tokyo" } }
+
+NOTE: { type: "note", title: "Visa reminder", datetime: { datetime: "2026-04-14T09:00", timezone: "Australia/Sydney" }, notes: "Check visa requirements" }
+
+Common fields on ALL segments: type, title, status (confirmed/pending/cancelled), confirmation, provider, provider_url, cost ({amount, currency}), notes, address, location, tags ([]), image_url, source_email.`,
     schema: {
-      item_id: z.string().describe("Work item ID or display key"),
-      segments: z.array(z.record(z.unknown())).describe("Array of segment objects. Required fields: type, title. Optional: status, confirmation, provider, departure/arrival (for flights), check_in/check_out (for lodging), etc."),
+      item_id: z.string().describe("Work item ID or display key (e.g. \"MARTIN-96\")"),
+      segments: z.array(z.record(z.unknown())).describe("Array of segment objects. Each must have 'type' (flight/lodging/transport/activity/restaurant/meeting/note) and 'title'. Datetimes use { datetime: \"YYYY-MM-DDTHH:MM\", timezone: \"IANA/Timezone\" } format. Flights need departure/arrival as { datetime, timezone, location, detail }. Lodging needs check_in/check_out as { datetime, timezone }. Activities need start (and optionally end) as { datetime, timezone }. See tool description for full examples."),
     },
     handler: async (args, item) => {
       const data = parseTravelSpaceData(item.space_data);
@@ -492,11 +512,11 @@ const travelMcpTools: SpaceMcpTool[] = [
   },
   {
     name: "tracker_update_travel_segment",
-    description: "Update a travel segment by its ID. Uses deep merge — nested objects (departure, arrival, etc.) are merged recursively, so you can update just departure.detail without affecting departure.datetime or departure.timezone.",
+    description: "Update a travel segment by its ID. Uses deep merge — nested objects (departure, arrival, check_in, check_out, start, end, origin, destination, reservation, datetime, cost) are merged recursively. Example: to update just a gate, pass changes: { departure: { detail: \"Gate 55\" } } — this preserves departure.datetime and departure.timezone. To change status: { status: \"confirmed\" }. To add notes: { notes: \"Window seat confirmed\" }.",
     schema: {
-      item_id: z.string().describe("Work item ID or display key"),
-      segment_id: z.string().describe("Segment ID (e.g. \"seg_abc123\")"),
-      changes: z.record(z.unknown()).describe("Fields to update. Supports deep merge for nested objects like departure, arrival, cost, etc."),
+      item_id: z.string().describe("Work item ID or display key (e.g. \"MARTIN-96\")"),
+      segment_id: z.string().describe("Segment ID (e.g. \"seg_a1b2c3d4e5f6\"). Use tracker_get_item to see existing segments and their IDs."),
+      changes: z.record(z.unknown()).describe("Fields to update. Nested objects (departure, arrival, cost, etc.) are deep-merged. Example: { departure: { detail: \"Gate 55\" } } or { status: \"confirmed\", seat: \"12A\" }"),
     },
     handler: async (args, item) => {
       const data = parseTravelSpaceData(item.space_data);
@@ -527,10 +547,10 @@ const travelMcpTools: SpaceMcpTool[] = [
   },
   {
     name: "tracker_remove_travel_segment",
-    description: "Remove one or more segments from a travel itinerary by their IDs.",
+    description: "Remove one or more segments from a travel itinerary by their IDs. Use tracker_get_item first to see the current segments and their IDs.",
     schema: {
-      item_id: z.string().describe("Work item ID or display key"),
-      ids: z.array(z.string()).describe("Segment IDs to remove"),
+      item_id: z.string().describe("Work item ID or display key (e.g. \"MARTIN-96\")"),
+      ids: z.array(z.string()).describe("Segment IDs to remove (e.g. [\"seg_a1b2c3d4e5f6\"]). Use tracker_get_item to see available segment IDs."),
     },
     handler: async (args, item) => {
       const data = parseTravelSpaceData(item.space_data);
