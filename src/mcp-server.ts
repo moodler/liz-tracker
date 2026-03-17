@@ -514,7 +514,7 @@ function createMcpServer(): McpServer {
       const item = resolveItem(args.item_id);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
       try {
-        const comment = createComment({ work_item_id: item.id, author: args.author || "Coder", body: args.body });
+        const comment = createComment({ work_item_id: item.id, author: args.author || "Harmoni", body: args.body });
         return { content: [{ type: "text", text: JSON.stringify(comment, null, 2) }] };
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
