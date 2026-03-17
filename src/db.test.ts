@@ -39,6 +39,7 @@ import {
   listDescriptionVersions,
   getDescriptionVersion,
   revertToDescriptionVersion,
+  sanitizeCommentBody,
   VALID_STATES,
   VALID_PRIORITIES,
 } from './db.js';
@@ -696,6 +697,79 @@ describe('Comments', () => {
     // Normal comments still work
     const comment = createComment({ work_item_id: itemId, author: 'Harmony', body: 'The session was restarted successfully.' });
     expect(comment.body).toBe('The session was restarted successfully.');
+  });
+});
+
+// ── Comment Body Sanitization (TRACK-226) ──────────────────────────────────────
+
+describe('sanitizeCommentBody', () => {
+  it('returns normal text unchanged', () => {
+    expect(sanitizeCommentBody('Hello world')).toBe('Hello world');
+  });
+
+  it('returns text with real newlines unchanged', () => {
+    const text = 'Line 1\nLine 2\n\nLine 3';
+    expect(sanitizeCommentBody(text)).toBe(text);
+  });
+
+  it('unescapes literal \\n when no real newlines present', () => {
+    const input = 'Line 1\\n\\nLine 2\\nLine 3';
+    expect(sanitizeCommentBody(input)).toBe('Line 1\n\nLine 2\nLine 3');
+  });
+
+  it('unescapes literal \\t when no real newlines present', () => {
+    const input = 'Col1\\tCol2\\nRow2';
+    expect(sanitizeCommentBody(input)).toBe('Col1\tCol2\nRow2');
+  });
+
+  it('unescapes literal \\" when no real newlines present', () => {
+    const input = 'He said \\"hello\\"\\nNext line';
+    expect(sanitizeCommentBody(input)).toBe('He said "hello"\nNext line');
+  });
+
+  it('unescapes literal \\\\ when no real newlines present', () => {
+    const input = 'path\\\\to\\\\file\\nNext';
+    expect(sanitizeCommentBody(input)).toBe('path\\to\\file\nNext');
+  });
+
+  it('leaves mixed content alone (real + literal newlines)', () => {
+    // This simulates code blocks that contain literal \n alongside real newlines
+    const input = 'Real newline here\n\nCode: `console.log("hello\\nworld")`';
+    expect(sanitizeCommentBody(input)).toBe(input);
+  });
+
+  it('returns empty string unchanged', () => {
+    expect(sanitizeCommentBody('')).toBe('');
+  });
+});
+
+describe('createComment sanitizes body', () => {
+  let projectId: string;
+  let itemId: string;
+
+  beforeEach(() => {
+    _initTestTrackerDatabase();
+    const p = createProject({ name: 'Test' });
+    projectId = p.id;
+    itemId = createWorkItem({ project_id: projectId, title: 'Task' }).id;
+  });
+
+  it('sanitizes JSON-escaped newlines on insert', () => {
+    const comment = createComment({
+      work_item_id: itemId,
+      author: 'Coder',
+      body: '**Title**\\n\\nParagraph text\\nMore text',
+    });
+    expect(comment.body).toBe('**Title**\n\nParagraph text\nMore text');
+  });
+
+  it('leaves normal comments unchanged', () => {
+    const comment = createComment({
+      work_item_id: itemId,
+      author: 'Coder',
+      body: 'Simple comment with\nreal newlines',
+    });
+    expect(comment.body).toBe('Simple comment with\nreal newlines');
   });
 });
 

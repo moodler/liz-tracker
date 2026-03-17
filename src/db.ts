@@ -665,6 +665,27 @@ export function initTrackerDatabase(): void {
     }
   }
 
+  // TRACK-226: Fix malformed comments with literal \n sequences.
+  // Comments where the body contains literal \n but no real newlines
+  // were stored with JSON escape sequences instead of actual characters.
+  {
+    const allComments = db
+      .prepare("SELECT id, body FROM tracker_comments")
+      .all() as Array<{ id: string; body: string }>;
+    const updateStmt = db.prepare("UPDATE tracker_comments SET body = ? WHERE id = ?");
+    let fixed = 0;
+    for (const c of allComments) {
+      const sanitized = sanitizeCommentBody(c.body);
+      if (sanitized !== c.body) {
+        updateStmt.run(sanitized, c.id);
+        fixed++;
+      }
+    }
+    if (fixed > 0) {
+      logger.info(`TRACK-226: Fixed ${fixed} comments with malformed escape sequences`);
+    }
+  }
+
   logger.info("Tracker database initialized");
 }
 
@@ -1700,6 +1721,40 @@ export function clearStaleLocks(
 // ── Comments CRUD ──
 
 /**
+ * Sanitize a comment body by fixing common formatting issues.
+ * Detects text where JSON escape sequences (like literal \n, \t, \")
+ * were stored instead of actual characters — typically caused by
+ * double-encoding during processing.
+ *
+ * Heuristic: if the body contains literal \n sequences but NO real
+ * newline characters, the entire body is treated as JSON-escaped and
+ * all escape sequences are unescaped. Mixed content (real newlines
+ * alongside literal \n — e.g. in code blocks) is left as-is.
+ */
+export function sanitizeCommentBody(body: string): string {
+  // Check for literal \n (the two characters \ and n, not a real newline)
+  const hasLiteralNewline = body.includes("\\n");
+  if (!hasLiteralNewline) return body;
+
+  // If the body has real newlines, the literal \n is likely inside code
+  // blocks or quotes — leave it alone
+  const hasRealNewline = body.includes("\n");
+  if (hasRealNewline) return body;
+
+  // The entire body appears to be JSON-escaped: unescape common sequences.
+  // Use a single pass to handle all escape sequences correctly (avoids
+  // order-of-operations issues like \\t being mistakenly read as \<tab>).
+  const escapePattern = /\\\\|\\n|\\t|\\"/g;
+  const ESCAPE_MAP: Record<string, string> = {
+    "\\\\": "\\",
+    "\\n": "\n",
+    "\\t": "\t",
+    '\\"': '"',
+  };
+  return body.replace(escapePattern, (match) => ESCAPE_MAP[match] ?? match);
+}
+
+/**
  * Noise phrases that should never be posted as comments.
  * Matched case-insensitively against the trimmed comment body.
  * Added to block Harmony session restart notices from polluting work items.
@@ -1720,12 +1775,15 @@ export function createComment(data: {
     throw new Error(`Comment blocked: "${data.body.trim()}" is a known noise phrase`);
   }
 
+  // Sanitize the body to fix JSON-escaped newlines/tabs/quotes (TRACK-226)
+  const sanitizedBody = sanitizeCommentBody(data.body);
+
   const ts = now();
   const comment: Comment = {
     id: genId(),
     work_item_id: data.work_item_id,
     author: data.author,
-    body: data.body,
+    body: sanitizedBody,
     created_at: ts,
     updated_at: ts,
   };
