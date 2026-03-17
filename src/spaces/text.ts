@@ -13,6 +13,16 @@
 
 import type { SpacePlugin } from "./types.js";
 
+const TEXT_AGENT_REFERENCE = `## Text Space
+
+Writing workspace for articles, blogs, and long-form content:
+
+- **Content** → stored in the item's \`description\` field (markdown)
+- **Version history** → description snapshots (navigable in the UI)
+- **Discussion** → comments sidebar for editorial feedback
+
+No special MCP tools — use \`tracker_update_item\` to update the description, and \`tracker_add_comment\` for editorial discussion.`;
+
 export const textPlugin: SpacePlugin = {
   name: "text",
   label: "Text",
@@ -23,6 +33,8 @@ export const textPlugin: SpacePlugin = {
     versionHistory: true,
     liveRefresh: true,
   },
+
+  agentReference: TEXT_AGENT_REFERENCE,
 
   defaultSpaceData: () => null,
   parseSpaceData: (raw) => raw ? JSON.parse(raw) : {},

@@ -487,6 +487,67 @@ const engagementMcpTools: SpaceMcpTool[] = [
   },
 ];
 
+// ── Agent Reference ──
+
+const ENGAGEMENT_AGENT_REFERENCE = `## Engagement Space
+
+Manages contractors, services, and external engagements. All structured data is stored in \`space_data\` as a JSON blob:
+
+\`\`\`json
+{
+  "contractor": { "company": "", "contact": "", "phone": "", "mobile": "", "email": "", "address": "" },
+  "quote": { "reference": "", "date": "", "expiry": "", "status": "pending", "total": 0, "currency": "AUD", "includes_gst": true, "line_items": [{ "desc": "", "amount": 0 }] },
+  "payment": { "status": "not_started", "deposits": [], "invoices": [] },
+  "milestones": [{ "label": "", "date": "", "status": "upcoming|done|overdue" }],
+  "gmail_query": "",
+  "calendar_tag": "",
+  "comms_log": [{ "direction": "inbound|outbound", "date": "2026-03-15", "subject": "Subject line", "snippet": "Brief excerpt" }]
+}
+\`\`\`
+
+- **Cover image** → attachment named \`cover.jpg/png/webp\` (displayed as header)
+- **Description** → item description field (general notes)
+- **Discussion** → comments sidebar
+
+### MCP Tools for Engagement
+
+**Always use these dedicated tools** — they handle the GET-parse-modify-save cycle automatically.
+
+| Tool | Description |
+| --- | --- |
+| \`tracker_update_engagement_contact\` | Update contact details — pass individual fields (\`company\`, \`contact\`, \`phone\`, \`mobile\`, \`email\`, \`address\`). Only provided fields are updated. |
+| \`tracker_update_engagement_quote\` | Update quote/financial — pass individual fields (\`reference\`, \`total\`, \`currency\`, \`status\`, \`line_items\`, \`payment_status\`, \`date\`, \`expiry\`, \`includes_gst\`). Only provided fields are updated. |
+| \`tracker_add_engagement_milestone\` | Add milestones — pass \`milestones\` array of \`{ label, date?, status? }\` objects. |
+| \`tracker_remove_engagement_milestone\` | Remove milestones by index — pass \`indices\` array. Use \`tracker_get_item\` first to see current milestones. |
+| \`tracker_update_engagement_milestone\` | Update a milestone — pass \`index\` and the fields to change (\`label\`, \`date\`, \`status\`). |
+| \`tracker_add_engagement_comms\` | Add communication log entries — pass \`entries\` array of \`{ direction, date, subject, snippet? }\`. |
+| \`tracker_update_engagement_settings\` | Update \`gmail_query\` and \`calendar_tag\`. |
+
+### Examples
+
+**Creating an engagement:**
+\`\`\`
+tracker_create_item(project_id="...", title="Contractor Name", space_type="engagement")
+tracker_update_engagement_contact(item_id="...", company="Acme", contact="Jane", email="jane@acme.com")
+tracker_update_engagement_quote(item_id="...", total=5000, currency="AUD", status="pending",
+  line_items=[{desc: "Initial consultation", amount: 2000}, {desc: "Implementation", amount: 3000}])
+\`\`\`
+
+**Adding milestones:**
+\`\`\`
+tracker_add_engagement_milestone(item_id="...", milestones=[
+  { label: "Initial meeting", date: "2026-03-20", status: "done" },
+  { label: "Quote accepted", date: "2026-03-25", status: "upcoming" }
+])
+\`\`\`
+
+**Logging communication:**
+\`\`\`
+tracker_add_engagement_comms(item_id="...", entries=[
+  { direction: "outbound", date: "2026-03-15", subject: "Quote request", snippet: "Sent initial quote request for kitchen renovation" }
+])
+\`\`\``;
+
 // ── Plugin Export ──
 
 export const engagementPlugin: SpacePlugin = {
@@ -499,6 +560,8 @@ export const engagementPlugin: SpacePlugin = {
     coverImage: true,
     liveRefresh: true,
   },
+
+  agentReference: ENGAGEMENT_AGENT_REFERENCE,
 
   defaultSpaceData: () => ({ ...DEFAULTS }),
   parseSpaceData: (raw) => parseEngagementSpaceData(raw) as unknown as Record<string, unknown>,

@@ -310,6 +310,7 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `tracker_add_travel_segment` | Add segments to a travel itinerary (auto-generates IDs, dedup by confirmation+provider) |
 | `tracker_update_travel_segment` | Update a travel segment by ID (deep merge for nested objects) |
 | `tracker_remove_travel_segment` | Remove travel segments by their IDs |
+| `tracker_agent_reference` | Get comprehensive agent-facing reference for all space types (data formats, tools, examples). Reads from space plugin registry — always up to date. |
 
 ### Per-project setup
 

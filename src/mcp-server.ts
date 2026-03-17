@@ -1287,6 +1287,65 @@ function createMcpServer(): McpServer {
     },
   );
 
+  // ── Agent Reference ──
+
+  server.tool(
+    "tracker_agent_reference",
+    "Get comprehensive agent-facing reference documentation for all tracker space types (data formats, MCP tools, examples, caveats). Call this when you need detailed information about how to use a specific space type — it returns the authoritative, always-up-to-date reference directly from the tracker's space plugin system. Optionally filter by space_type to get only the reference for one space.",
+    {
+      space_type: z.string().optional().describe("Filter to a specific space type (e.g. \"travel\", \"engagement\", \"scheduled\", \"song\", \"text\"). Omit to get all spaces."),
+    },
+    async (args) => {
+      const plugins = listSpacePlugins();
+      const sections: string[] = [];
+
+      // Header with space types table
+      sections.push("# Tracker Space Types Reference\n");
+      sections.push("| Type | Description | Key Features |");
+      sections.push("| --- | --- | --- |");
+      for (const p of plugins) {
+        const features: string[] = [];
+        if (p.capabilities.coverImage) features.push("cover image");
+        if (p.capabilities.versionHistory) features.push("version history");
+        if (p.mcpTools?.length) features.push(`${p.mcpTools.length} MCP tools`);
+        sections.push(`| \`${p.name}\` | ${p.description} | ${features.join(", ") || "—"} |`);
+      }
+      sections.push("");
+
+      // Shared features
+      const coverTypes = getCoverSpaceTypes();
+      if (coverTypes.length > 0) {
+        sections.push("## Shared: Cover Image Tools\n");
+        sections.push(`Space types with cover image support: ${coverTypes.map(t => `\`${t}\``).join(", ")}\n`);
+        sections.push("| Tool | Description |");
+        sections.push("| --- | --- |");
+        sections.push("| `tracker_set_cover_image` | Set/replace cover image (base64 data) |");
+        sections.push("| `tracker_set_cover_image_from_path` | Set/replace cover image from file path |");
+        sections.push("| `tracker_remove_cover_image` | Remove cover image |");
+        sections.push("");
+      }
+
+      // Per-space reference sections
+      const targetType = args.space_type?.toLowerCase();
+      for (const p of plugins) {
+        if (targetType && p.name !== targetType) continue;
+        if (p.agentReference) {
+          sections.push(p.agentReference);
+          sections.push("");
+        }
+      }
+
+      // General tips
+      sections.push("## Working with Spaces\n");
+      sections.push("- **When creating items**, set `space_type` to the appropriate type. The project must have that space type active.");
+      sections.push("- **Attachments** are key for song and engagement spaces — cover images and style files are stored as attachments, not in `space_data`.");
+      sections.push("- **`space_data`** is a JSON string — always stringify when setting, parse when reading.");
+      sections.push("- **Always prefer dedicated MCP tools** over raw `space_data` updates — they handle validation, coercion, and the GET-parse-modify-save cycle.");
+
+      return { content: [{ type: "text", text: sections.join("\n") }] };
+    },
+  );
+
   return server;
 }
 

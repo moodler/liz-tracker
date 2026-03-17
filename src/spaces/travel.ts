@@ -921,6 +921,165 @@ RESILIENCE: The tool auto-corrects common mistakes: "carrier"→"provider", "boo
   },
 ];
 
+// ── Agent Reference ──
+
+const TRAVEL_AGENT_REFERENCE = `## Travel Space
+
+One work item = one trip. All structured data is stored in \`space_data\` as a JSON blob containing trip metadata and an array of **segments** (flights, hotels, activities, etc.). The dashboard renders a chronological, day-by-day timeline view.
+
+### Trip Metadata
+
+\`\`\`json
+{
+  "trip": {
+    "destination": "Tokyo, Japan",
+    "purpose": "business",
+    "travelers": ["Martin"],
+    "default_timezone": "Asia/Tokyo",
+    "notes": "Vegetarian meals. Aisle seat."
+  },
+  "segments": []
+}
+\`\`\`
+
+- **Destination** — where the trip is going (e.g. "Tokyo, Japan" or "Shenzhen → Suzhou → Guangzhou")
+- **Purpose** — business, leisure, conference, etc.
+- **Travelers** — array of traveler names
+- **Default timezone** — IANA timezone used as fallback for segments (e.g. "Asia/Tokyo")
+- **Notes** — free-text trip notes (meal preferences, visa info, etc.)
+
+### Segments
+
+Segments are the building blocks of the itinerary. Each has a **common base** plus **type-specific fields**.
+
+**Common base fields (all segment types):**
+- \`id\` — unique segment ID (auto-generated: \`seg_\` + random hex)
+- \`type\` — one of: \`flight\`, \`lodging\`, \`transport\`, \`activity\`, \`restaurant\`, \`meeting\`, \`note\`
+- \`title\` — display name (e.g. "QF21 SYD → NRT", "Park Hyatt Tokyo", "Sushi Saito")
+- \`status\` — \`confirmed\`, \`pending\`, or \`cancelled\`
+- \`confirmation\` — booking reference / confirmation number
+- \`provider\` — airline, hotel chain, company name
+- \`provider_url\` — link to manage booking
+- \`cost\` — \`{ amount, currency }\` (optional)
+- \`notes\` — free-text notes
+- \`address\` — full street address
+- \`location\` — display-friendly city/area name (e.g. "Shinjuku, Tokyo") — used for day headers
+- \`tags\` — string array for lightweight categorization (e.g. "must-do", "optional")
+- \`image_url\` — optional image URL
+- \`source_email\` — reference to parsed email (for traceability)
+
+### Datetime Format
+
+**Critical:** All datetimes use structured objects, NOT flat strings.
+
+- **TimePoint**: \`{ "datetime": "2026-04-15T14:00", "timezone": "Asia/Tokyo" }\`
+  Used by: lodging check_in/check_out, activity start/end, restaurant reservation, meeting start/end, note datetime
+
+- **LocationTimePoint**: \`{ "datetime": "2026-04-15T21:00", "timezone": "Australia/Sydney", "location": "SYD", "detail": "Terminal 1" }\`
+  Used by: flight departure/arrival, transport origin/destination
+
+Every datetime is stored as **local time + IANA timezone**, never bare UTC. This prevents display errors after DST changes.
+
+### Segment Types and Key Fields
+
+**\`flight\`** — \`departure\` (LocationTimePoint), \`arrival\` (LocationTimePoint), \`flight_number\`, \`seat\`, \`cabin\` (economy/premium/business/first), \`aircraft\`, \`ticket_number\`
+
+**\`lodging\`** — \`check_in\` (TimePoint), \`check_out\` (TimePoint), \`property_type\` (hotel/airbnb/hostel/resort), \`room_type\`
+
+**\`transport\`** (train, bus, ferry, car rental, taxi, shuttle, rideshare) — \`transport_type\`, \`origin\` (LocationTimePoint), \`destination\` (LocationTimePoint), \`route_number\`, \`seat\`, \`car_type\`
+
+**\`activity\`** (tour, museum, show, concert, excursion, spa, sightseeing) — \`activity_type\`, \`start\` (TimePoint), \`end\` (TimePoint, optional), \`duration_minutes\` (optional fallback for gap detection), \`venue\`
+
+**\`restaurant\`** — \`reservation\` (TimePoint), \`cuisine\`, \`party_size\`
+
+**\`meeting\`** — \`start\` (TimePoint), \`end\` (TimePoint), \`meeting_url\`, \`attendees\`
+
+**\`note\`** (catch-all — reminders, directions, visa info) — \`datetime\` (TimePoint)
+
+### Deduplication
+
+When adding segments, the system deduplicates by \`confirmation\` + \`provider\`. If a segment with the same confirmation number and provider already exists, it's **updated** instead of duplicated. This is important when parsing forwarded booking emails — the same booking may be processed multiple times.
+
+### Resilience / Auto-Coercion
+
+The travel tools auto-correct common mistakes from agents:
+- Field aliases: \`airline\` → \`provider\`, \`booking_ref\` → \`confirmation\`, \`restaurant_name\` → \`title\`, \`property_name\` → \`title\`, \`operator\` → \`provider\`, \`text\` → \`notes\`
+- Status aliases: \`booked\` → \`confirmed\`, \`tentative\` → \`pending\`, \`canceled\` → \`cancelled\`
+- Type aliases: \`hotel\` → \`lodging\`, \`taxi\`/\`train\`/\`bus\` → \`transport\`, \`tour\`/\`museum\` → \`activity\`, \`dining\`/\`meal\` → \`restaurant\`
+- Flat ISO datetime strings like \`"2026-03-22T06:40:00+08:00"\` are parsed into TimePoint format
+
+However, using the correct format is strongly preferred.
+
+### MCP Tools for Travel
+
+**Always use these dedicated tools** — never construct raw \`space_data\` JSON for travel items.
+
+| Tool | Description |
+| --- | --- |
+| \`tracker_update_travel_trip\` | Update trip metadata — pass \`destination\`, \`purpose\`, \`travelers\` (array), \`default_timezone\`, \`notes\`. Only provided fields are updated. |
+| \`tracker_add_travel_segment\` | Add segments — pass \`segments\` array. Each needs \`type\` and \`title\` at minimum. Auto-generates IDs. Deduplicates by \`confirmation\` + \`provider\`. |
+| \`tracker_update_travel_segment\` | Update a segment by ID — pass \`segment_id\` and \`changes\` object. **Deep merges** nested objects (e.g. \`{ departure: { detail: "Gate 55" } }\` only updates the detail, preserving datetime and timezone). |
+| \`tracker_remove_travel_segment\` | Remove segments — pass \`ids\` array of segment ID strings. Use \`tracker_get_item\` first to see available IDs. |
+
+### Examples
+
+**Creating a trip and adding a flight:**
+\`\`\`
+tracker_create_item(project_id="...", title="Tokyo Business Trip", space_type="travel")
+tracker_update_travel_trip(item_id="...", destination="Tokyo, Japan", purpose="business",
+  travelers=["Martin"], default_timezone="Asia/Tokyo")
+tracker_add_travel_segment(item_id="...", segments=[{
+  type: "flight",
+  title: "QF21 SYD → NRT",
+  status: "confirmed",
+  provider: "Qantas",
+  confirmation: "ABC123",
+  departure: { datetime: "2026-04-15T21:00", timezone: "Australia/Sydney", location: "SYD", detail: "Terminal 1" },
+  arrival: { datetime: "2026-04-16T06:00", timezone: "Asia/Tokyo", location: "NRT", detail: "Terminal 2" },
+  flight_number: "QF 21",
+  seat: "34A",
+  cabin: "business"
+}])
+\`\`\`
+
+**Adding lodging:**
+\`\`\`
+tracker_add_travel_segment(item_id="...", segments=[{
+  type: "lodging",
+  title: "Park Hyatt Tokyo",
+  status: "confirmed",
+  provider: "Park Hyatt",
+  confirmation: "9169182",
+  location: "Shinjuku, Tokyo",
+  address: "3-7-1-2 Nishi Shinjuku",
+  check_in: { datetime: "2026-04-15T15:00", timezone: "Asia/Tokyo" },
+  check_out: { datetime: "2026-04-18T11:00", timezone: "Asia/Tokyo" },
+  property_type: "hotel",
+  room_type: "Deluxe King"
+}])
+\`\`\`
+
+**Partial update (gate change):**
+\`\`\`
+tracker_update_travel_segment(item_id="...", segment_id="seg_a1b2c3d4e5f6",
+  changes={ departure: { detail: "Gate 55" } })
+\`\`\`
+
+### Additional Features
+
+- **Cover image** → attachment named \`cover.jpg/png/webp\` (displayed as trip header)
+- **Description** → item description field (general trip notes)
+- **Discussion** → comments sidebar
+- **Documents** → attachments tab for boarding passes, confirmations, PDFs
+
+### Email Parsing Workflow
+
+When forwarded confirmation emails are detected (via gmail_query or manual forward):
+1. Parse the email to extract: segment type, dates/times/timezones, confirmation number, provider, seat/room details
+2. Call \`tracker_add_travel_segment\` (dedup by confirmation + provider handles re-sends)
+3. Add a comment: "Parsed QF21 confirmation — added flight segment"
+4. Set \`source_email\` on the segment for traceability`;
+
 // ── Plugin Export ──
 
 export const travelPlugin: SpacePlugin = {
@@ -933,6 +1092,8 @@ export const travelPlugin: SpacePlugin = {
     coverImage: true,
     liveRefresh: true,
   },
+
+  agentReference: TRAVEL_AGENT_REFERENCE,
 
   defaultSpaceData: () => ({ ...DEFAULTS }),
   parseSpaceData: (raw) => parseTravelSpaceData(raw) as unknown as Record<string, unknown>,

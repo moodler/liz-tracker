@@ -332,6 +332,68 @@ const scheduledMcpTools: SpaceMcpTool[] = [
   },
 ];
 
+// ── Agent Reference ──
+
+const SCHEDULED_AGENT_REFERENCE = `## Scheduled Space
+
+Manages recurring automated tasks. Schedule config, status, and structured task lists are stored in \`space_data\`:
+
+\`\`\`json
+{
+  "schedule": {
+    "frequency": "daily|weekly|hourly|once|manual|custom",
+    "time": "07:00",
+    "days_of_week": ["monday", "wednesday", "friday"],
+    "timezone": "Australia/Perth",
+    "cron_override": null
+  },
+  "status": {
+    "next_run": "2026-03-12T07:00:00+08:00",
+    "last_run": "2026-03-11T07:00:00+08:00",
+    "last_status": "completed|failed",
+    "last_duration_ms": 1234,
+    "run_count": 42
+  },
+  "todo": [
+    "Check the inbox for new messages",
+    "Update the daily log with findings"
+  ],
+  "ignore": [
+    "Battery level warnings",
+    "Routine maintenance reminders"
+  ]
+}
+\`\`\`
+
+- **Task instructions** → item description field (main prompt/instructions for the task)
+- **TODO** → array of **plain strings** in \`space_data.todo\` — specific sub-tasks to perform during each run
+- **IGNORE** → array of **plain strings** in \`space_data.ignore\` — types of information to skip/ignore
+- **Run history** → displayed in the sidebar from status data
+
+**Critical:** \`todo\` and \`ignore\` must be arrays of plain strings — never objects. Using objects like \`{"text": "task"}\` will cause \`[object Object]\` to display in the UI.
+
+### MCP Tools for Scheduled
+
+**Always use these dedicated tools** — they handle the GET-parse-modify-save cycle internally.
+
+| Tool | Description |
+| --- | --- |
+| \`tracker_add_scheduled_todo\` | Add TODO items — pass \`item_id\` and \`items\` (array of strings) |
+| \`tracker_remove_scheduled_todo\` | Remove TODO items — pass \`item_id\` and \`indices\` (array of zero-based index numbers) |
+| \`tracker_add_scheduled_ignore\` | Add IGNORE rules — pass \`item_id\` and \`rules\` (array of strings) |
+| \`tracker_remove_scheduled_ignore\` | Remove IGNORE rules — pass \`item_id\` and \`indices\` (array of zero-based index numbers) |
+
+### Reading Scheduled Items
+
+When reading scheduled items, always check both \`description\` (main instructions) and \`space_data\` (for \`todo\` and \`ignore\` lists):
+
+\`\`\`
+item = tracker_get_item(item_id="...")
+space_data = JSON.parse(item.space_data)
+todos = space_data.todo       // ["Check inbox", "Update log"]
+ignores = space_data.ignore   // ["Battery warnings"]
+\`\`\``;
+
 // ── Plugin Export ──
 
 export const scheduledPlugin: SpacePlugin = {
@@ -343,6 +405,8 @@ export const scheduledPlugin: SpacePlugin = {
   capabilities: {
     liveRefresh: true,
   },
+
+  agentReference: SCHEDULED_AGENT_REFERENCE,
 
   defaultSpaceData: () => ({ ...DEFAULTS }),
   parseSpaceData: (raw) => parseScheduledSpaceData(raw) as unknown as Record<string, unknown>,
