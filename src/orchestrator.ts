@@ -2784,6 +2784,21 @@ export function isScheduleTimeDue(item: WorkItem): boolean {
       return false;
     }
 
+    // TRACK-228: Dispatch window — only dispatch within DISPATCH_WINDOW_MINUTES
+    // after the scheduled time. Without this, a task scheduled for 3am would
+    // dispatch at any time after 3am (e.g. 1pm when approved), because
+    // "currentMinutes >= scheduledMinutes" is true all day after 3am.
+    // The window ensures tasks only dispatch near their scheduled time.
+    // If the window is missed (e.g. server was down), the task waits for
+    // the next occurrence.
+    // Hourly tasks are exempt — they use last_run interval timing, not a
+    // fixed time-of-day window.
+    const DISPATCH_WINDOW_MINUTES = 30;
+    if (frequency !== "hourly" && currentMinutes > scheduledMinutes + DISPATCH_WINDOW_MINUTES) {
+      // Too late — missed the dispatch window. Wait for next occurrence.
+      return false;
+    }
+
     // For weekly: check if today is one of the scheduled days
     if (frequency === "weekly") {
       const daysOfWeek = schedule.days_of_week as string[] | null;

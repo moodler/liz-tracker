@@ -672,27 +672,48 @@ describe("isScheduleTimeDue", () => {
     // If we happen to be running at 23:59 UTC, skip this assertion
   });
 
-  it("returns true for daily task after scheduled time (no last_run)", () => {
-    // Schedule for 00:00 UTC — should always be due (it's always past midnight)
-    const item = makeScheduledItem({ frequency: "daily", time: "00:00", timezone: "UTC" });
+  it("returns true for daily task within dispatch window (no last_run)", () => {
+    // Schedule for a few minutes ago in UTC — should be within the 30-min dispatch window
+    const now = new Date();
+    const minutesAgo = 5;
+    const schedTime = new Date(now.getTime() - minutesAgo * 60 * 1000);
+    const timeStr = `${String(schedTime.getUTCHours()).padStart(2, "0")}:${String(schedTime.getUTCMinutes()).padStart(2, "0")}`;
+    const item = makeScheduledItem({ frequency: "daily", time: timeStr, timezone: "UTC" });
     expect(isScheduleTimeDue(item)).toBe(true);
   });
 
+  it("returns false for daily task outside dispatch window (no last_run)", () => {
+    // Schedule for 2 hours ago in UTC — should be OUTSIDE the 30-min dispatch window
+    // A task approved hours after its scheduled time should wait for the next day
+    const now = new Date();
+    const hoursAgo = 2;
+    const schedTime = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
+    const timeStr = `${String(schedTime.getUTCHours()).padStart(2, "0")}:${String(schedTime.getUTCMinutes()).padStart(2, "0")}`;
+    const item = makeScheduledItem({ frequency: "daily", time: timeStr, timezone: "UTC" });
+    expect(isScheduleTimeDue(item)).toBe(false);
+  });
+
   it("returns false for daily task that already ran today", () => {
-    // Schedule for 00:00 UTC and set last_run to now
+    // Schedule for a few minutes ago and set last_run to now
+    const now = new Date();
+    const schedTime = new Date(now.getTime() - 5 * 60 * 1000);
+    const timeStr = `${String(schedTime.getUTCHours()).padStart(2, "0")}:${String(schedTime.getUTCMinutes()).padStart(2, "0")}`;
     const item = makeScheduledItem(
-      { frequency: "daily", time: "00:00", timezone: "UTC" },
+      { frequency: "daily", time: timeStr, timezone: "UTC" },
       { last_run: new Date().toISOString() },
     );
     expect(isScheduleTimeDue(item)).toBe(false);
   });
 
-  it("returns true for daily task that ran yesterday", () => {
-    // Schedule for 00:00 UTC and set last_run to yesterday
+  it("returns true for daily task that ran yesterday (within window)", () => {
+    // Schedule for a few minutes ago and set last_run to yesterday
+    const now = new Date();
+    const schedTime = new Date(now.getTime() - 5 * 60 * 1000);
+    const timeStr = `${String(schedTime.getUTCHours()).padStart(2, "0")}:${String(schedTime.getUTCMinutes()).padStart(2, "0")}`;
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const item = makeScheduledItem(
-      { frequency: "daily", time: "00:00", timezone: "UTC" },
+      { frequency: "daily", time: timeStr, timezone: "UTC" },
       { last_run: yesterday.toISOString() },
     );
     expect(isScheduleTimeDue(item)).toBe(true);
@@ -719,8 +740,8 @@ describe("isScheduleTimeDue", () => {
     expect(isScheduleTimeDue(item)).toBe(false);
   });
 
-  it("returns true for weekly task on a scheduled day after scheduled time", () => {
-    // Figure out what today IS
+  it("returns true for weekly task on a scheduled day within dispatch window", () => {
+    // Figure out what today IS and schedule for a few minutes ago
     const today = new Date();
     const formatter = new Intl.DateTimeFormat("en-US", {
       timeZone: "UTC",
@@ -728,9 +749,12 @@ describe("isScheduleTimeDue", () => {
     });
     const todayName = formatter.format(today).toLowerCase();
 
+    const schedTime = new Date(today.getTime() - 5 * 60 * 1000);
+    const timeStr = `${String(schedTime.getUTCHours()).padStart(2, "0")}:${String(schedTime.getUTCMinutes()).padStart(2, "0")}`;
+
     const item = makeScheduledItem({
       frequency: "weekly",
-      time: "00:00",
+      time: timeStr,
       timezone: "UTC",
       days_of_week: [todayName],
     });
