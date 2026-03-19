@@ -731,6 +731,70 @@ export function initTrackerDatabase(): void {
     }
   }
 
+  // TRACK-233: Migrate existing tracker_transitions into tracker_activity_log.
+  // Copies all historical state changes so the unified activity log has the full history.
+  // Only runs once — skips if activity_log already has item.state_changed entries.
+  {
+    const existingActivityCount = (db
+      .prepare("SELECT COUNT(*) as cnt FROM tracker_activity_log WHERE action = 'item.state_changed'")
+      .get() as { cnt: number }).cnt;
+
+    if (existingActivityCount === 0) {
+      // Join transitions with work_items to get project_id, and build activity log entries
+      const transitions = db
+        .prepare(`
+          SELECT t.id, t.work_item_id, t.from_state, t.to_state, t.actor, t.actor_class, t.comment, t.created_at,
+                 w.project_id
+          FROM tracker_transitions t
+          LEFT JOIN tracker_work_items w ON t.work_item_id = w.id
+          ORDER BY t.created_at ASC
+        `)
+        .all() as Array<{
+          id: string;
+          work_item_id: string;
+          from_state: string | null;
+          to_state: string;
+          actor: string;
+          actor_class: string;
+          comment: string | null;
+          created_at: string;
+          project_id: string | null;
+        }>;
+
+      if (transitions.length > 0) {
+        const insertStmt = db.prepare(
+          `INSERT INTO tracker_activity_log (id, project_id, item_id, action, actor, actor_class, summary, details, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        );
+
+        const insertMany = db.transaction(() => {
+          for (const t of transitions) {
+            const summary = t.from_state
+              ? `Changed state: ${t.from_state} \u2192 ${t.to_state}`
+              : `Created (initial state: ${t.to_state})`;
+            const details: Record<string, unknown> = { from_state: t.from_state, to_state: t.to_state };
+            if (t.comment) details.comment = t.comment;
+
+            insertStmt.run(
+              genId(),
+              t.project_id || null,
+              t.work_item_id,
+              "item.state_changed",
+              t.actor,
+              t.actor_class || classifyActor(t.actor),
+              summary,
+              JSON.stringify(details),
+              t.created_at,
+            );
+          }
+        });
+        insertMany();
+
+        logger.info(`TRACK-233: Migrated ${transitions.length} historical transitions into activity log`);
+      }
+    }
+  }
+
   logger.info("Tracker database initialized");
 }
 

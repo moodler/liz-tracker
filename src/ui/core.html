@@ -1829,42 +1829,6 @@
         padding: 8px 24px;
       }
 
-      /* ── Transitions ── */
-      .transition-list {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-      .transition-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 1rem;
-        padding: 6px 0;
-        border-bottom: 1px solid rgba(35, 53, 84, 0.5);
-      }
-      .transition-item:last-child {
-        border-bottom: none;
-      }
-      .transition-arrow {
-        color: var(--text-dim);
-      }
-      .transition-actor {
-        color: var(--text-muted);
-        font-style: italic;
-      }
-      .transition-time {
-        color: var(--text-dim);
-        font-size: 0.875rem;
-        margin-left: auto;
-      }
-      .transition-state {
-        font-size: 0.875rem;
-        padding: 2px 8px;
-        border-radius: 3px;
-        font-weight: 500;
-      }
-
       /* ── Activity Log Panel ── */
       .activity-panel-overlay {
         position: fixed;
@@ -9630,10 +9594,6 @@
           <button class="btn btn-ghost markers-done-btn" id="markersDoneBtn">Mark as Done</button>
         </div>
         <div class="detail-section">
-          <h3>History</h3>
-          <div class="transition-list" id="detailTransitions"></div>
-        </div>
-        <div class="detail-section">
           <h3>Activity</h3>
           <div class="activity-compact-list" id="detailActivity"></div>
         </div>
@@ -14417,42 +14377,6 @@
 
           // Per-item activity (async, non-blocking)
           loadItemActivity(item.id);
-
-          // Transitions
-          const transEl = $("#detailTransitions");
-          transEl.innerHTML = "";
-          if (item.transitions && item.transitions.length) {
-            [...item.transitions].reverse().forEach((t) => {
-              const isMove = t.from_state && t.from_state === t.to_state && t.comment && t.comment.startsWith("Moved from ");
-              const actorClassBadge = t.actor_class ? ` <span style="font-size:0.65rem;opacity:0.6;font-style:normal;">[${esc(t.actor_class)}]</span>` : "";
-
-              if (isMove) {
-                // Project move — show the comment as the main content
-                const moveColor = "#6c5ce7";
-                transEl.innerHTML += `<div class="transition-item">
-            <span class="transition-state" style="background:${moveColor}20;color:${moveColor}">&#128193; ${esc(t.comment)}</span>
-            <span class="transition-actor">${esc(t.actor)}${actorClassBadge}</span>
-            <span class="transition-time">${timeAgo(t.created_at)}</span>
-          </div>`;
-              } else {
-                const fromLabel = t.from_state
-                  ? STATE_LABELS[t.from_state] || t.from_state
-                  : "Created";
-                const toLabel = STATE_LABELS[t.to_state] || t.to_state;
-                const fromColor = t.from_state
-                  ? STATE_COLORS[t.from_state] || "#636e72"
-                  : "#636e72";
-                const toColor = STATE_COLORS[t.to_state] || "#636e72";
-                transEl.innerHTML += `<div class="transition-item">
-            <span class="transition-state" style="background:${fromColor}20;color:${fromColor}">${esc(fromLabel)}</span>
-            <span class="transition-arrow">&rarr;</span>
-            <span class="transition-state" style="background:${toColor}20;color:${toColor}">${esc(toLabel)}</span>
-            <span class="transition-actor">${esc(t.actor)}${actorClassBadge}</span>
-            <span class="transition-time">${timeAgo(t.created_at)}</span>
-          </div>`;
-              }
-            });
-          }
         }
 
         // ── Blocker Picker ──
