@@ -686,6 +686,23 @@ export function initTrackerDatabase(): void {
     }
   }
 
+  // TRACK-228: Ensure 'scheduled' is in active_spaces for all orchestrated projects
+  // that have a working_directory. This enables creating scheduled tasks in projects
+  // like Tracker, Liz, App, and Home so the orchestrator can dispatch them to coding agents.
+  {
+    const orchProjects = db
+      .prepare("SELECT id, name, active_spaces FROM tracker_projects WHERE orchestration = 1 AND working_directory != ''")
+      .all() as Array<{ id: string; name: string; active_spaces: string }>;
+    for (const proj of orchProjects) {
+      const spaces: string[] = proj.active_spaces ? JSON.parse(proj.active_spaces) : ["standard"];
+      if (!spaces.includes("scheduled")) {
+        spaces.push("scheduled");
+        db.prepare("UPDATE tracker_projects SET active_spaces = ? WHERE id = ?").run(JSON.stringify(spaces), proj.id);
+        logger.info(`TRACK-228: Added 'scheduled' to active_spaces for project "${proj.name}"`);
+      }
+    }
+  }
+
   logger.info("Tracker database initialized");
 }
 

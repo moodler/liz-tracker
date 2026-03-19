@@ -1787,6 +1787,52 @@ function buildPrompt(
     lines.push("## Description", "", item.description, "");
   }
 
+  // TRACK-228: Include space_data context for scheduled tasks.
+  // Scheduled items store structured data (TODO list, IGNORE rules, schedule config)
+  // in space_data that the coding agent needs to see when executing the task.
+  if (item.space_type === "scheduled" && item.space_data) {
+    try {
+      const spaceData = JSON.parse(item.space_data);
+      const todoItems: string[] = Array.isArray(spaceData.todo) ? spaceData.todo : [];
+      const ignoreRules: string[] = Array.isArray(spaceData.ignore) ? spaceData.ignore : [];
+      const schedule = spaceData.schedule || {};
+
+      if (todoItems.length > 0 || ignoreRules.length > 0 || schedule.frequency) {
+        lines.push("## Scheduled Task Details", "");
+
+        if (schedule.frequency) {
+          const freq = schedule.frequency;
+          const time = schedule.time || "";
+          const tz = schedule.timezone || "";
+          const days = Array.isArray(schedule.days_of_week) ? schedule.days_of_week.join(", ") : "";
+          let scheduleDesc = `**Schedule:** ${freq}`;
+          if (time) scheduleDesc += ` at ${time}`;
+          if (days) scheduleDesc += ` on ${days}`;
+          if (tz) scheduleDesc += ` (${tz})`;
+          lines.push(scheduleDesc, "");
+        }
+
+        if (todoItems.length > 0) {
+          lines.push("**TODO — Tasks to perform:**", "");
+          for (const todo of todoItems) {
+            lines.push(`- ${todo}`);
+          }
+          lines.push("");
+        }
+
+        if (ignoreRules.length > 0) {
+          lines.push("**IGNORE — Skip these:**", "");
+          for (const rule of ignoreRules) {
+            lines.push(`- ${rule}`);
+          }
+          lines.push("");
+        }
+      }
+    } catch {
+      // Malformed space_data — skip silently, the description should have enough context
+    }
+  }
+
   // Section 4.3.2: Comment integrity — segregate pre/post-approval comments
   if (comments.length > 0) {
     const approvedAt = item.approved_at;
