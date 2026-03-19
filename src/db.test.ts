@@ -30,6 +30,7 @@ import {
   getBlockers,
   createComment,
   deleteComment,
+  updateComment,
   listComments,
   listTransitions,
   updateWorkItem,
@@ -2053,6 +2054,57 @@ describe('Activity Log', () => {
       expect(entries).toHaveLength(1);
       expect(entries[0].summary).toContain('Martin');
       expect(entries[0].item_id).toBe(item.id);
+    });
+
+    it('deleteComment uses provided actor', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item' });
+      const comment = createComment({
+        work_item_id: item.id,
+        author: 'Martin',
+        body: 'Test comment',
+      });
+
+      deleteComment(comment.id, 'dashboard');
+      const entries = listActivity({ action: 'comment.deleted' });
+      expect(entries).toHaveLength(1);
+      expect(entries[0].actor).toBe('dashboard');
+      expect(entries[0].actor_class).toBe('human');
+    });
+
+    it('updateComment logs comment.edited', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item' });
+      const comment = createComment({
+        work_item_id: item.id,
+        author: 'Martin',
+        body: 'Original text',
+      });
+
+      updateComment(comment.id, { body: 'Updated text', actor: 'dashboard' });
+      const entries = listActivity({ action: 'comment.edited' });
+      expect(entries).toHaveLength(1);
+      expect(entries[0].summary).toContain('Martin');
+      expect(entries[0].actor).toBe('dashboard');
+      expect(entries[0].item_id).toBe(item.id);
+    });
+
+    it('deleteAttachment uses provided actor', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item' });
+      const attachment = createAttachment({
+        work_item_id: item.id,
+        filename: 'test.png',
+        mime_type: 'image/png',
+        size_bytes: 1000,
+        storage_path: 'attachments/test.png',
+      });
+
+      deleteAttachment(attachment.id, 'dashboard');
+      const entries = listActivity({ action: 'attachment.deleted' });
+      expect(entries).toHaveLength(1);
+      expect(entries[0].actor).toBe('dashboard');
+      expect(entries[0].actor_class).toBe('human');
     });
 
     it('deleteWorkItem cleans up activity log entries', () => {

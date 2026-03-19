@@ -2232,12 +2232,28 @@ export function updateComment(
     "UPDATE tracker_comments SET body = ?, updated_at = ? WHERE id = ?",
   ).run(data.body, ts, id);
 
+  const actorName = data.actor || "system";
+  const item = getWorkItem(existing.work_item_id);
+  if (item) {
+    logActivity({
+      project_id: item.project_id,
+      item_id: existing.work_item_id,
+      action: "comment.edited",
+      actor: actorName,
+      summary: `Edited comment by ${existing.author}`,
+      details: { author: existing.author, comment_id: id },
+    });
+  }
+
   return db
     .prepare("SELECT * FROM tracker_comments WHERE id = ?")
     .get(id) as Comment;
 }
 
-export function deleteComment(id: string): Comment | undefined {
+export function deleteComment(
+  id: string,
+  actor?: string,
+): Comment | undefined {
   const comment = db
     .prepare("SELECT * FROM tracker_comments WHERE id = ?")
     .get(id) as Comment | undefined;
@@ -2246,6 +2262,7 @@ export function deleteComment(id: string): Comment | undefined {
   db.prepare("DELETE FROM tracker_comments WHERE id = ?").run(id);
 
   const ts = now();
+  const actorName = actor || "system";
   const item = getWorkItem(comment.work_item_id);
   if (item) {
     // Log to activity log
@@ -2253,7 +2270,7 @@ export function deleteComment(id: string): Comment | undefined {
       project_id: item.project_id,
       item_id: comment.work_item_id,
       action: "comment.deleted",
-      actor: "system",
+      actor: actorName,
       summary: `Deleted comment by ${comment.author}`,
       details: { author: comment.author, comment_id: id },
     });
@@ -2262,7 +2279,7 @@ export function deleteComment(id: string): Comment | undefined {
       type: "comment.deleted",
       work_item_id: comment.work_item_id,
       project_id: item.project_id,
-      actor: "system",
+      actor: actorName,
       data: { comment_id: id, author: comment.author },
       timestamp: ts,
     });
@@ -2954,13 +2971,17 @@ export function listAttachments(workItemId: string): Attachment[] {
 }
 
 /** Delete an attachment record from the database. Does NOT delete the file on disk. */
-export function deleteAttachment(id: string): Attachment | undefined {
+export function deleteAttachment(
+  id: string,
+  actor?: string,
+): Attachment | undefined {
   const attachment = getAttachment(id);
   if (!attachment) return undefined;
 
   db.prepare("DELETE FROM tracker_attachments WHERE id = ?").run(id);
 
   const ts = now();
+  const actorName = actor || "system";
   const item = getWorkItem(attachment.work_item_id);
   if (item) {
     // Log to activity log
@@ -2968,7 +2989,7 @@ export function deleteAttachment(id: string): Attachment | undefined {
       project_id: item.project_id,
       item_id: attachment.work_item_id,
       action: "attachment.deleted",
-      actor: "system",
+      actor: actorName,
       summary: `Deleted ${attachment.filename}`,
       details: { filename: attachment.filename },
     });
@@ -2977,7 +2998,7 @@ export function deleteAttachment(id: string): Attachment | undefined {
       type: "attachment.deleted",
       work_item_id: attachment.work_item_id,
       project_id: item.project_id,
-      actor: "system",
+      actor: actorName,
       data: { attachment_id: id, filename: attachment.filename },
       timestamp: ts,
     });

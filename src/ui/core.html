@@ -9621,6 +9621,8 @@
           <option value="item.moved">Moved</option>
           <option value="item.locked">Locked</option>
           <option value="item.unlocked">Unlocked</option>
+          <option value="comment.edited">Comment edited</option>
+          <option value="comment.deleted">Comment deleted</option>
           <option value="attachment.uploaded">Attachment uploaded</option>
           <option value="attachment.deleted">Attachment deleted</option>
         </select>
@@ -14698,7 +14700,7 @@
               e.stopPropagation();
               if (!confirm(`Delete "${a.filename}"?`)) return;
               try {
-                await apiDelete(`/attachments/${a.id}`);
+                await apiDelete(`/attachments/${a.id}?actor=${DEFAULT_AUTHOR}`);
                 toast(`Deleted "${a.filename}"`);
                 const item = await apiGet(`/items/${detailItemId}`);
                 renderAttachments(item.attachments || []);
@@ -15198,7 +15200,7 @@
         async function deleteComment(commentId) {
           if (!confirm("Delete this comment?")) return;
           try {
-            await apiDelete(`/comments/${commentId}`);
+            await apiDelete(`/comments/${commentId}?actor=${DEFAULT_AUTHOR}`);
             toast("Comment deleted");
             const item = await apiGet(`/items/${detailItemId}`);
             populateDetail(item);
@@ -15233,7 +15235,7 @@
             const newBody = textarea.value.trim();
             if (!newBody) return;
             try {
-              await apiPatch(`/comments/${commentId}`, { body: newBody });
+              await apiPatch(`/comments/${commentId}`, { body: newBody, actor: DEFAULT_AUTHOR });
               toast("Comment updated");
               const item = await apiGet(`/items/${detailItemId}`);
               populateDetail(item);

@@ -1452,7 +1452,8 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
 
       // DELETE /attachments/:id — delete attachment (record + file)
       if (parts.length === 2 && method === "DELETE") {
-        const attachment = deleteAttachment(attachmentId);
+        const actor = params.get("actor") || undefined;
+        const attachment = deleteAttachment(attachmentId, actor);
         if (!attachment) return error(res, "Attachment not found", 404);
 
         // Also remove the file from disk
@@ -1473,12 +1474,19 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
       if (parts.length === 2 && method === "PATCH") {
         const body = await parseBody(req);
         if (!body.body) return error(res, "body is required");
-        const comment = updateComment(commentId, { body: String(body.body) });
+        const comment = updateComment(commentId, {
+          body: String(body.body),
+          actor: body.actor ? String(body.actor) : undefined,
+        });
         if (!comment) return error(res, "Comment not found", 404);
         return json(res, comment);
       }
       if (parts.length === 2 && method === "DELETE") {
-        const comment = deleteComment(commentId);
+        const body = await parseBody(req).catch(() => ({}));
+        const actor = (body as Record<string, unknown>)?.actor
+          ? String((body as Record<string, unknown>).actor)
+          : params.get("actor") || undefined;
+        const comment = deleteComment(commentId, actor);
         if (!comment) return error(res, "Comment not found", 404);
         return json(res, { deleted: true });
       }
