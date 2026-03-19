@@ -10147,9 +10147,11 @@
             codeLines = [];
           let inList = false,
             listType = "";
+          let inSubList = false; // tracking nested ul inside ol
 
           function flushList() {
             if (inList) {
+              if (inSubList) { html += "</ul></li>"; inSubList = false; }
               html += `</${listType}>`;
               inList = false;
             }
@@ -10233,8 +10235,19 @@
               continue;
             }
 
-            // Blank line
+            // Blank line — but don't flush if next non-blank line continues the list
             if (!line.trim()) {
+              if (inList) {
+                let j = i + 1;
+                while (j < lines.length && !lines[j].trim()) j++;
+                if (j < lines.length) {
+                  const nextLine = lines[j];
+                  const continuesList =
+                    (listType === "ol" && (/^\s*\d+[.)]\s+/.test(nextLine) || /^\s+[-*]\s+/.test(nextLine))) ||
+                    (listType === "ul" && /^\s*[-*]\s+/.test(nextLine));
+                  if (continuesList) continue; // skip blank line, keep list open
+                }
+              }
               flushList();
               continue;
             }
@@ -10255,9 +10268,21 @@
               continue;
             }
 
-            // Unordered list
+            // Unordered list (or nested sub-list under an ordered list)
             const ulMatch = line.match(/^(\s*)[-*]\s+(.*)/);
             if (ulMatch) {
+              // Indented unordered item inside an ordered list → nest as sub-list
+              if (inList && listType === "ol" && ulMatch[1].length > 0) {
+                if (!inSubList) {
+                  // Re-open the last <li> by replacing trailing </li> with a nested <ul>
+                  html = html.replace(/<\/li>$/, "");
+                  html += "<ul>";
+                  inSubList = true;
+                }
+                html += `<li>${inline(ulMatch[2])}</li>`;
+                continue;
+              }
+              if (inSubList) { html += "</ul></li>"; inSubList = false; }
               if (!inList || listType !== "ul") {
                 flushList();
                 html += "<ul>";
@@ -10269,15 +10294,18 @@
             }
 
             // Ordered list
-            const olMatch = line.match(/^(\s*)\d+[.)]\s+(.*)/);
+            const olMatch = line.match(/^(\s*)(\d+)[.)]\s+(.*)/);
             if (olMatch) {
+              // Close any open sub-list before adding next ordered item
+              if (inSubList) { html += "</ul></li>"; inSubList = false; }
               if (!inList || listType !== "ol") {
                 flushList();
-                html += "<ol>";
+                const startNum = parseInt(olMatch[2], 10);
+                html += startNum > 1 ? `<ol start="${startNum}">` : "<ol>";
                 inList = true;
                 listType = "ol";
               }
-              html += `<li>${inline(olMatch[2])}</li>`;
+              html += `<li>${inline(olMatch[3])}</li>`;
               continue;
             }
 
