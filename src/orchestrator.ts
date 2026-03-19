@@ -32,7 +32,9 @@ import {
   createExecutionAudit,
   completeExecutionAudit,
   getExpiredScheduledItems,
+  getNonOrchestratedScheduledItems,
   updateWorkItem,
+  emit,
   type WorkItem,
   type Project,
   type Attachment,
@@ -1152,6 +1154,10 @@ function tick(): void {
   // Check for expired scheduled items and auto-close them
   checkExpiredScheduledItems();
 
+  // TRACK-228: Trigger due scheduled tasks in non-orchestrated projects
+  // (uses same cron logic as orchestrated dispatch, but routes via webhook to Liz/Harmoni)
+  triggerDueScheduledTasks();
+
   // Check for items in testing/in_review that have been acknowledged by owner
   checkPendingAcknowledgments();
 
@@ -1227,6 +1233,18 @@ function tryDispatch(): void {
           logger.debug(
             { itemId: item.id, projectId: item.project_id, projectSessions, maxPerProject: OPENCODE_MAX_PER_PROJECT },
             "Skipping dispatch: project at per-project concurrency limit",
+          );
+          continue;
+        }
+
+        // TRACK-228: Scheduled task time gating — only dispatch scheduled tasks
+        // when their configured time has arrived. Tasks with a specific schedule
+        // time should wait until that time, not dispatch immediately on approval.
+        if (!isScheduleTimeDue(item)) {
+          const key = getWorkItemKey(item);
+          logger.debug(
+            { itemId: item.id, key },
+            "Skipping dispatch: scheduled task not yet due",
           );
           continue;
         }
@@ -2682,6 +2700,156 @@ function cancelDeferredError(sessionId: string): void {
 
 // ── Scheduled Task Recycling (TRACK-228) ──
 
+// ── Scheduled Task Time Gating (TRACK-228) ──
+
+/**
+ * Check if a scheduled task's time has arrived and it should be dispatched.
+ *
+ * For non-scheduled items, always returns true (no gating).
+ * For scheduled items, checks whether the current time (in the task's timezone)
+ * has reached the configured schedule time, and whether the task hasn't already
+ * run in the current scheduled window.
+ *
+ * Frequency-specific behavior:
+ * - manual: always true (dispatch immediately when approved — human approval IS the trigger)
+ * - hourly: true if last_run was more than 55 minutes ago (5-min grace for polling jitter)
+ * - daily: true if current time >= scheduled time AND hasn't run today
+ * - weekly: true if current time >= scheduled time AND today is in days_of_week AND hasn't run today
+ * - monthly: true if current time >= scheduled time AND hasn't run this month
+ * - once: true if current time >= scheduled time (runs once then stays done)
+ * - custom (cron_override): always true (cron parsing is out of scope — let it dispatch)
+ *
+ * @param item - The work item to check
+ * @returns true if the item should be dispatched now
+ */
+export function isScheduleTimeDue(item: WorkItem): boolean {
+  // Non-scheduled items are always dispatchable
+  if (item.space_type !== "scheduled") return true;
+  if (!item.space_data) return true;
+
+  let spaceData: { schedule?: Record<string, unknown>; status?: Record<string, unknown> };
+  try {
+    spaceData = JSON.parse(item.space_data);
+  } catch {
+    return true; // Malformed data — don't block dispatch
+  }
+
+  const schedule = spaceData.schedule;
+  if (!schedule) return true;
+
+  const frequency = schedule.frequency as string | undefined;
+  if (!frequency) return true;
+
+  // Manual tasks dispatch immediately — human approval is the trigger
+  if (frequency === "manual") return true;
+
+  // Custom cron — too complex to parse, allow dispatch
+  if (frequency === "custom") return true;
+
+  const scheduledTime = schedule.time as string | undefined; // "HH:MM" format
+  const timezone = (schedule.timezone as string) || "UTC";
+
+  // If no time configured, allow dispatch
+  if (!scheduledTime) return true;
+
+  // Get current time in the task's timezone
+  const now = new Date();
+  let nowInTz: Date;
+  try {
+    // Format current time in the target timezone to extract hours/minutes/date components
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      weekday: "long",
+    });
+    const parts = formatter.formatToParts(now);
+    const get = (type: string) => parts.find(p => p.type === type)?.value || "";
+
+    const currentHour = parseInt(get("hour"), 10);
+    const currentMinute = parseInt(get("minute"), 10);
+    const currentYear = parseInt(get("year"), 10);
+    const currentMonth = parseInt(get("month"), 10);
+    const currentDay = parseInt(get("day"), 10);
+    const currentWeekday = get("weekday").toLowerCase(); // e.g. "monday"
+
+    // Parse scheduled time
+    const [schedHour, schedMinute] = scheduledTime.split(":").map(Number);
+    if (isNaN(schedHour) || isNaN(schedMinute)) return true;
+
+    // Check if current time has reached the scheduled time
+    const currentMinutes = currentHour * 60 + currentMinute;
+    const scheduledMinutes = schedHour * 60 + schedMinute;
+
+    if (currentMinutes < scheduledMinutes) {
+      // Not yet time — too early today
+      return false;
+    }
+
+    // For weekly: check if today is one of the scheduled days
+    if (frequency === "weekly") {
+      const daysOfWeek = schedule.days_of_week as string[] | null;
+      if (Array.isArray(daysOfWeek) && daysOfWeek.length > 0) {
+        if (!daysOfWeek.includes(currentWeekday)) {
+          return false; // Not a scheduled day
+        }
+      }
+    }
+
+    // Check if already ran in the current window (prevent re-dispatch after recycle)
+    const status = spaceData.status;
+    const lastRun = status?.last_run as string | undefined;
+    if (lastRun) {
+      try {
+        // Get last_run in the task's timezone
+        const lastRunDate = new Date(lastRun);
+        const lastRunFormatter = new Intl.DateTimeFormat("en-US", {
+          timeZone: timezone,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+        const lastParts = lastRunFormatter.formatToParts(lastRunDate);
+        const getLast = (type: string) => lastParts.find(p => p.type === type)?.value || "";
+
+        const lastYear = parseInt(getLast("year"), 10);
+        const lastMonth = parseInt(getLast("month"), 10);
+        const lastDay = parseInt(getLast("day"), 10);
+
+        if (frequency === "hourly") {
+          // Hourly: skip if last run was less than 55 minutes ago
+          const msSinceLastRun = now.getTime() - lastRunDate.getTime();
+          if (msSinceLastRun < 55 * 60 * 1000) return false;
+        } else if (frequency === "daily" || frequency === "weekly" || frequency === "once") {
+          // Daily/weekly/once: skip if already ran today (in task's timezone)
+          if (lastYear === currentYear && lastMonth === currentMonth && lastDay === currentDay) {
+            return false;
+          }
+        } else if (frequency === "monthly") {
+          // Monthly: skip if already ran this month
+          if (lastYear === currentYear && lastMonth === currentMonth) {
+            return false;
+          }
+        }
+      } catch {
+        // Failed to parse last_run — proceed with dispatch
+      }
+    }
+
+    return true;
+  } catch {
+    // Timezone formatting failed — allow dispatch as fallback
+    return true;
+  }
+}
+
 /**
  * Non-recurring frequencies — scheduled tasks with these frequencies are NOT
  * recycled after completion. "once" tasks run a single time, "manual" tasks
@@ -3162,6 +3330,67 @@ function checkExpiredScheduledItems(): void {
       "orchestrator",
       `Auto-closed: scheduled task expired (due date ${item.date_due} has passed)`,
     );
+  }
+}
+
+/**
+ * TRACK-228: Trigger scheduled tasks in non-orchestrated projects when their
+ * scheduled time arrives. Uses the same isScheduleTimeDue() cron logic as
+ * orchestrated projects, but instead of dispatching to a coding agent, it
+ * emits a scheduled_task.due event that the webhook handler in index.ts
+ * forwards to Liz/Harmoni.
+ *
+ * This ensures ALL scheduled tasks across ALL projects use the same cron
+ * logic, regardless of whether the project uses orchestration or not:
+ * - Orchestrated projects → dispatched to coding agents via tryDispatch()
+ * - Non-orchestrated projects → triggered via webhook to Liz/Harmoni
+ */
+function triggerDueScheduledTasks(): void {
+  const items = getNonOrchestratedScheduledItems();
+  if (items.length === 0) return;
+
+  for (const item of items) {
+    if (!isScheduleTimeDue(item)) continue;
+
+    const key = getWorkItemKey(item);
+    const project = getProject(item.project_id);
+
+    logger.info(
+      { itemId: item.id, key, projectName: project?.name },
+      "Scheduled task due in non-orchestrated project — triggering via webhook",
+    );
+
+    // Update space_data status to mark as running and prevent re-trigger
+    // on the next tick cycle
+    if (item.space_data) {
+      try {
+        const spaceData = JSON.parse(item.space_data);
+        if (!spaceData.status) spaceData.status = {};
+        spaceData.status.last_run = new Date().toISOString();
+        spaceData.status.last_status = "running";
+        spaceData.status.run_count = (spaceData.status.run_count || 0) + 1;
+        updateWorkItem(item.id, { space_data: JSON.stringify(spaceData) });
+      } catch {
+        logger.warn({ itemId: item.id, key }, "Failed to update scheduled task status");
+      }
+    }
+
+    // Emit event for the webhook handler in index.ts to forward to Liz/Harmoni
+    emit({
+      type: "scheduled_task.due",
+      work_item_id: item.id,
+      project_id: item.project_id,
+      actor: "orchestrator",
+      data: {
+        issue_key: key,
+        title: item.title,
+        description: item.description,
+        space_type: item.space_type,
+        space_data: item.space_data,
+        project_name: project?.name || "",
+      },
+      timestamp: new Date().toISOString(),
+    });
   }
 }
 

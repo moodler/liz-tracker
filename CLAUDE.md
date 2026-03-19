@@ -130,7 +130,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 | `ITEM_DISPATCH_FAILURE_LIMIT` | `3` | Per-item failures before auto-shelving to needs_input |
 | `ANTHROPIC_API_KEY` | (none) | Anthropic API key — enables AI categorization button in the dashboard |
 | `AI_CATEGORIZE_MODEL` | `claude-sonnet-4-20250514` | Model for AI categorization (fast structured extraction) |
-| `WEBHOOK_URL` | (none) | URL to POST comment webhook notifications to (for external integrations) |
+| `WEBHOOK_URL` | (none) | URL to POST webhook notifications to (comments + scheduled task triggers) |
 | `WEBHOOK_SECRET` | (none) | Shared secret for authenticating webhook payloads (HMAC) |
 
 ### How it works
@@ -160,6 +160,15 @@ All configuration is via `.env` file or environment variables. See `.env.example
 2. If the comment matches acknowledgment patterns (e.g. "looks good", "LGTM", "done", "approved", "ship it"), the item is auto-moved to `done`
 3. If the comment is non-acknowledgment feedback on a `testing` item, it triggers the review feedback redispatch flow above
 4. Runs both reactively (via event watcher) and periodically (catch-all scan for missed comments)
+
+**Scheduled task time gating (TRACK-228):**
+1. Scheduled tasks are NOT dispatched immediately upon approval — they wait until their configured schedule time arrives
+2. `isScheduleTimeDue()` checks the current time (in the task's timezone) against the schedule: time, frequency, days_of_week
+3. Frequency-specific behavior: `manual` dispatches immediately (approval is the trigger), `hourly` checks 55-min window, `daily`/`weekly`/`once` check time-of-day, `weekly` also checks day-of-week, `monthly` checks month, `custom` (cron) always dispatches
+4. After a task runs, `last_run` in `space_data.status` prevents re-dispatch in the same window (same day for daily, same hour for hourly, etc.)
+5. The same cron logic (`isScheduleTimeDue()`) is used for **both** orchestrated and non-orchestrated projects:
+   - **Orchestrated projects** (orchestration=1): scheduled tasks are dispatched to coding agents via `tryDispatch()`
+   - **Non-orchestrated projects** (orchestration=0): scheduled tasks are triggered via `scheduled_task.due` webhook to Liz/Harmoni via `triggerDueScheduledTasks()`
 
 **Recurring scheduled task recycling (TRACK-228):**
 1. When a recurring scheduled task session completes, the orchestrator automatically recycles it back to `approved` (instead of advancing through testing → done)

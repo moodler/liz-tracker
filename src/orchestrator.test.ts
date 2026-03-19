@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { isProcessAlive, resolveOpencodePid, sendSignal, killProcessGracefully, validateAgentConfig, is413Error, isImageTooLargeError, isPostCompletionError } from "./orchestrator.js";
+import { isProcessAlive, resolveOpencodePid, sendSignal, killProcessGracefully, validateAgentConfig, is413Error, isImageTooLargeError, isPostCompletionError, isScheduleTimeDue } from "./orchestrator.js";
 import { base64UrlEncode, buildOpencodeSessionUrl, buildOpencodeDirectoryUrl, buildOpencodeApiSessionUrl } from "./config.js";
 import fs from "fs";
 import path from "path";
@@ -592,5 +592,211 @@ describe("buildOpencodeApiSessionUrl", () => {
     const url = buildOpencodeApiSessionUrl("/home/user/project");
     expect(url).toContain("/session?directory=");
     expect(url).toContain(encodeURIComponent("/home/user/project"));
+  });
+});
+
+// ── isScheduleTimeDue (TRACK-228) ──
+
+/**
+ * Helper to create a minimal WorkItem for schedule testing.
+ * Only space_type and space_data matter for isScheduleTimeDue().
+ */
+function makeScheduledItem(scheduleOverrides: Record<string, unknown> = {}, statusOverrides: Record<string, unknown> = {}, extraFields: Record<string, unknown> = {}): any {
+  return {
+    id: "test-item",
+    space_type: "scheduled",
+    space_data: JSON.stringify({
+      schedule: {
+        frequency: "daily",
+        time: "07:00",
+        days_of_week: null,
+        timezone: "Australia/Perth",
+        cron_override: null,
+        ...scheduleOverrides,
+      },
+      status: {
+        next_run: null,
+        last_run: null,
+        last_status: null,
+        last_duration_ms: null,
+        run_count: 0,
+        ...statusOverrides,
+      },
+      todo: [],
+      ignore: [],
+    }),
+    ...extraFields,
+  };
+}
+
+describe("isScheduleTimeDue", () => {
+  it("returns true for non-scheduled items", () => {
+    expect(isScheduleTimeDue({ space_type: "standard", space_data: null } as any)).toBe(true);
+  });
+
+  it("returns true for scheduled items with no space_data", () => {
+    expect(isScheduleTimeDue({ space_type: "scheduled", space_data: null } as any)).toBe(true);
+  });
+
+  it("returns true for scheduled items with malformed space_data", () => {
+    expect(isScheduleTimeDue({ space_type: "scheduled", space_data: "not json" } as any)).toBe(true);
+  });
+
+  it("returns true for manual frequency (dispatch immediately)", () => {
+    const item = makeScheduledItem({ frequency: "manual" });
+    expect(isScheduleTimeDue(item)).toBe(true);
+  });
+
+  it("returns true for custom frequency (cron — too complex to parse)", () => {
+    const item = makeScheduledItem({ frequency: "custom", cron_override: "0 */6 * * *" });
+    expect(isScheduleTimeDue(item)).toBe(true);
+  });
+
+  it("returns true for scheduled items with no time configured", () => {
+    const item = makeScheduledItem({ time: null });
+    expect(isScheduleTimeDue(item)).toBe(true);
+  });
+
+  it("returns false for daily task before scheduled time", () => {
+    // Schedule for 23:59 UTC — should not be due unless it's literally 23:59 UTC
+    // Use a timezone where it's morning to ensure the test is stable
+    const item = makeScheduledItem({ frequency: "daily", time: "23:59", timezone: "UTC" });
+    // This test checks that a task scheduled for 23:59 UTC is NOT due at most times
+    // It could fail if run exactly at 23:59 UTC, but that's extremely unlikely
+    const now = new Date();
+    const utcHour = now.getUTCHours();
+    const utcMinute = now.getUTCMinutes();
+    if (utcHour < 23 || (utcHour === 23 && utcMinute < 59)) {
+      expect(isScheduleTimeDue(item)).toBe(false);
+    }
+    // If we happen to be running at 23:59 UTC, skip this assertion
+  });
+
+  it("returns true for daily task after scheduled time (no last_run)", () => {
+    // Schedule for 00:00 UTC — should always be due (it's always past midnight)
+    const item = makeScheduledItem({ frequency: "daily", time: "00:00", timezone: "UTC" });
+    expect(isScheduleTimeDue(item)).toBe(true);
+  });
+
+  it("returns false for daily task that already ran today", () => {
+    // Schedule for 00:00 UTC and set last_run to now
+    const item = makeScheduledItem(
+      { frequency: "daily", time: "00:00", timezone: "UTC" },
+      { last_run: new Date().toISOString() },
+    );
+    expect(isScheduleTimeDue(item)).toBe(false);
+  });
+
+  it("returns true for daily task that ran yesterday", () => {
+    // Schedule for 00:00 UTC and set last_run to yesterday
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const item = makeScheduledItem(
+      { frequency: "daily", time: "00:00", timezone: "UTC" },
+      { last_run: yesterday.toISOString() },
+    );
+    expect(isScheduleTimeDue(item)).toBe(true);
+  });
+
+  it("returns false for weekly task on a non-scheduled day", () => {
+    // Figure out what today ISN'T
+    const today = new Date();
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      weekday: "long",
+    });
+    const todayName = formatter.format(today).toLowerCase();
+    // Pick a day that's NOT today
+    const allDays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const otherDay = allDays.find(d => d !== todayName)!;
+
+    const item = makeScheduledItem({
+      frequency: "weekly",
+      time: "00:00",
+      timezone: "UTC",
+      days_of_week: [otherDay],
+    });
+    expect(isScheduleTimeDue(item)).toBe(false);
+  });
+
+  it("returns true for weekly task on a scheduled day after scheduled time", () => {
+    // Figure out what today IS
+    const today = new Date();
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      weekday: "long",
+    });
+    const todayName = formatter.format(today).toLowerCase();
+
+    const item = makeScheduledItem({
+      frequency: "weekly",
+      time: "00:00",
+      timezone: "UTC",
+      days_of_week: [todayName],
+    });
+    expect(isScheduleTimeDue(item)).toBe(true);
+  });
+
+  it("returns false for hourly task that ran less than 55 minutes ago", () => {
+    const recentRun = new Date();
+    recentRun.setMinutes(recentRun.getMinutes() - 30); // 30 minutes ago
+    const item = makeScheduledItem(
+      { frequency: "hourly", time: "00:00", timezone: "UTC" },
+      { last_run: recentRun.toISOString() },
+    );
+    expect(isScheduleTimeDue(item)).toBe(false);
+  });
+
+  it("returns true for hourly task that ran more than 55 minutes ago", () => {
+    const oldRun = new Date();
+    oldRun.setMinutes(oldRun.getMinutes() - 60); // 60 minutes ago
+    const item = makeScheduledItem(
+      { frequency: "hourly", time: "00:00", timezone: "UTC" },
+      { last_run: oldRun.toISOString() },
+    );
+    expect(isScheduleTimeDue(item)).toBe(true);
+  });
+
+  it("returns false for once task that already ran today", () => {
+    const item = makeScheduledItem(
+      { frequency: "once", time: "00:00", timezone: "UTC" },
+      { last_run: new Date().toISOString() },
+    );
+    expect(isScheduleTimeDue(item)).toBe(false);
+  });
+
+  it("returns false for monthly task that already ran this month", () => {
+    const item = makeScheduledItem(
+      { frequency: "monthly", time: "00:00", timezone: "UTC" },
+      { last_run: new Date().toISOString() },
+    );
+    expect(isScheduleTimeDue(item)).toBe(false);
+  });
+
+  it("respects timezone — task scheduled in far-ahead timezone", () => {
+    // Use a timezone that's well ahead of UTC. If current UTC time is before the
+    // scheduled time in that timezone, the task should not be due.
+    // Schedule at 23:59 in Pacific/Kiritimati (UTC+14, always ahead)
+    const item = makeScheduledItem({
+      frequency: "daily",
+      time: "23:59",
+      timezone: "Pacific/Kiritimati",
+    });
+    // Get current time in Kiritimati
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Pacific/Kiritimati",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(new Date());
+    const hour = parseInt(parts.find(p => p.type === "hour")?.value || "0", 10);
+    const minute = parseInt(parts.find(p => p.type === "minute")?.value || "0", 10);
+    const currentMinutes = hour * 60 + minute;
+
+    if (currentMinutes < 23 * 60 + 59) {
+      expect(isScheduleTimeDue(item)).toBe(false);
+    }
+    // If it happens to be 23:59 in Kiritimati, this test gracefully skips
   });
 });
