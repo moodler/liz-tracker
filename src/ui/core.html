@@ -6312,6 +6312,15 @@
       .space-key:active {
         opacity: 0.6;
       }
+      .space-title {
+        font-size: 0.88rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+        flex: 0 1 auto;
+      }
       .space-state-select {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -8634,6 +8643,9 @@
         .space-header .space-key {
           flex-shrink: 0;
         }
+        .space-header .space-title {
+          display: none;
+        }
         .space-header .space-view-toggle-btn {
           margin-left: auto;
           flex-shrink: 0;
@@ -9429,6 +9441,7 @@
         <div class="space-header" id="spaceHeader">
           <button class="space-close-btn" id="spaceCloseBtn" title="Close">&times;</button>
           <span class="space-key" id="spaceKey"></span>
+          <span class="space-title" id="spaceTitle"></span>
           <button class="space-btn space-view-toggle-btn" id="spaceViewToggleBtn" title="Switch to standard tracker view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 6h6M9 10h6M9 14h4"/></svg> Standard View</button>
           <div class="space-header-actions">
             <select class="space-state-select" id="spaceStateSelect"></select>
@@ -13305,6 +13318,13 @@
               stateSelect.value = item.state;
             }
 
+            // --- Update title if changed ---
+            const titleEl = $("#spaceTitle");
+            if (titleEl && item.title !== (spaceItemData && spaceItemData.title)) {
+              titleEl.textContent = item.title || "";
+              titleEl.title = item.title || "";
+            }
+
             // --- Update description/dashboard if changed externally ---
             // Delegate to plugin's refreshDashboard callback if available
             {
@@ -13481,6 +13501,8 @@
             spaceItemData = item;
             // Populate header
             $("#spaceKey").textContent = item.key || "";
+            $("#spaceTitle").textContent = item.title || "";
+            $("#spaceTitle").title = item.title || "";
             // Update toggle button to show current view name (e.g. "Engagement View")
             const spaceType_ = item.space_type || "standard";
             const spaceInfo_ = SPACE_TYPES[spaceType_];
