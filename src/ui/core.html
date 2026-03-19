@@ -9370,7 +9370,7 @@
           <div class="attachment-upload" id="attachmentUpload">
             <label class="attachment-drop-zone" id="attachmentDropZone">
               <input type="file" id="attachmentFileInput" multiple style="display:none;" />
-              <span class="drop-zone-text">📎 Drop files here or click to upload</span>
+              <span class="drop-zone-text">📎 Drop files, paste images, or click to upload</span>
             </label>
             <div class="attachment-progress" id="attachmentProgress" style="display:none;">
               <div class="progress-bar"><div class="progress-fill" id="attachmentProgressFill"></div></div>
@@ -14586,6 +14586,40 @@
           const files = e.dataTransfer.files;
           for (const file of files) {
             uploadAttachment(file);
+          }
+        });
+
+        // ── Paste to upload ──
+        // Listen on the detail panel so paste works whenever the panel is open,
+        // regardless of which element has focus.
+        detailPanel.addEventListener('paste', (e) => {
+          if (!detailItemId) return;
+          const items = e.clipboardData && e.clipboardData.items;
+          if (!items) return;
+
+          let handled = false;
+          for (const item of items) {
+            if (item.type.startsWith('image/')) {
+              e.preventDefault();
+              const file = item.getAsFile();
+              if (!file) continue;
+
+              // Generate a descriptive filename from the timestamp
+              const now = new Date();
+              const pad = (n, d = 2) => String(n).padStart(d, '0');
+              const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+              const ext = file.type.split('/')[1] || 'png';
+              const namedFile = new File([file], `paste-${ts}.${ext}`, { type: file.type });
+
+              uploadAttachment(namedFile);
+              handled = true;
+            }
+          }
+
+          // Visual feedback: flash the drop zone
+          if (handled) {
+            dropZone.classList.add('dragover');
+            setTimeout(() => dropZone.classList.remove('dragover'), 600);
           }
         });
 
