@@ -2900,6 +2900,41 @@ function isRecurringScheduledTask(item: WorkItem): boolean {
 }
 
 /**
+ * Update the space_data.status fields on a scheduled task after a run completes.
+ * Called for ALL scheduled tasks — both recurring (recycled) and one-off.
+ *
+ * TRACK-235: Previously this logic was only inside recycleScheduledItem(), so
+ * non-recurring scheduled tasks (or tasks not yet detected as recurring) that
+ * went through the normal in_review → testing → done pipeline never had their
+ * run_count, last_run, or last_status updated.
+ *
+ * @param item - The completed scheduled work item
+ * @param success - Whether the last run was successful
+ * @param durationMs - Duration of the last run in milliseconds (optional)
+ */
+function updateScheduledTaskStatus(item: WorkItem, success: boolean, durationMs?: number): void {
+  if (item.space_type !== "scheduled") return;
+  if (!item.space_data) return;
+
+  const key = getWorkItemKey(item);
+  try {
+    const spaceData = JSON.parse(item.space_data);
+    if (!spaceData.status) spaceData.status = {};
+    spaceData.status.last_run = new Date().toISOString();
+    spaceData.status.last_status = success ? "completed" : "failed";
+    spaceData.status.run_count = (spaceData.status.run_count || 0) + 1;
+    if (durationMs !== undefined) {
+      spaceData.status.last_duration_ms = durationMs;
+    }
+    updateWorkItem(item.id, { space_data: JSON.stringify(spaceData) });
+    logger.debug({ itemId: item.id, key, success, runCount: spaceData.status.run_count }, "Updated scheduled task status");
+  } catch {
+    // Non-fatal — continue even if status update fails
+    logger.warn({ itemId: item.id, key }, "Failed to update scheduled task status fields");
+  }
+}
+
+/**
  * Recycle a completed recurring scheduled task back to 'approved' state
  * so it gets dispatched again on the next cycle.
  *
@@ -2915,23 +2950,8 @@ function isRecurringScheduledTask(item: WorkItem): boolean {
 function recycleScheduledItem(item: WorkItem, success: boolean, durationMs?: number): void {
   const key = getWorkItemKey(item);
 
-  // Update space_data status fields
-  if (item.space_data) {
-    try {
-      const spaceData = JSON.parse(item.space_data);
-      if (!spaceData.status) spaceData.status = {};
-      spaceData.status.last_run = new Date().toISOString();
-      spaceData.status.last_status = success ? "completed" : "failed";
-      spaceData.status.run_count = (spaceData.status.run_count || 0) + 1;
-      if (durationMs !== undefined) {
-        spaceData.status.last_duration_ms = durationMs;
-      }
-      updateWorkItem(item.id, { space_data: JSON.stringify(spaceData) });
-    } catch {
-      // Non-fatal — continue with the recycle even if status update fails
-      logger.warn({ itemId: item.id, key }, "Failed to update scheduled task status fields");
-    }
-  }
+  // Update space_data status fields (TRACK-235: extracted to shared function)
+  updateScheduledTaskStatus(item, success, durationMs);
 
   // Move back to approved — the TRACK-228 exception in changeWorkItemState()
   // allows system actors to recycle scheduled tasks while preserving the
@@ -3020,12 +3040,15 @@ function handleSessionComplete(sessionId: string): void {
     unlockWorkItem(session.itemId);
   }
 
+  const durationMs = Date.now() - session.startedAt.getTime();
+  const completedStates = new Set(["in_review", "done"]);
+
   // TRACK-228: Recycle recurring scheduled tasks back to approved after completion.
   // This bypasses the normal in_review → testing → done pipeline — recurring tasks
   // don't need owner verification on every run.
-  const completedStates = new Set(["in_review", "done"]);
+  // Note: recycleScheduledItem() internally calls updateScheduledTaskStatus() to
+  // update run_count, last_run, etc.
   if (completedStates.has(item.state) && isRecurringScheduledTask(item)) {
-    const durationMs = Date.now() - session.startedAt.getTime();
     recycleScheduledItem(item, true, durationMs);
     logger.info(
       { itemId: session.itemId, sessionId, durationMs },
@@ -3034,6 +3057,13 @@ function handleSessionComplete(sessionId: string): void {
     // Immediately try to dispatch the next item now that a slot is free
     tryDispatch();
     return;
+  }
+
+  // TRACK-235: Update scheduled task status (run_count, last_run, last_status) for
+  // non-recurring scheduled tasks that go through the normal completion pipeline.
+  // Recurring tasks are already handled by recycleScheduledItem() above.
+  if (completedStates.has(item.state) && item.space_type === "scheduled") {
+    updateScheduledTaskStatus(item, true, durationMs);
   }
 
   // Auto-advance based on final item state
@@ -3135,14 +3165,19 @@ function handleSessionError(sessionId: string, message: string): void {
     }
 
     // TRACK-228: Recycle recurring scheduled tasks instead of advancing to testing
+    // Note: recycleScheduledItem() internally calls updateScheduledTaskStatus()
+    const durationMs = Date.now() - session.startedAt.getTime();
     if (completedStates.has(item.state) && isRecurringScheduledTask(item)) {
-      const durationMs = Date.now() - session.startedAt.getTime();
       recycleScheduledItem(item, true, durationMs);
       logger.info(
         { itemId: session.itemId, sessionId },
         "Post-completion error recovery — recurring scheduled task recycled to approved",
       );
     } else if (item.state === "in_review") {
+      // TRACK-235: Update scheduled task status for non-recurring scheduled tasks
+      if (item.space_type === "scheduled") {
+        updateScheduledTaskStatus(item, true, durationMs);
+      }
       // Auto-advance from in_review to testing (same as handleSessionComplete)
       changeWorkItemState(
         session.itemId,
@@ -3167,6 +3202,13 @@ function handleSessionError(sessionId: string, message: string): void {
 
   // Record execution audit (Section 4.6.2)
   completeExecutionAudit(sessionId, { exit_status: "failure" });
+
+  // TRACK-235: Update scheduled task status for failed runs too, so the dashboard
+  // accurately reflects that a run was attempted (even if it failed).
+  if (item && item.space_type === "scheduled") {
+    const durationMs = Date.now() - session.startedAt.getTime();
+    updateScheduledTaskStatus(item, false, durationMs);
+  }
 
   if (item) {
     createComment({
