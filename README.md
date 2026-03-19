@@ -59,13 +59,14 @@ Optionally let the tracker automatically dispatch approved work items to [OpenCo
 - Monitors progress via SSE and updates item status in real time
 - **Comment-based auto-completion** — when the owner comments "looks good", "done", "LGTM" etc. on items in testing or in_review, the orchestrator auto-advances them to done
 - **Review feedback redispatch** — when the owner leaves non-acknowledgment feedback on items in testing, the orchestrator automatically moves them back to in_review and dispatches a new coder session to address the feedback
+- **Recurring scheduled task recycling** — when a recurring scheduled task completes, the orchestrator automatically recycles it back to `approved` for the next execution cycle, preserving original human approval provenance
 - **Expired scheduled task auto-close** — scheduled tasks with a past due date are automatically moved to done
 - Includes safety features: actor classification (only humans can approve), description integrity checks, circuit breakers, per-item retry limits, and an emergency stop button
 
 ### Other Features
 
 - **Comments and discussion** — threaded comments on any item, with inline CriticMarkup in Song and Text spaces
-- **Attachments** — upload files and images to any item
+- **Attachments** — upload files and images to any item, including paste-from-clipboard support
 - **Dependencies** — link items that block each other
 - **Cover images** — visual cover art for Song and Travel items
 - **Deep links** — shareable URLs that open directly to any item, with Open Graph meta tags for rich link previews in iMessage, Slack, etc.
@@ -108,11 +109,14 @@ Copy `.env.example` to `.env` and edit as needed. Key settings:
 | `OWNER_NAME` | `Owner` | Your display name (used as default assignee) |
 | `HUMAN_ACTORS` | `dashboard,me` | Comma-separated names classified as human (can approve items) |
 | `AGENT_ACTORS` | `coder` | Comma-separated names classified as AI agents |
-| `TRACKER_API_TOKEN` | (auto-generated) | Bearer token for write API endpoints |
+| `TRACKER_API_TOKEN` | (auto-generated) | Bearer token for API endpoints |
+| `TRACKER_PUBLIC_URL` | `http://localhost:{PORT}` | Tracker dashboard URL (for links and fallback base) |
+| `TRACKER_SHORT_URL` | (same as `TRACKER_PUBLIC_URL`) | Short base URL for item deep links (e.g. `http://t` → `http://t/TRACK-187`) |
 | `ANTHROPIC_API_KEY` | (none) | Enables AI categorization in the dashboard |
 | `AI_CATEGORIZE_MODEL` | `claude-sonnet-4-20250514` | Model for AI categorization |
 | `WEBHOOK_URL` | (none) | URL to POST comment webhook notifications to |
 | `WEBHOOK_SECRET` | (none) | Shared secret for authenticating webhook payloads |
+| `ASSISTANT_PROJECT_ROOT` | `~/assistant` | Root directory for container path translation (agent file uploads) |
 
 On first run, an API token is auto-generated and saved to `store/auth_token`. See `.env.example` for all options including orchestrator settings.
 
@@ -170,7 +174,7 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | `POST` | `/api/v1/projects` | Create a project |
 | `PUT` | `/api/v1/projects/reorder` | Reorder project tabs |
 | `GET` | `/api/v1/projects/:id` | Get a project |
-| `PATCH` | `/api/v1/projects/:id` | Update a project (name, description, context, theme, working_directory, orchestration, active_spaces) |
+| `PATCH` | `/api/v1/projects/:id` | Update a project (name, description, context, theme, working_directory, opencode_project_id, orchestration, active_spaces) |
 | `DELETE` | `/api/v1/projects/:id` | Delete a project |
 | `GET` | `/api/v1/projects/:id/stats` | Get project statistics |
 | `GET` | `/api/v1/projects/:id/tracker` | Get kanban-grouped view for a project |
@@ -188,6 +192,7 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | `POST` | `/api/v1/items/:id/lock` | Lock an item |
 | `POST` | `/api/v1/items/:id/unlock` | Unlock an item |
 | `POST` | `/api/v1/items/clear-stale-locks` | Clear locks older than 2 hours |
+| `GET` | `/api/v1/items/recent` | Recently updated items (filterable by project, with limit) |
 | `POST` | `/api/v1/items/ai-categorize` | AI-powered field extraction from description text |
 
 ### Comments, Dependencies, Attachments
@@ -209,6 +214,7 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | `GET` | `/api/v1/items/:id/transitions` | List state transitions |
 | `GET` | `/api/v1/items/:id/watchers` | List watchers |
 | `POST` | `/api/v1/items/:id/watchers` | Add a watcher |
+| `DELETE` | `/api/v1/items/:id/watchers/:entity` | Remove a watcher |
 
 ### Space-Specific Endpoints
 
@@ -216,6 +222,7 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | --- | --- | --- |
 | `GET` | `/api/v1/items/:id/versions` | Description version history |
 | `POST` | `/api/v1/items/:id/versions` | Save a description version snapshot |
+| `POST` | `/api/v1/items/:id/versions/revert` | Revert description to a specific version |
 | `PUT` | `/api/v1/items/:id/cover` | Set/replace cover image |
 | `DELETE` | `/api/v1/items/:id/cover` | Remove cover image |
 | `POST` | `/api/v1/items/:id/scheduled/todo` | Add TODO items |
@@ -225,6 +232,7 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | `PATCH` | `/api/v1/items/:id/engagement/contact` | Update engagement contact |
 | `PATCH` | `/api/v1/items/:id/engagement/quote` | Update engagement quote/financials |
 | `POST` | `/api/v1/items/:id/engagement/milestones` | Add milestones |
+| `PATCH` | `/api/v1/items/:id/engagement/milestones` | Update a milestone |
 | `DELETE` | `/api/v1/items/:id/engagement/milestones` | Remove milestones |
 | `POST` | `/api/v1/items/:id/engagement/comms` | Add comms log entries |
 | `PATCH` | `/api/v1/items/:id/engagement/settings` | Update engagement settings |
@@ -333,6 +341,7 @@ The orchestrator is disabled by default. To enable it:
 - **Session timeout** — stale sessions auto-detected and aborted (default 45 minutes)
 - **Agent config validation** — pre-flight check before dispatch to ensure agent config is valid
 - **Session recovery** — on tracker restart, recovers active sessions and polls their status
+- **Scheduled task recycling** — recurring scheduled tasks are automatically recycled back to approved after completion, preserving approval provenance
 
 ## Testing
 

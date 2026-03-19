@@ -613,6 +613,7 @@ tracker_add_travel_segment({
 - `PATCH /projects/:id` — accepts `active_spaces` field (JSON array)
 - `GET /items/:id/versions` — returns description version history
 - `POST /items/:id/versions` — save a description version snapshot
+- `POST /items/:id/versions/revert` — revert description to a specific version (`{ version_id: "...", actor?: "..." }`)
 - `POST /items/:id/scheduled/todo` — add TODO items (`{ items: ["string1", "string2"] }`)
 - `DELETE /items/:id/scheduled/todo` — remove TODO items (`{ indices: [0, 2] }`)
 - `POST /items/:id/scheduled/ignore` — add IGNORE rules (`{ rules: ["rule1"] }`)
@@ -620,6 +621,7 @@ tracker_add_travel_segment({
 - `PATCH /items/:id/engagement/contact` — update engagement contact details (`{ company?, contact?, phone?, ... }`)
 - `PATCH /items/:id/engagement/quote` — update engagement quote/financial (`{ reference?, total?, currency?, line_items?, payment_status?, ... }`)
 - `POST /items/:id/engagement/milestones` — add engagement milestones (`{ milestones: [{ label, date?, status? }] }`)
+- `PATCH /items/:id/engagement/milestones` — update a milestone by index (`{ index, label?, date?, status? }`)
 - `DELETE /items/:id/engagement/milestones` — remove engagement milestones (`{ indices: [0, 2] }`)
 - `POST /items/:id/engagement/comms` — add engagement comms log (`{ entries: [{ direction, date, subject, snippet? }] }`)
 - `PATCH /items/:id/engagement/settings` — update engagement settings (`{ gmail_query?, calendar_tag? }`)
