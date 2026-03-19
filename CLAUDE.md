@@ -75,7 +75,7 @@ npm run test:coverage # Run tests with coverage report
 - The `_initTestTrackerDatabase()` function in `db.ts` creates a fresh in-memory DB for each test suite
 
 **Current test coverage:**
-- `src/db.test.ts` — actor classification, state transitions (incl. security rules), project/item CRUD, locks, dependencies, comments, approval provenance, move between projects
+- `src/db.test.ts` — actor classification, state transitions (incl. security rules), project/item CRUD, locks, dependencies, comments, approval provenance, move between projects, activity log (logActivity/listActivity, filtering, integration with mutations)
 - `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers (base64url encoding, session/directory/API URL builders), error classification (413 errors, image-too-large, post-completion errors), scheduled task time gating (isScheduleTimeDue frequency/timezone/last_run logic)
 - `src/spaces/travel.test.ts` — type-aware segment deduplication key logic (flight/lodging/transport disambiguation)
 
@@ -320,6 +320,9 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `DELETE` | `/api/v1/orchestrator/restart` | Cancel a pending restart |
 | `GET` | `/api/v1/orchestrator/safe-to-restart` | Quick check if restart is safe |
 | `POST` | `/api/v1/items/ai-categorize` | AI-powered field extraction from description text (requires `ANTHROPIC_API_KEY`) |
+| `GET` | `/api/v1/activity` | List recent activity (global). Query params: `limit`, `offset`, `project_id`, `item_id`, `action`, `actor`, `since`, `search` |
+| `GET` | `/api/v1/projects/:id/activity` | List activity for a specific project |
+| `GET` | `/api/v1/items/:id/activity` | List activity for a specific item |
 
 ### MCP Tools
 
@@ -349,6 +352,7 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `tracker_upload_attachment_from_path` | Upload a local file by path (supports container path translation) |
 | `tracker_list_attachments` | List all attachments on a work item |
 | `tracker_delete_attachment` | Delete a file attachment |
+| `tracker_list_activity` | List recent activity log entries with optional filters (project, item, action, actor, since) |
 
 **Orchestrator tools:**
 

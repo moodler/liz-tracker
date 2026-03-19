@@ -40,6 +40,11 @@ import {
   getDescriptionVersion,
   revertToDescriptionVersion,
   sanitizeCommentBody,
+  logActivity,
+  listActivity,
+  createAttachment,
+  deleteAttachment,
+  deleteWorkItem,
   VALID_STATES,
   VALID_PRIORITIES,
 } from './db.js';
@@ -1788,5 +1793,261 @@ describe('scheduled task space_data', () => {
     expect(parsed.todo).toEqual(['Updated task 1', 'Updated task 2']);
     // Ignore should be unchanged
     expect(parsed.ignore).toEqual(['Original rule']);
+  });
+});
+
+// ── Activity Log ───────────────────────────────────────────────────────────────
+
+describe('Activity Log', () => {
+  beforeEach(() => {
+    _initTestTrackerDatabase();
+  });
+
+  describe('logActivity and listActivity', () => {
+    it('inserts and retrieves an activity entry', () => {
+      logActivity({
+        project_id: 'proj1',
+        item_id: 'item1',
+        action: 'item.created',
+        actor: 'dashboard',
+        summary: 'Created TRACK-1: Test item',
+        details: { title: 'Test item', state: 'brainstorming', priority: 'none' },
+      });
+
+      const entries = listActivity();
+      expect(entries).toHaveLength(1);
+      expect(entries[0].action).toBe('item.created');
+      expect(entries[0].actor).toBe('dashboard');
+      expect(entries[0].actor_class).toBe('human');
+      expect(entries[0].summary).toBe('Created TRACK-1: Test item');
+      expect(entries[0].project_id).toBe('proj1');
+      expect(entries[0].item_id).toBe('item1');
+      const details = JSON.parse(entries[0].details!);
+      expect(details.title).toBe('Test item');
+    });
+
+    it('classifies actors correctly', () => {
+      logActivity({ action: 'test', actor: 'dashboard', summary: 'human' });
+      logActivity({ action: 'test', actor: 'Coder', summary: 'agent' });
+      logActivity({ action: 'test', actor: 'orchestrator', summary: 'system' });
+      logActivity({ action: 'test', actor: 'unknown', summary: 'api' });
+
+      const entries = listActivity({ limit: 10 });
+      // Most recent first
+      expect(entries.find(e => e.summary === 'human')!.actor_class).toBe('human');
+      expect(entries.find(e => e.summary === 'agent')!.actor_class).toBe('agent');
+      expect(entries.find(e => e.summary === 'system')!.actor_class).toBe('system');
+      expect(entries.find(e => e.summary === 'api')!.actor_class).toBe('api');
+    });
+
+    it('filters by project_id', () => {
+      logActivity({ project_id: 'p1', action: 'test', actor: 'system', summary: 'a' });
+      logActivity({ project_id: 'p2', action: 'test', actor: 'system', summary: 'b' });
+
+      const filtered = listActivity({ project_id: 'p1' });
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].summary).toBe('a');
+    });
+
+    it('filters by item_id', () => {
+      logActivity({ item_id: 'i1', action: 'test', actor: 'system', summary: 'a' });
+      logActivity({ item_id: 'i2', action: 'test', actor: 'system', summary: 'b' });
+
+      const filtered = listActivity({ item_id: 'i1' });
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].summary).toBe('a');
+    });
+
+    it('filters by action', () => {
+      logActivity({ action: 'item.created', actor: 'system', summary: 'a' });
+      logActivity({ action: 'item.updated', actor: 'system', summary: 'b' });
+
+      const filtered = listActivity({ action: 'item.created' });
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].summary).toBe('a');
+    });
+
+    it('filters by actor', () => {
+      logActivity({ action: 'test', actor: 'Coder', summary: 'a' });
+      logActivity({ action: 'test', actor: 'dashboard', summary: 'b' });
+
+      const filtered = listActivity({ actor: 'Coder' });
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].summary).toBe('a');
+    });
+
+    it('supports search in summary', () => {
+      logActivity({ action: 'test', actor: 'system', summary: 'Changed priority from low to high' });
+      logActivity({ action: 'test', actor: 'system', summary: 'Created TRACK-1: New feature' });
+
+      const filtered = listActivity({ search: 'priority' });
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].summary).toContain('priority');
+    });
+
+    it('respects limit and offset', () => {
+      for (let i = 0; i < 10; i++) {
+        logActivity({ action: 'test', actor: 'system', summary: `entry-${i}` });
+      }
+
+      const page1 = listActivity({ limit: 3, offset: 0 });
+      expect(page1).toHaveLength(3);
+
+      const page2 = listActivity({ limit: 3, offset: 3 });
+      expect(page2).toHaveLength(3);
+
+      // Entries are ordered by created_at DESC, so page1 has newest
+      expect(page1[0].summary).not.toBe(page2[0].summary);
+    });
+
+    it('clamps limit to max 200', () => {
+      for (let i = 0; i < 5; i++) {
+        logActivity({ action: 'test', actor: 'system', summary: `entry-${i}` });
+      }
+      // Requesting 999 should be clamped to 200, but we only have 5 entries
+      const entries = listActivity({ limit: 999 });
+      expect(entries).toHaveLength(5);
+    });
+
+    it('handles nullable project_id and item_id', () => {
+      logActivity({ action: 'test', actor: 'system', summary: 'global event' });
+
+      const entries = listActivity();
+      expect(entries[0].project_id).toBeNull();
+      expect(entries[0].item_id).toBeNull();
+    });
+  });
+
+  describe('Integration: mutations produce activity log entries', () => {
+    it('createWorkItem logs item.created', () => {
+      const project = createProject({ name: 'Test' });
+      createWorkItem({ project_id: project.id, title: 'My Item', created_by: 'dashboard' });
+
+      const entries = listActivity({ action: 'item.created' });
+      expect(entries.length).toBeGreaterThanOrEqual(1);
+      expect(entries[0].summary).toContain('My Item');
+      expect(entries[0].actor).toBe('dashboard');
+    });
+
+    it('updateWorkItem logs field changes', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item', priority: 'none' as any });
+
+      updateWorkItem(item.id, { priority: 'high' as any, actor: 'dashboard' });
+
+      const entries = listActivity({ action: 'item.updated' });
+      expect(entries.length).toBeGreaterThanOrEqual(1);
+      const priorityEntry = entries.find(e => e.summary.includes('priority'));
+      expect(priorityEntry).toBeDefined();
+      expect(priorityEntry!.summary).toContain('none');
+      expect(priorityEntry!.summary).toContain('high');
+    });
+
+    it('updateWorkItem does not log unchanged fields', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item', priority: 'high' as any });
+
+      // Update with the same priority — should not log
+      updateWorkItem(item.id, { priority: 'high' as any, actor: 'dashboard' });
+
+      const entries = listActivity({ action: 'item.updated' });
+      expect(entries).toHaveLength(0);
+    });
+
+    it('changeWorkItemState logs item.state_changed', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item', created_by: 'dashboard' });
+
+      changeWorkItemState(item.id, 'approved', 'dashboard');
+
+      const entries = listActivity({ action: 'item.state_changed' });
+      expect(entries.length).toBeGreaterThanOrEqual(1);
+      expect(entries[0].summary).toContain('brainstorming');
+      expect(entries[0].summary).toContain('approved');
+    });
+
+    it('moveWorkItem logs item.moved', () => {
+      const proj1 = createProject({ name: 'Source' });
+      const proj2 = createProject({ name: 'Target' });
+      const item = createWorkItem({ project_id: proj1.id, title: 'Movable' });
+
+      moveWorkItem(item.id, proj2.id, 'dashboard');
+
+      const entries = listActivity({ action: 'item.moved' });
+      expect(entries.length).toBeGreaterThanOrEqual(1);
+      expect(entries[0].summary).toContain('Source');
+      expect(entries[0].summary).toContain('Target');
+    });
+
+    it('lockWorkItem and unlockWorkItem log events', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item' });
+
+      lockWorkItem(item.id, 'Coder');
+      unlockWorkItem(item.id);
+
+      const lockEntries = listActivity({ action: 'item.locked' });
+      expect(lockEntries).toHaveLength(1);
+      expect(lockEntries[0].summary).toContain('Coder');
+
+      const unlockEntries = listActivity({ action: 'item.unlocked' });
+      expect(unlockEntries).toHaveLength(1);
+      expect(unlockEntries[0].summary).toBe('Unlocked');
+    });
+
+    it('createAttachment logs attachment.uploaded', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item' });
+
+      createAttachment({
+        work_item_id: item.id,
+        filename: 'test.png',
+        mime_type: 'image/png',
+        size_bytes: 1024,
+        storage_path: 'attachments/test.png',
+        uploaded_by: 'Coder',
+      });
+
+      const entries = listActivity({ action: 'attachment.uploaded' });
+      expect(entries).toHaveLength(1);
+      expect(entries[0].summary).toContain('test.png');
+      expect(entries[0].summary).toContain('1KB');
+    });
+
+    it('deleteAttachment logs attachment.deleted', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item' });
+
+      const att = createAttachment({
+        work_item_id: item.id,
+        filename: 'test.png',
+        mime_type: 'image/png',
+        size_bytes: 1024,
+        storage_path: 'attachments/test.png',
+        uploaded_by: 'Coder',
+      });
+
+      deleteAttachment(att.id);
+
+      const entries = listActivity({ action: 'attachment.deleted' });
+      expect(entries).toHaveLength(1);
+      expect(entries[0].summary).toContain('test.png');
+    });
+
+    it('deleteWorkItem cleans up activity log entries', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Temp Item', created_by: 'dashboard' });
+
+      // Should have at least the created entry
+      const beforeDelete = listActivity({ item_id: item.id });
+      expect(beforeDelete.length).toBeGreaterThan(0);
+
+      // Delete the item — should clean up activity entries
+      const deleted = deleteWorkItem(item.id);
+      expect(deleted).toBe(true);
+
+      const afterDelete = listActivity({ item_id: item.id });
+      expect(afterDelete).toHaveLength(0);
+    });
   });
 });

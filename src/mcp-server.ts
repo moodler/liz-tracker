@@ -41,6 +41,7 @@ import {
   getAttachment,
   listAttachments,
   deleteAttachment,
+  listActivity,
   MAX_ATTACHMENT_SIZE,
   VALID_STATES,
   VALID_PRIORITIES,
@@ -668,6 +669,44 @@ function createMcpServer(): McpServer {
           return `  - [${bKey}] "${b.title}" [${b.state}] (${b.id})`;
         }).join("\n");
       return { content: [{ type: "text", text: msg }] };
+    },
+  );
+
+  // ── Activity Log ──
+
+  server.tool(
+    "tracker_list_activity",
+    "List recent activity log entries. Returns a unified audit trail of all significant actions: item edits, state changes, moves, attachment events, and more.",
+    {
+      project_id: z.string().optional().describe("Filter by project ID"),
+      item_id: z.string().optional().describe("Filter by item ID or display key (e.g. \"TRACK-5\")"),
+      action: z.string().optional().describe("Filter by action type (e.g. \"item.updated\", \"item.state_changed\", \"attachment.uploaded\")"),
+      actor: z.string().optional().describe("Filter by actor name"),
+      limit: z.number().optional().describe("Max entries to return (default 50, max 200)"),
+      since: z.string().optional().describe("Only entries after this ISO date"),
+    },
+    async (args) => {
+      // Resolve item_id if it's a display key
+      let itemId = args.item_id;
+      if (itemId) {
+        const item = getWorkItemByKey(itemId);
+        if (item) itemId = item.id;
+      }
+
+      const entries = listActivity({
+        project_id: args.project_id,
+        item_id: itemId,
+        action: args.action,
+        actor: args.actor,
+        limit: args.limit,
+        since: args.since,
+      });
+
+      if (entries.length === 0) {
+        return { content: [{ type: "text", text: "No activity entries found." }] };
+      }
+
+      return { content: [{ type: "text", text: JSON.stringify(entries, null, 2) }] };
     },
   );
 

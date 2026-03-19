@@ -1865,6 +1865,205 @@
         font-weight: 500;
       }
 
+      /* ── Activity Log Panel ── */
+      .activity-panel-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.3);
+        z-index: 250;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+      }
+      .activity-panel-overlay.open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .activity-panel {
+        position: fixed;
+        top: 0;
+        right: -480px;
+        width: 480px;
+        max-width: 100vw;
+        height: 100vh;
+        background: var(--card-bg, #1a2332);
+        z-index: 260;
+        display: flex;
+        flex-direction: column;
+        transition: right 0.25s ease;
+        box-shadow: -4px 0 24px rgba(0,0,0,0.3);
+      }
+      .activity-panel.open {
+        right: 0;
+      }
+      .activity-panel-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 16px 20px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+      }
+      .activity-panel-header h2 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0;
+        flex: 1;
+        color: var(--text-primary);
+      }
+      .activity-panel-refresh,
+      .activity-panel-close {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 1.3rem;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 4px;
+      }
+      .activity-panel-refresh:hover,
+      .activity-panel-close:hover {
+        background: rgba(255,255,255,0.08);
+        color: var(--text-primary);
+      }
+      .activity-panel-filters {
+        display: flex;
+        gap: 8px;
+        padding: 12px 20px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        flex-wrap: wrap;
+      }
+      .activity-panel-filters select,
+      .activity-panel-filters input {
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.1);
+        color: var(--text-primary);
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        flex: 1;
+        min-width: 100px;
+      }
+      .activity-panel-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px 20px;
+      }
+      .activity-day-header {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-dim);
+        padding: 12px 0 6px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        margin-bottom: 4px;
+        font-weight: 600;
+      }
+      .activity-day-header:first-child {
+        padding-top: 0;
+      }
+      .activity-entry {
+        display: flex;
+        gap: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+        font-size: 0.85rem;
+        line-height: 1.4;
+      }
+      .activity-entry:last-child {
+        border-bottom: none;
+      }
+      .activity-time {
+        color: var(--text-dim);
+        font-size: 0.75rem;
+        white-space: nowrap;
+        min-width: 42px;
+        padding-top: 1px;
+      }
+      .activity-content {
+        flex: 1;
+        color: var(--text-primary);
+      }
+      .activity-actor {
+        font-weight: 500;
+      }
+      .activity-actor.human { color: #00b894; }
+      .activity-actor.agent { color: #6c5ce7; }
+      .activity-actor.system { color: #fdcb6e; }
+      .activity-actor.api { color: #636e72; }
+      .activity-item-key {
+        color: var(--text-muted);
+        cursor: pointer;
+        text-decoration: underline;
+        text-decoration-color: rgba(255,255,255,0.2);
+      }
+      .activity-item-key:hover {
+        color: var(--text-primary);
+      }
+      .activity-load-more {
+        display: block;
+        width: calc(100% - 40px);
+        margin: 8px 20px 16px;
+        padding: 10px;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 6px;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 0.85rem;
+        text-align: center;
+      }
+      .activity-load-more:hover {
+        background: rgba(255,255,255,0.1);
+        color: var(--text-primary);
+      }
+      .activity-empty {
+        color: var(--text-dim);
+        text-align: center;
+        padding: 40px 20px;
+        font-size: 0.9rem;
+      }
+
+      /* ── Per-item activity (compact) ── */
+      .activity-compact-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      .activity-compact-item {
+        display: flex;
+        gap: 8px;
+        font-size: 0.85rem;
+        padding: 4px 0;
+        color: var(--text-primary);
+        line-height: 1.3;
+      }
+      .activity-compact-time {
+        color: var(--text-dim);
+        font-size: 0.75rem;
+        white-space: nowrap;
+        min-width: 42px;
+      }
+      .activity-compact-summary {
+        flex: 1;
+      }
+      .activity-compact-actor {
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        white-space: nowrap;
+      }
+
+      @media (max-width: 480px) {
+        .activity-panel {
+          width: 100vw;
+          right: -100vw;
+        }
+        #activityLogBtn {
+          display: none;
+        }
+      }
+
       /* ── Create Item Modal ── */
       .modal-overlay {
         position: fixed;
@@ -8940,6 +9139,9 @@
         <button class="today-control-btn" id="todayControlBtn" title="Today view">
           <span class="today-btn-icon">&#9728;&#65039;</span> Today
         </button>
+        <button class="today-control-btn" id="activityLogBtn" title="Activity log">
+          <span class="today-btn-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span> Activity
+        </button>
         <div style="flex: 1"></div>
         <div class="sort-control">
           <label class="sort-label" for="sortMode">Sort:</label>
@@ -9431,8 +9633,41 @@
           <h3>History</h3>
           <div class="transition-list" id="detailTransitions"></div>
         </div>
+        <div class="detail-section">
+          <h3>Activity</h3>
+          <div class="activity-compact-list" id="detailActivity"></div>
+        </div>
       </div>
       </div>
+    </div>
+
+    <!-- Activity Log Panel -->
+    <div class="activity-panel-overlay" id="activityPanelOverlay"></div>
+    <div class="activity-panel" id="activityPanel">
+      <div class="activity-panel-header">
+        <h2>Activity Log</h2>
+        <button class="activity-panel-refresh" id="activityRefreshBtn" title="Refresh">&#8635;</button>
+        <button class="activity-panel-close" id="activityCloseBtn" title="Close">&times;</button>
+      </div>
+      <div class="activity-panel-filters">
+        <select id="activityProjectFilter">
+          <option value="">All projects</option>
+        </select>
+        <select id="activityActionFilter">
+          <option value="">All actions</option>
+          <option value="item.created">Created</option>
+          <option value="item.updated">Updated</option>
+          <option value="item.state_changed">State changed</option>
+          <option value="item.moved">Moved</option>
+          <option value="item.locked">Locked</option>
+          <option value="item.unlocked">Unlocked</option>
+          <option value="attachment.uploaded">Attachment uploaded</option>
+          <option value="attachment.deleted">Attachment deleted</option>
+        </select>
+        <input type="text" id="activitySearchInput" placeholder="Search activity..." />
+      </div>
+      <div class="activity-panel-list" id="activityList"></div>
+      <button class="activity-load-more" id="activityLoadMore" style="display:none">Load more</button>
     </div>
 
     <!-- Space Overlay (modal workspace for specialized item types) -->
@@ -14180,6 +14415,9 @@
           // Attachments
           renderAttachments(item.attachments || []);
 
+          // Per-item activity (async, non-blocking)
+          loadItemActivity(item.id);
+
           // Transitions
           const transEl = $("#detailTransitions");
           transEl.innerHTML = "";
@@ -17031,6 +17269,192 @@
         quickCreateInput.addEventListener("focus", () => { isEditing = true; trackActivity(); });
         quickCreateInput.addEventListener("blur", () => { isEditing = false; });
         quickCreateInput.addEventListener("input", trackActivity);
+
+        // ── Activity Log ──
+
+        let activityOffset = 0;
+        const ACTIVITY_PAGE_SIZE = 50;
+
+        function openActivityPanel() {
+          const panel = $("#activityPanel");
+          const overlay = $("#activityPanelOverlay");
+          panel.classList.add("open");
+          overlay.classList.add("open");
+          // Populate project filter
+          const projFilter = $("#activityProjectFilter");
+          const currentVal = projFilter.value;
+          projFilter.innerHTML = '<option value="">All projects</option>';
+          projectsCache.forEach(p => {
+            projFilter.innerHTML += `<option value="${esc(p.id)}">${esc(p.short_name)} — ${esc(p.name)}</option>`;
+          });
+          projFilter.value = currentVal;
+          activityOffset = 0;
+          loadActivity(false);
+        }
+
+        function closeActivityPanel() {
+          $("#activityPanel").classList.remove("open");
+          $("#activityPanelOverlay").classList.remove("open");
+        }
+
+        function getActivityFilters() {
+          const filters = {};
+          const projId = $("#activityProjectFilter").value;
+          const action = $("#activityActionFilter").value;
+          const search = $("#activitySearchInput").value.trim();
+          if (projId) filters.project_id = projId;
+          if (action) filters.action = action;
+          if (search) filters.search = search;
+          return filters;
+        }
+
+        async function loadActivity(append) {
+          if (!append) activityOffset = 0;
+          const filters = getActivityFilters();
+          const params = new URLSearchParams();
+          if (filters.project_id) params.set("project_id", filters.project_id);
+          if (filters.action) params.set("action", filters.action);
+          if (filters.search) params.set("search", filters.search);
+          params.set("limit", String(ACTIVITY_PAGE_SIZE));
+          params.set("offset", String(activityOffset));
+
+          try {
+            const entries = await apiGet(`/activity?${params}`);
+            const listEl = $("#activityList");
+            if (!append) listEl.innerHTML = "";
+            if (entries.length === 0 && !append) {
+              listEl.innerHTML = '<div class="activity-empty">No activity yet</div>';
+              $("#activityLoadMore").style.display = "none";
+              return;
+            }
+            renderActivityEntries(listEl, entries, append);
+            activityOffset += entries.length;
+            $("#activityLoadMore").style.display = entries.length >= ACTIVITY_PAGE_SIZE ? "" : "none";
+          } catch (e) {
+            if (!append) {
+              $("#activityList").innerHTML = '<div class="activity-empty">Failed to load activity</div>';
+            }
+          }
+        }
+
+        function renderActivityEntries(container, entries, append) {
+          // Group by day
+          let lastDay = append ? container.dataset.lastDay || "" : "";
+          const today = new Date().toISOString().slice(0, 10);
+          const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+          entries.forEach(entry => {
+            const day = entry.created_at.slice(0, 10);
+            if (day !== lastDay) {
+              lastDay = day;
+              const header = document.createElement("div");
+              header.className = "activity-day-header";
+              if (day === today) header.textContent = "Today";
+              else if (day === yesterday) header.textContent = "Yesterday";
+              else {
+                const d = new Date(day + "T00:00:00");
+                header.textContent = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined });
+              }
+              container.appendChild(header);
+            }
+
+            const el = document.createElement("div");
+            el.className = "activity-entry";
+            const time = new Date(entry.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+            const actorClass = entry.actor_class || "api";
+            // Find item key from our cache if possible
+            let itemKeyHtml = "";
+            if (entry.item_id) {
+              let foundKey = null;
+              if (trackerData && trackerData.tracker) {
+                for (const stateItems of Object.values(trackerData.tracker)) {
+                  if (!Array.isArray(stateItems)) continue;
+                  const found = stateItems.find(i => i.id === entry.item_id);
+                  if (found) { foundKey = found.key; break; }
+                }
+              }
+              if (foundKey) {
+                itemKeyHtml = ` on <span class="activity-item-key" data-id="${esc(entry.item_id)}" data-project-id="${esc(entry.project_id || "")}">${esc(foundKey)}</span>`;
+              }
+            }
+
+            el.innerHTML = `
+              <span class="activity-time">${esc(time)}</span>
+              <span class="activity-content">
+                <span class="activity-actor ${actorClass}">${esc(entry.actor)}</span>
+                ${esc(entry.summary)}${itemKeyHtml}
+              </span>
+            `;
+            container.appendChild(el);
+          });
+          container.dataset.lastDay = lastDay;
+
+          // Make item keys clickable
+          $$(".activity-item-key", container).forEach(el => {
+            if (el.dataset.bound) return;
+            el.dataset.bound = "1";
+            el.addEventListener("click", () => {
+              closeActivityPanel();
+              const projId = el.dataset.projectId;
+              if (projId && projId !== currentProjectId) switchProject(projId);
+              openDetail(el.dataset.id);
+            });
+          });
+        }
+
+        /** Load and render per-item activity in the detail panel. */
+        async function loadItemActivity(itemId) {
+          const el = $("#detailActivity");
+          if (!el) return;
+          try {
+            const entries = await apiGet(`/items/${itemId}/activity?limit=20`);
+            if (entries.length === 0) {
+              el.innerHTML = '<div style="color:var(--text-dim);font-size:0.85rem">No activity recorded</div>';
+              return;
+            }
+            el.innerHTML = "";
+            entries.forEach(entry => {
+              const div = document.createElement("div");
+              div.className = "activity-compact-item";
+              const time = new Date(entry.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+              const day = entry.created_at.slice(0, 10);
+              const today = new Date().toISOString().slice(0, 10);
+              const dateStr = day === today ? time : `${new Date(entry.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${time}`;
+              div.innerHTML = `
+                <span class="activity-compact-time">${esc(dateStr)}</span>
+                <span class="activity-compact-summary">${esc(entry.summary)}</span>
+                <span class="activity-compact-actor">(${esc(entry.actor)})</span>
+              `;
+              el.appendChild(div);
+            });
+          } catch {
+            el.innerHTML = '<div style="color:var(--text-dim);font-size:0.85rem">Failed to load activity</div>';
+          }
+        }
+
+        // Activity panel event handlers
+        $("#activityLogBtn").addEventListener("click", openActivityPanel);
+        $("#activityCloseBtn").addEventListener("click", closeActivityPanel);
+        $("#activityPanelOverlay").addEventListener("click", closeActivityPanel);
+        $("#activityRefreshBtn").addEventListener("click", () => loadActivity(false));
+        $("#activityLoadMore").addEventListener("click", () => loadActivity(true));
+
+        let activityFilterDebounce = null;
+        ["change"].forEach(evt => {
+          $("#activityProjectFilter").addEventListener(evt, () => loadActivity(false));
+          $("#activityActionFilter").addEventListener(evt, () => loadActivity(false));
+        });
+        $("#activitySearchInput").addEventListener("input", () => {
+          clearTimeout(activityFilterDebounce);
+          activityFilterDebounce = setTimeout(() => loadActivity(false), 300);
+        });
+
+        // Close on Escape
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && $("#activityPanel").classList.contains("open")) {
+            closeActivityPanel();
+          }
+        });
 
         // ── Auto Refresh ──
 

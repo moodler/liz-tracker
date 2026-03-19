@@ -192,6 +192,18 @@ export interface DescriptionVersion {
   created_at: string;
 }
 
+export interface ActivityLogEntry {
+  id: string;
+  project_id: string | null;
+  item_id: string | null;
+  action: string;
+  actor: string;
+  actor_class: ActorClass;
+  summary: string;
+  details: string | null; // JSON blob
+  created_at: string;
+}
+
 // ── Schema ──
 
 function createSchema(database: Database.Database): void {
@@ -296,6 +308,22 @@ function createSchema(database: Database.Database): void {
       FOREIGN KEY (work_item_id) REFERENCES tracker_work_items(id)
     );
     CREATE INDEX IF NOT EXISTS idx_tracker_desc_versions_wi ON tracker_description_versions(work_item_id);
+
+    CREATE TABLE IF NOT EXISTS tracker_activity_log (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      item_id TEXT,
+      action TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      actor_class TEXT NOT NULL DEFAULT 'api',
+      summary TEXT NOT NULL,
+      details TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_activity_log_project ON tracker_activity_log(project_id);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_item ON tracker_activity_log(item_id);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_action ON tracker_activity_log(action);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_created ON tracker_activity_log(created_at);
   `);
 }
 
@@ -783,6 +811,113 @@ export function _initTestTrackerDatabase(): void {
       FOREIGN KEY (work_item_id) REFERENCES tracker_work_items(id)
     );
   `);
+
+  // Create activity log table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracker_activity_log (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      item_id TEXT,
+      action TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      actor_class TEXT NOT NULL DEFAULT 'api',
+      summary TEXT NOT NULL,
+      details TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_activity_log_project ON tracker_activity_log(project_id);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_item ON tracker_activity_log(item_id);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_action ON tracker_activity_log(action);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_created ON tracker_activity_log(created_at);
+  `);
+}
+
+// ── Activity Log ──
+
+/**
+ * Log an activity entry to the unified audit trail.
+ * Low-overhead — one INSERT per mutation. Called from mutation functions.
+ */
+export function logActivity(data: {
+  project_id?: string | null;
+  item_id?: string | null;
+  action: string;
+  actor: string;
+  summary: string;
+  details?: Record<string, unknown>;
+}): void {
+  const id = genId();
+  const actor_class = classifyActor(data.actor);
+  db.prepare(
+    `INSERT INTO tracker_activity_log (id, project_id, item_id, action, actor, actor_class, summary, details, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    data.project_id || null,
+    data.item_id || null,
+    data.action,
+    data.actor,
+    actor_class,
+    data.summary,
+    data.details ? JSON.stringify(data.details) : null,
+    now(),
+  );
+}
+
+export interface ActivityLogFilters {
+  project_id?: string;
+  item_id?: string;
+  action?: string;
+  actor?: string;
+  since?: string; // ISO date
+  search?: string; // free-text search in summary
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * List activity log entries with optional filters.
+ * Results are ordered by created_at DESC (most recent first).
+ */
+export function listActivity(filters?: ActivityLogFilters): ActivityLogEntry[] {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (filters?.project_id) {
+    conditions.push("project_id = ?");
+    params.push(filters.project_id);
+  }
+  if (filters?.item_id) {
+    conditions.push("item_id = ?");
+    params.push(filters.item_id);
+  }
+  if (filters?.action) {
+    conditions.push("action = ?");
+    params.push(filters.action);
+  }
+  if (filters?.actor) {
+    conditions.push("actor = ?");
+    params.push(filters.actor);
+  }
+  if (filters?.since) {
+    conditions.push("created_at >= ?");
+    params.push(filters.since);
+  }
+  if (filters?.search) {
+    conditions.push("summary LIKE ?");
+    params.push(`%${filters.search}%`);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const limit = Math.min(Math.max(filters?.limit || 50, 1), 200);
+  const offset = Math.max(filters?.offset || 0, 0);
+
+  params.push(limit, offset);
+  return db
+    .prepare(
+      `SELECT * FROM tracker_activity_log ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    )
+    .all(...params) as ActivityLogEntry[];
 }
 
 // ── Event System ──
@@ -1105,6 +1240,18 @@ export function createWorkItem(data: {
   // Record initial transition
   recordTransition(item.id, null, state, item.created_by, "Created");
 
+  // Log to activity log
+  const project = getProject(item.project_id);
+  const itemKey = project ? `${project.short_name}-${item.seq_number}` : item.id;
+  logActivity({
+    project_id: item.project_id,
+    item_id: item.id,
+    action: "item.created",
+    actor: item.created_by,
+    summary: `Created ${itemKey}: ${item.title}`,
+    details: { title: item.title, state: item.state, priority: item.priority },
+  });
+
   emit({
     type: "work_item.created",
     work_item_id: item.id,
@@ -1334,6 +1481,59 @@ export function updateWorkItem(
   ).run(...values);
 
   const updated = getWorkItem(id)!;
+
+  // Log field changes to activity log
+  const activityActor = data.actor || "system";
+  const trackableFields: Array<{
+    field: string;
+    oldVal: unknown;
+    newVal: unknown;
+    label: string;
+  }> = [];
+  if (data.title !== undefined && data.title !== existing.title) {
+    trackableFields.push({ field: "title", oldVal: existing.title, newVal: data.title, label: "title" });
+  }
+  if (data.description !== undefined && data.description !== existing.description) {
+    trackableFields.push({ field: "description", oldVal: "(changed)", newVal: "(changed)", label: "description" });
+  }
+  if (data.priority !== undefined && data.priority !== existing.priority) {
+    trackableFields.push({ field: "priority", oldVal: existing.priority, newVal: data.priority, label: "priority" });
+  }
+  if (data.assignee !== undefined && (data.assignee || null) !== existing.assignee) {
+    trackableFields.push({ field: "assignee", oldVal: existing.assignee || "none", newVal: data.assignee || "none", label: "assignee" });
+  }
+  if (data.labels !== undefined && data.labels !== existing.labels) {
+    trackableFields.push({ field: "labels", oldVal: existing.labels, newVal: data.labels, label: "labels" });
+  }
+  if (data.platform !== undefined && data.platform !== existing.platform) {
+    trackableFields.push({ field: "platform", oldVal: existing.platform, newVal: data.platform, label: "platform" });
+  }
+  if (data.date_due !== undefined && (data.date_due || null) !== existing.date_due) {
+    trackableFields.push({ field: "date_due", oldVal: existing.date_due || "none", newVal: data.date_due || "none", label: "due date" });
+  }
+  if (data.link !== undefined && (data.link || null) !== existing.link) {
+    trackableFields.push({ field: "link", oldVal: existing.link || "none", newVal: data.link || "none", label: "link" });
+  }
+  if (data.requires_code !== undefined && data.requires_code !== existing.requires_code) {
+    trackableFields.push({ field: "requires_code", oldVal: existing.requires_code, newVal: data.requires_code, label: "requires_code" });
+  }
+  if (data.bot_dispatch !== undefined && data.bot_dispatch !== existing.bot_dispatch) {
+    trackableFields.push({ field: "bot_dispatch", oldVal: existing.bot_dispatch, newVal: data.bot_dispatch, label: "bot_dispatch" });
+  }
+
+  for (const change of trackableFields) {
+    logActivity({
+      project_id: updated.project_id,
+      item_id: id,
+      action: "item.updated",
+      actor: activityActor,
+      summary: change.field === "description"
+        ? "Updated description"
+        : `Changed ${change.label} from ${change.oldVal} to ${change.newVal}`,
+      details: { field: change.field, old_value: change.oldVal, new_value: change.newVal },
+    });
+  }
+
   emit({
     type: "work_item.updated",
     work_item_id: id,
@@ -1418,6 +1618,21 @@ export function moveWorkItem(
     actor || "system",
     moveComment,
   );
+
+  // Log to activity log
+  logActivity({
+    project_id: targetProjectId,
+    item_id: id,
+    action: "item.moved",
+    actor: actor || "system",
+    summary: `Moved ${oldKey} from ${sourceProject?.name || "unknown"} to ${targetProject.name} (now ${newKey})`,
+    details: {
+      from_project: sourceProject?.name || existing.project_id,
+      to_project: targetProject.name,
+      old_key: oldKey,
+      new_key: newKey,
+    },
+  });
 
   emit({
     type: "work_item.moved",
@@ -1602,6 +1817,17 @@ export function changeWorkItemState(
   recordTransition(id, oldState, newState, actor, comment || null);
 
   const updated = getWorkItem(id)!;
+
+  // Log to activity log
+  logActivity({
+    project_id: updated.project_id,
+    item_id: id,
+    action: "item.state_changed",
+    actor,
+    summary: `Changed state: ${oldState} \u2192 ${newState}`,
+    details: { from_state: oldState, to_state: newState },
+  });
+
   emit({
     type: "work_item.state_changed",
     work_item_id: id,
@@ -1626,6 +1852,7 @@ export function deleteWorkItem(id: string): boolean {
   db.prepare("DELETE FROM tracker_comments WHERE work_item_id = ?").run(id);
   db.prepare("DELETE FROM tracker_attachments WHERE work_item_id = ?").run(id);
   db.prepare("DELETE FROM tracker_description_versions WHERE work_item_id = ?").run(id);
+  db.prepare("DELETE FROM tracker_activity_log WHERE item_id = ?").run(id);
   const result = db
     .prepare("DELETE FROM tracker_work_items WHERE id = ?")
     .run(id);
@@ -1733,6 +1960,15 @@ export function lockWorkItem(id: string, agent: string): WorkItem | undefined {
     "UPDATE tracker_work_items SET locked_by = ?, locked_at = ?, updated_at = ? WHERE id = ?",
   ).run(agent, ts, ts, id);
 
+  logActivity({
+    project_id: existing.project_id,
+    item_id: id,
+    action: "item.locked",
+    actor: agent,
+    summary: `Locked by ${agent}`,
+    details: { agent },
+  });
+
   return getWorkItem(id)!;
 }
 
@@ -1741,9 +1977,19 @@ export function unlockWorkItem(id: string): WorkItem | undefined {
   const existing = getWorkItem(id);
   if (!existing) return undefined;
 
+  const unlocker = existing.locked_by || "system";
   db.prepare(
     "UPDATE tracker_work_items SET locked_by = NULL, locked_at = NULL, updated_at = ? WHERE id = ?",
   ).run(now(), id);
+
+  logActivity({
+    project_id: existing.project_id,
+    item_id: id,
+    action: "item.unlocked",
+    actor: unlocker,
+    summary: "Unlocked",
+    details: {},
+  });
 
   return getWorkItem(id)!;
 }
@@ -2576,6 +2822,17 @@ export function createAttachment(data: {
 
   const item = getWorkItem(data.work_item_id);
   if (item) {
+    // Log to activity log
+    const sizeKb = Math.round(data.size_bytes / 1024);
+    logActivity({
+      project_id: item.project_id,
+      item_id: data.work_item_id,
+      action: "attachment.uploaded",
+      actor: data.uploaded_by || "system",
+      summary: `Uploaded ${data.filename} (${sizeKb}KB)`,
+      details: { filename: data.filename, size_bytes: data.size_bytes, mime_type: data.mime_type },
+    });
+
     emit({
       type: "attachment.created",
       work_item_id: data.work_item_id,
@@ -2615,6 +2872,16 @@ export function deleteAttachment(id: string): Attachment | undefined {
   const ts = now();
   const item = getWorkItem(attachment.work_item_id);
   if (item) {
+    // Log to activity log
+    logActivity({
+      project_id: item.project_id,
+      item_id: attachment.work_item_id,
+      action: "attachment.deleted",
+      actor: "system",
+      summary: `Deleted ${attachment.filename}`,
+      details: { filename: attachment.filename },
+    });
+
     emit({
       type: "attachment.deleted",
       work_item_id: attachment.work_item_id,

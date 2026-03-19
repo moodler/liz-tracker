@@ -78,6 +78,7 @@ import {
   getAttachment,
   listAttachments,
   deleteAttachment,
+  listActivity,
   MAX_ATTACHMENT_SIZE,
   createDescriptionVersion,
   listDescriptionVersions,
@@ -502,6 +503,23 @@ async function handleApiRequest(
           tracker[state] = enriched.filter((i) => i.state === state);
         }
         return json(res, { project, tracker });
+      }
+
+      // GET /projects/:id/activity
+      if (parts.length === 3 && parts[2] === "activity" && method === "GET") {
+        const project = getProject(projectId);
+        if (!project) return error(res, "Project not found", 404);
+        const limit = Math.min(Math.max(Number(params.get("limit") || 50), 1), 200);
+        const offset = Math.max(Number(params.get("offset") || 0), 0);
+        return json(res, listActivity({
+          project_id: projectId,
+          action: params.get("action") || undefined,
+          actor: params.get("actor") || undefined,
+          since: params.get("since") || undefined,
+          search: params.get("search") || undefined,
+          limit,
+          offset,
+        }));
       }
 
       // GET/POST /projects/:id/items
@@ -1013,6 +1031,22 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
         return json(res, getExecutionAudits(itemId));
       }
 
+      // GET /items/:id/activity — activity log for a specific item
+      if (parts.length === 3 && parts[2] === "activity" && method === "GET") {
+        const item = getWorkItem(itemId);
+        if (!item) return error(res, "Work item not found", 404);
+        const limit = Math.min(Math.max(Number(params.get("limit") || 50), 1), 200);
+        const offset = Math.max(Number(params.get("offset") || 0), 0);
+        return json(res, listActivity({
+          item_id: itemId,
+          action: params.get("action") || undefined,
+          actor: params.get("actor") || undefined,
+          since: params.get("since") || undefined,
+          limit,
+          offset,
+        }));
+      }
+
       // GET /items/:id/attachments — list attachments
       if (parts.length === 3 && parts[2] === "attachments" && method === "GET") {
         const item = getWorkItem(itemId);
@@ -1448,6 +1482,22 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
         if (!ok) return error(res, "Comment not found", 404);
         return json(res, { deleted: true });
       }
+    }
+
+    // ── Activity Log ──
+    if (parts[0] === "activity" && parts.length === 1 && method === "GET") {
+      const limit = Math.min(Math.max(Number(params.get("limit") || 50), 1), 200);
+      const offset = Math.max(Number(params.get("offset") || 0), 0);
+      return json(res, listActivity({
+        project_id: params.get("project_id") || undefined,
+        item_id: params.get("item_id") || undefined,
+        action: params.get("action") || undefined,
+        actor: params.get("actor") || undefined,
+        since: params.get("since") || undefined,
+        search: params.get("search") || undefined,
+        limit,
+        offset,
+      }));
     }
 
     // ── Attention (cross-project) ──
