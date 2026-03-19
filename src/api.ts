@@ -1478,8 +1478,8 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
         return json(res, comment);
       }
       if (parts.length === 2 && method === "DELETE") {
-        const ok = deleteComment(commentId);
-        if (!ok) return error(res, "Comment not found", 404);
+        const comment = deleteComment(commentId);
+        if (!comment) return error(res, "Comment not found", 404);
         return json(res, { deleted: true });
       }
     }

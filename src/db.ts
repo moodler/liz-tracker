@@ -2237,11 +2237,38 @@ export function updateComment(
     .get(id) as Comment;
 }
 
-export function deleteComment(id: string): boolean {
-  const result = db
-    .prepare("DELETE FROM tracker_comments WHERE id = ?")
-    .run(id);
-  return result.changes > 0;
+export function deleteComment(id: string): Comment | undefined {
+  const comment = db
+    .prepare("SELECT * FROM tracker_comments WHERE id = ?")
+    .get(id) as Comment | undefined;
+  if (!comment) return undefined;
+
+  db.prepare("DELETE FROM tracker_comments WHERE id = ?").run(id);
+
+  const ts = now();
+  const item = getWorkItem(comment.work_item_id);
+  if (item) {
+    // Log to activity log
+    logActivity({
+      project_id: item.project_id,
+      item_id: comment.work_item_id,
+      action: "comment.deleted",
+      actor: "system",
+      summary: `Deleted comment by ${comment.author}`,
+      details: { author: comment.author, comment_id: id },
+    });
+
+    emit({
+      type: "comment.deleted",
+      work_item_id: comment.work_item_id,
+      project_id: item.project_id,
+      actor: "system",
+      data: { comment_id: id, author: comment.author },
+      timestamp: ts,
+    });
+  }
+
+  return comment;
 }
 
 // ── Transitions ──

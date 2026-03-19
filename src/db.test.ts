@@ -29,6 +29,7 @@ import {
   isBlocked,
   getBlockers,
   createComment,
+  deleteComment,
   listComments,
   listTransitions,
   updateWorkItem,
@@ -2032,6 +2033,26 @@ describe('Activity Log', () => {
       const entries = listActivity({ action: 'attachment.deleted' });
       expect(entries).toHaveLength(1);
       expect(entries[0].summary).toContain('test.png');
+    });
+
+    it('deleteComment logs comment.deleted', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item' });
+
+      const comment = createComment({
+        work_item_id: item.id,
+        author: 'Martin',
+        body: 'Test comment to delete',
+      });
+
+      const deleted = deleteComment(comment.id);
+      expect(deleted).toBeDefined();
+      expect(deleted!.id).toBe(comment.id);
+
+      const entries = listActivity({ action: 'comment.deleted' });
+      expect(entries).toHaveLength(1);
+      expect(entries[0].summary).toContain('Martin');
+      expect(entries[0].item_id).toBe(item.id);
     });
 
     it('deleteWorkItem cleans up activity log entries', () => {
