@@ -48,7 +48,7 @@ brainstorming → clarification → approved → in_development → in_review �
 
 ### AI Agent Integration
 
-Any MCP-compatible AI agent can manage your tracker programmatically via 40+ tools — create items, update status, add comments, manage travel segments, update engagement milestones, and more. Connect your agent to the MCP endpoint and it can work alongside you.
+Any MCP-compatible AI agent can manage your tracker programmatically via 50+ tools — create items, update status, add comments, manage travel segments, update engagement milestones, and more. Connect your agent to the MCP endpoint and it can work alongside you.
 
 ### AI Orchestrator
 
@@ -59,6 +59,7 @@ Optionally let the tracker automatically dispatch approved work items to [OpenCo
 - Monitors progress via SSE and updates item status in real time
 - **Comment-based auto-completion** — when the owner comments "looks good", "done", "LGTM" etc. on items in testing or in_review, the orchestrator auto-advances them to done
 - **Review feedback redispatch** — when the owner leaves non-acknowledgment feedback on items in testing, the orchestrator automatically moves them back to in_review and dispatches a new coder session to address the feedback
+- **Scheduled task time gating** — scheduled tasks wait for their configured time/day before dispatching, with timezone-aware checks for daily, weekly, hourly, and monthly frequencies
 - **Recurring scheduled task recycling** — when a recurring scheduled task completes, the orchestrator automatically recycles it back to `approved` for the next execution cycle, preserving original human approval provenance
 - **Expired scheduled task auto-close** — scheduled tasks with a past due date are automatically moved to done
 - Includes safety features: actor classification (only humans can approve), description integrity checks, circuit breakers, per-item retry limits, and an emergency stop button
@@ -133,7 +134,7 @@ src/
 ├── config.ts         # Environment configuration
 ├── db.ts             # SQLite database layer (schema, CRUD, migrations)
 ├── api.ts            # HTTP server — REST API + static files + MCP routing + OG meta tag injection
-├── mcp-server.ts     # MCP tool definitions (40+ tools, including dynamic space plugin tools)
+├── mcp-server.ts     # MCP tool definitions (50+ tools, including dynamic space plugin tools)
 ├── orchestrator.ts   # AI orchestrator — dispatches work to OpenCode sessions, monitors via SSE
 ├── logger.ts         # Pino logger
 ├── spaces/           # Space plugin backends (types, registry, per-space logic)
@@ -277,7 +278,7 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 
 ## MCP Server
 
-The MCP endpoint at `/mcp` (Streamable HTTP, stateless) exposes 40+ tools for AI agents. Connect any MCP-compatible client to `http://localhost:1000/mcp`.
+The MCP endpoint at `/mcp` (Streamable HTTP, stateless) exposes 50+ tools for AI agents. Connect any MCP-compatible client to `http://localhost:1000/mcp`.
 
 Tools cover: project and item CRUD, state transitions, comments, watchers, dependencies, attachments, orchestrator control (dispatch, abort, emergency stop, safe restart), cover images, agent config validation, agent reference documentation, and all space-specific operations (scheduled TODOs/IGNORE rules, engagement milestones/contacts/quotes/comms/settings, travel segments/trips).
 
@@ -342,6 +343,7 @@ The orchestrator is disabled by default. To enable it:
 - **Agent config validation** — pre-flight check before dispatch to ensure agent config is valid
 - **Session recovery** — on tracker restart, recovers active sessions and polls their status
 - **Scheduled task recycling** — recurring scheduled tasks are automatically recycled back to approved after completion, preserving approval provenance
+- **Scheduled task time gating** — tasks only dispatch when their configured schedule time arrives (timezone-aware)
 
 ## Testing
 
@@ -354,7 +356,7 @@ npm run test:coverage # Coverage report
 Tests use [Vitest](https://vitest.dev/) with an in-memory SQLite database. Test suites cover:
 
 - `src/db.test.ts` — actor classification, state transitions, security rules, project/item CRUD, locks, dependencies, comments, approval provenance, cross-project moves
-- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers, error classification
+- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers, error classification, scheduled task time gating
 - `src/spaces/travel.test.ts` — type-aware segment deduplication keys
 
 ## License

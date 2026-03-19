@@ -76,7 +76,7 @@ npm run test:coverage # Run tests with coverage report
 
 **Current test coverage:**
 - `src/db.test.ts` — actor classification, state transitions (incl. security rules), project/item CRUD, locks, dependencies, comments, approval provenance, move between projects
-- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers (base64url encoding, session/directory/API URL builders), error classification (413 errors, image-too-large, post-completion errors)
+- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers (base64url encoding, session/directory/API URL builders), error classification (413 errors, image-too-large, post-completion errors), scheduled task time gating (isScheduleTimeDue frequency/timezone/last_run logic)
 - `src/spaces/travel.test.ts` — type-aware segment deduplication key logic (flight/lodging/transport disambiguation)
 
 **To activate the pre-push hook** (run once per clone):
@@ -166,7 +166,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 2. `isScheduleTimeDue()` checks the current time (in the task's timezone) against the schedule: time, frequency, days_of_week
 3. Frequency-specific behavior: `manual` dispatches immediately (approval is the trigger), `hourly` checks 55-min window, `daily`/`weekly`/`once` check time-of-day, `weekly` also checks day-of-week, `monthly` checks month, `custom` (cron) always dispatches
 4. After a task runs, `last_run` in `space_data.status` prevents re-dispatch in the same window (same day for daily, same hour for hourly, etc.)
-5. This time gating applies to orchestrated projects only. Non-orchestrated projects (HARMONI, MARTIN, WRITING) use a separate external scheduler (`liz/scripts/harmoni-scheduler.sh`, run by launchd every 60s) that checks `space_data.status.next_run` via the tracker API and dispatches tasks through Liz's IPC system.
+5. This time gating applies to orchestrated projects only. Non-orchestrated projects can use an external scheduler that checks `space_data.status.next_run` via the tracker API and dispatches tasks through an external system.
 
 **Recurring scheduled task recycling (TRACK-228):**
 1. When a recurring scheduled task session completes, the orchestrator automatically recycles it back to `approved` (instead of advancing through testing → done)
@@ -464,7 +464,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 | `song` | music note (SVG) | Songwriting workspace — split-pane lyrics editor + conversation + metadata bar |
 | `text` | text lines (SVG) | Writing workspace — markdown editor + conversation for articles, blogs, long-form text |
 | `engagement` | briefcase (SVG) | Coordination workspace for contractors, services, and external engagements — structured dashboard (contact, quote, milestones, documents, comms log) + discussion sidebar. Uses `space_data` JSON for all structured content. |
-| `scheduled` | clock (SVG) | Scheduled task workspace — schedule config (frequency, time, days), live status panel (next/last run, run count), task instructions editor, TODO list, IGNORE list + run history sidebar. Used by the HARMONI project for recurring automated tasks. `space_data` stores a JSON string (see format below). |
+| `scheduled` | clock (SVG) | Scheduled task workspace — schedule config (frequency, time, days), live status panel (next/last run, run count), task instructions editor, TODO list, IGNORE list + run history sidebar. Useful for recurring automated tasks. `space_data` stores a JSON string (see format below). |
 | `travel` | plane (SVG) | Trip planning workspace — day-by-day itinerary with timezone-aware segments (flights, lodging, transport, activities, restaurants, meetings, notes), gap detection, cover image support, and MCP tools for programmatic segment management. `space_data` stores trip metadata + segments array as JSON. |
 
 #### Scheduled Task `space_data` Format
@@ -597,7 +597,7 @@ Agents should **always** use these tools instead of constructing `space_data` JS
 **Example: Adding a flight segment via MCP tool:**
 ```
 tracker_add_travel_segment({
-  item_id: "MARTIN-96",
+  item_id: "TRAVEL-1",
   segments: [{
     type: "flight",
     title: "SQ224 PER → SIN",
