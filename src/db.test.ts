@@ -2089,6 +2089,57 @@ describe('Activity Log', () => {
       expect(entries[0].item_id).toBe(item.id);
     });
 
+    it('createComment logs comment.created', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item' });
+      const comment = createComment({
+        work_item_id: item.id,
+        author: 'Martin',
+        body: 'Hello world',
+      });
+
+      const entries = listActivity({ action: 'comment.created' });
+      expect(entries).toHaveLength(1);
+      expect(entries[0].summary).toBe('Added comment by Martin');
+      expect(entries[0].actor).toBe('Martin');
+      expect(entries[0].item_id).toBe(item.id);
+      expect(entries[0].project_id).toBe(project.id);
+      const details = JSON.parse(entries[0].details!);
+      expect(details.comment_id).toBe(comment.id);
+      expect(details.author).toBe('Martin');
+    });
+
+    it('updateWorkItem logs description.edited', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item' });
+
+      updateWorkItem(item.id, { description: 'New description text', actor: 'dashboard' });
+
+      const entries = listActivity({ action: 'description.edited' });
+      expect(entries).toHaveLength(1);
+      expect(entries[0].summary).toBe('Edited description');
+      expect(entries[0].actor).toBe('dashboard');
+      expect(entries[0].item_id).toBe(item.id);
+      expect(entries[0].project_id).toBe(project.id);
+    });
+
+    it('updateWorkItem does not log description.edited when description unchanged', () => {
+      const project = createProject({ name: 'Test' });
+      const item = createWorkItem({ project_id: project.id, title: 'Item' });
+
+      // Set an initial description
+      updateWorkItem(item.id, { description: 'Initial', actor: 'dashboard' });
+
+      // Clear previous entries by checking count
+      const before = listActivity({ action: 'description.edited' });
+
+      // Update with the same description
+      updateWorkItem(item.id, { description: 'Initial', actor: 'dashboard' });
+
+      const after = listActivity({ action: 'description.edited' });
+      expect(after).toHaveLength(before.length); // No new entry
+    });
+
     it('deleteAttachment uses provided actor', () => {
       const project = createProject({ name: 'Test' });
       const item = createWorkItem({ project_id: project.id, title: 'Item' });

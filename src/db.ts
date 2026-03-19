@@ -1558,7 +1558,15 @@ export function updateWorkItem(
     trackableFields.push({ field: "title", oldVal: existing.title, newVal: data.title, label: "title" });
   }
   if (data.description !== undefined && data.description !== existing.description) {
-    trackableFields.push({ field: "description", oldVal: "(changed)", newVal: "(changed)", label: "description" });
+    // Log description edits as a dedicated action type (not item.updated)
+    logActivity({
+      project_id: updated.project_id,
+      item_id: id,
+      action: "description.edited",
+      actor: activityActor,
+      summary: `Edited description`,
+      details: { field: "description" },
+    });
   }
   if (data.priority !== undefined && data.priority !== existing.priority) {
     trackableFields.push({ field: "priority", oldVal: existing.priority, newVal: data.priority, label: "priority" });
@@ -2178,6 +2186,15 @@ export function createComment(data: {
 
   const item = getWorkItem(data.work_item_id);
   if (item) {
+    logActivity({
+      project_id: item.project_id,
+      item_id: data.work_item_id,
+      action: "comment.created",
+      actor: data.author,
+      summary: `Added comment by ${data.author}`,
+      details: { comment_id: comment.id, author: data.author },
+    });
+
     emit({
       type: "comment.created",
       work_item_id: data.work_item_id,
