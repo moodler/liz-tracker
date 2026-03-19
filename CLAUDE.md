@@ -215,7 +215,7 @@ Every state transition and item creation records an `actor_class`:
 
 Only `human`-class actors can move items to `approved` or `cancelled`. Attempts by other actor classes throw an error (403 from API, error from MCP).
 
-**MCP enforcement:** All items created via MCP tools have `created_by` forced to `"Harmoni"` (TRACK-213). This prevents agents from impersonating human actors (e.g. passing `created_by: "dashboard"`) to bypass actor classification. Similarly, state changes via MCP force `actor_class = "agent"` (LIZ-57).
+**MCP enforcement:** All items created via MCP tools have `created_by` forced to the default agent name. This prevents agents from impersonating human actors (e.g. passing `created_by: "dashboard"`) to bypass actor classification. Similarly, state changes via MCP force `actor_class = "agent"`.
 
 **Exception:** Comment-only items (`requires_code=0`) can be approved by agents. Since they don't grant code access, they don't present a security risk. This allows multiple agents to discuss and take turns on an issue without requiring human re-approval on every turn.
 
@@ -553,7 +553,7 @@ Travel items store trip metadata and segments in `space_data` as a JSON string:
   "trip": {
     "destination": "Tokyo, Japan",
     "purpose": "business",
-    "travelers": ["Martin"],
+    "travelers": ["Alice"],
     "default_timezone": "Asia/Tokyo",
     "notes": "Vegetarian meals. Aisle seat."
   },
@@ -603,12 +603,12 @@ tracker_add_travel_segment({
     title: "SQ224 PER → SIN",
     status: "confirmed",
     provider: "Singapore Airlines",
-    confirmation: "DXNRYI",
+    confirmation: "ABC123",
     departure: { datetime: "2026-03-22T06:40", timezone: "Australia/Perth", location: "PER" },
     arrival: { datetime: "2026-03-22T11:55", timezone: "Asia/Singapore", location: "SIN", detail: "Terminal 3" },
     flight_number: "SQ224",
     cabin: "business",
-    ticket_number: "618-2473418908",
+    ticket_number: "000-0000000000",
     notes: "Boeing 787"
   }]
 })
@@ -628,7 +628,6 @@ tracker_add_travel_segment({
 - `PATCH /items/:id/engagement/contact` — update engagement contact details (`{ company?, contact?, phone?, ... }`)
 - `PATCH /items/:id/engagement/quote` — update engagement quote/financial (`{ reference?, total?, currency?, line_items?, payment_status?, ... }`)
 - `POST /items/:id/engagement/milestones` — add engagement milestones (`{ milestones: [{ label, date?, status? }] }`)
-- `PATCH /items/:id/engagement/milestones` — update a milestone by index (`{ index, label?, date?, status? }`)
 - `DELETE /items/:id/engagement/milestones` — remove engagement milestones (`{ indices: [0, 2] }`)
 - `POST /items/:id/engagement/comms` — add engagement comms log (`{ entries: [{ direction, date, subject, snippet? }] }`)
 - `PATCH /items/:id/engagement/settings` — update engagement settings (`{ gmail_query?, calendar_tag? }`)
@@ -679,7 +678,7 @@ Zero changes needed to `api.ts`, `mcp-server.ts`, `db.ts`, or the overlay shell 
 - Database tables are prefixed with `tracker_` (projects, work_items, comments, transitions, watchers, dependencies)
 - All IDs are random hex strings (24 chars)
 - Timestamps are ISO 8601 strings
-- Work items have sequential keys per project (e.g. LIZ-1, LIZ-2)
+- Work items have sequential keys per project (e.g. PROJ-1, PROJ-2)
 - The MCP server runs in stateless mode (new server+transport per request)
 - Orchestrator-spawned sessions use `actor="Coder"` for state changes
 

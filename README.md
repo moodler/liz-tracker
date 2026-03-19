@@ -233,7 +233,6 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | `PATCH` | `/api/v1/items/:id/engagement/contact` | Update engagement contact |
 | `PATCH` | `/api/v1/items/:id/engagement/quote` | Update engagement quote/financials |
 | `POST` | `/api/v1/items/:id/engagement/milestones` | Add milestones |
-| `PATCH` | `/api/v1/items/:id/engagement/milestones` | Update a milestone |
 | `DELETE` | `/api/v1/items/:id/engagement/milestones` | Remove milestones |
 | `POST` | `/api/v1/items/:id/engagement/comms` | Add comms log entries |
 | `PATCH` | `/api/v1/items/:id/engagement/settings` | Update engagement settings |

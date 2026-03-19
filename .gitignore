@@ -11,3 +11,4 @@ logs/
 .DS_Store
 .tracker_lock
 src/ui/index.html
+CLAUDE-LOCAL.md
