@@ -1475,16 +1475,30 @@ export function changeWorkItemState(
 
   // ── Section 4.5: Restricted state transitions ──
   // Only human actors can approve items for auto-execution.
-  // Exception: comment-only items (requires_code=0) can be approved by agents,
+  // Exception 1: comment-only items (requires_code=0) can be approved by agents,
   // since they don't present a security risk (no code changes). This allows
   // multiple agents to discuss and take turns on an issue without requiring
   // human re-approval on every turn.
+  // Exception 2 (TRACK-228): system actors can recycle scheduled tasks back to
+  // approved after completion. This enables recurring scheduled tasks — the
+  // orchestrator resets them to approved so they get dispatched again on the next
+  // cycle. Guards: the item must be a scheduled task, must have existing human
+  // approval provenance, and the description must not have been tampered with.
   if (newState === "approved" && actorClass !== "human" && existing.requires_code !== 0) {
-    throw new Error(
-      `Only human actors can approve items for execution. ` +
-      `Actor "${actor}" classified as "${actorClass}". ` +
-      `Agent-created items must be approved by a human via the dashboard.`,
-    );
+    const isScheduledRecycle =
+      actorClass === "system" &&
+      existing.space_type === "scheduled" &&
+      existing.approved_by_class === "human" &&
+      existing.approved_description_hash !== null &&
+      existing.approved_description_hash === hashDescription(existing.description);
+
+    if (!isScheduledRecycle) {
+      throw new Error(
+        `Only human actors can approve items for execution. ` +
+        `Actor "${actor}" classified as "${actorClass}". ` +
+        `Agent-created items must be approved by a human via the dashboard.`,
+      );
+    }
   }
 
   // Only human actors can cancel items
@@ -1531,28 +1545,58 @@ export function changeWorkItemState(
 
   // ── Section 4.2 + 4.3: Approval metadata ──
   if (newState === "approved") {
-    const descHash = hashDescription(existing.description);
-    db.prepare(
-      `UPDATE tracker_work_items SET
-        approved_by = ?, approved_by_class = ?, approved_at = ?,
-        approved_description_hash = ?
-       WHERE id = ?`,
-    ).run(actor, actorClass, ts, descHash, id);
+    // TRACK-228: When a system actor recycles a scheduled task back to approved,
+    // preserve the original human approval provenance instead of overwriting it.
+    // The description hasn't changed, so the original hash is still valid.
+    const isScheduledRecycle =
+      actorClass === "system" &&
+      existing.space_type === "scheduled" &&
+      existing.approved_by_class === "human" &&
+      existing.approved_description_hash !== null;
 
-    logger.info(
-      { itemId: id, actor, actorClass, descHash: descHash.slice(0, 12) },
-      "Item approved with description hash",
-    );
+    if (isScheduledRecycle) {
+      // Preserve existing approval metadata — just refresh approved_at timestamp
+      db.prepare(
+        `UPDATE tracker_work_items SET approved_at = ? WHERE id = ?`,
+      ).run(ts, id);
+
+      logger.info(
+        { itemId: id, actor, originalApprovedBy: existing.approved_by, descHash: existing.approved_description_hash!.slice(0, 12) },
+        "Scheduled task recycled — preserving original human approval provenance",
+      );
+    } else {
+      const descHash = hashDescription(existing.description);
+      db.prepare(
+        `UPDATE tracker_work_items SET
+          approved_by = ?, approved_by_class = ?, approved_at = ?,
+          approved_description_hash = ?
+         WHERE id = ?`,
+      ).run(actor, actorClass, ts, descHash, id);
+
+      logger.info(
+        { itemId: id, actor, actorClass, descHash: descHash.slice(0, 12) },
+        "Item approved with description hash",
+      );
+    }
   }
 
-  // If moving OUT of approved (e.g. back to clarification), clear approval metadata
+  // If moving OUT of approved (e.g. back to clarification), clear approval metadata.
+  // TRACK-228: Preserve approval metadata for scheduled tasks moving into the dispatch
+  // lifecycle (in_development, in_review, testing). This allows the orchestrator to
+  // recycle completed scheduled tasks back to approved without requiring re-approval.
+  // Only clear metadata for non-lifecycle transitions (e.g. back to clarification/brainstorming).
   if (oldState === "approved" && newState !== "approved") {
-    db.prepare(
-      `UPDATE tracker_work_items SET
-        approved_by = NULL, approved_by_class = NULL, approved_at = NULL,
-        approved_description_hash = NULL
-       WHERE id = ?`,
-    ).run(id);
+    const scheduledLifecycleStates = new Set(["in_development", "in_review", "testing"]);
+    const preserveForScheduled = existing.space_type === "scheduled" && scheduledLifecycleStates.has(newState);
+
+    if (!preserveForScheduled) {
+      db.prepare(
+        `UPDATE tracker_work_items SET
+          approved_by = NULL, approved_by_class = NULL, approved_at = NULL,
+          approved_description_hash = NULL
+         WHERE id = ?`,
+      ).run(id);
+    }
   }
 
   recordTransition(id, oldState, newState, actor, comment || null);

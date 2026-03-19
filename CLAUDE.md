@@ -161,6 +161,13 @@ All configuration is via `.env` file or environment variables. See `.env.example
 3. If the comment is non-acknowledgment feedback on a `testing` item, it triggers the review feedback redispatch flow above
 4. Runs both reactively (via event watcher) and periodically (catch-all scan for missed comments)
 
+**Recurring scheduled task recycling (TRACK-228):**
+1. When a recurring scheduled task session completes, the orchestrator automatically recycles it back to `approved` (instead of advancing through testing → done)
+2. This applies to scheduled tasks with frequency other than `once` or `manual`, and that haven't expired (no `date_due` in the past)
+3. The original human approval provenance is preserved through the lifecycle — no re-approval needed between cycles
+4. `space_data.status` fields are updated on each cycle: `last_run`, `run_count`, `last_status`, `last_duration_ms`
+5. Security: The system actor can only recycle items that have existing human approval provenance AND whose description hasn't been tampered with
+
 **Expired scheduled item auto-close:**
 1. Periodically scans for scheduled-space items with a `date_due` in the past
 2. Auto-moves them to `done` so the cron runner stops executing them

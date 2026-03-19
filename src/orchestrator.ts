@@ -32,6 +32,7 @@ import {
   createExecutionAudit,
   completeExecutionAudit,
   getExpiredScheduledItems,
+  updateWorkItem,
   type WorkItem,
   type Project,
   type Attachment,
@@ -2679,6 +2680,98 @@ function cancelDeferredError(sessionId: string): void {
   }
 }
 
+// ── Scheduled Task Recycling (TRACK-228) ──
+
+/**
+ * Non-recurring frequencies — scheduled tasks with these frequencies are NOT
+ * recycled after completion. "once" tasks run a single time, "manual" tasks
+ * are triggered manually (not automatically re-approved).
+ */
+const NON_RECURRING_FREQUENCIES = new Set(["once", "manual"]);
+
+/**
+ * Check if a work item is a recurring scheduled task that should be recycled
+ * back to 'approved' after completion.
+ *
+ * Returns true if:
+ * 1. The item has space_type='scheduled'
+ * 2. The schedule frequency is recurring (not 'once' or 'manual')
+ * 3. The item is not expired (no date_due in the past)
+ *
+ * Returns false for non-scheduled items, one-off tasks, manual tasks,
+ * and expired tasks (which should stay done).
+ */
+function isRecurringScheduledTask(item: WorkItem): boolean {
+  if (item.space_type !== "scheduled") return false;
+
+  // Check if the task has expired (date_due in the past)
+  if (item.date_due) {
+    const dueDate = new Date(item.date_due);
+    if (dueDate.getTime() < Date.now()) return false;
+  }
+
+  // Parse space_data to check the frequency
+  if (!item.space_data) return false;
+  try {
+    const spaceData = JSON.parse(item.space_data);
+    const frequency = spaceData.schedule?.frequency;
+    if (!frequency) return false;
+    return !NON_RECURRING_FREQUENCIES.has(frequency);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Recycle a completed recurring scheduled task back to 'approved' state
+ * so it gets dispatched again on the next cycle.
+ *
+ * Updates the space_data status fields (last_run, run_count, last_status)
+ * and resets the item state to 'approved'. The original human approval
+ * provenance is preserved by the changeWorkItemState() exception for
+ * scheduled task recycling (see db.ts TRACK-228).
+ *
+ * @param item - The completed scheduled work item
+ * @param success - Whether the last run was successful
+ * @param durationMs - Duration of the last run in milliseconds (optional)
+ */
+function recycleScheduledItem(item: WorkItem, success: boolean, durationMs?: number): void {
+  const key = getWorkItemKey(item);
+
+  // Update space_data status fields
+  if (item.space_data) {
+    try {
+      const spaceData = JSON.parse(item.space_data);
+      if (!spaceData.status) spaceData.status = {};
+      spaceData.status.last_run = new Date().toISOString();
+      spaceData.status.last_status = success ? "completed" : "failed";
+      spaceData.status.run_count = (spaceData.status.run_count || 0) + 1;
+      if (durationMs !== undefined) {
+        spaceData.status.last_duration_ms = durationMs;
+      }
+      updateWorkItem(item.id, { space_data: JSON.stringify(spaceData) });
+    } catch {
+      // Non-fatal — continue with the recycle even if status update fails
+      logger.warn({ itemId: item.id, key }, "Failed to update scheduled task status fields");
+    }
+  }
+
+  // Move back to approved — the TRACK-228 exception in changeWorkItemState()
+  // allows system actors to recycle scheduled tasks while preserving the
+  // original human approval provenance.
+  changeWorkItemState(
+    item.id,
+    "approved",
+    "orchestrator",
+    `Recurring scheduled task completed (${success ? "success" : "failed"}) — recycled to approved for next dispatch cycle`,
+  );
+
+  logger.info(
+    { itemId: item.id, key, success },
+    "Recycled recurring scheduled task back to approved",
+  );
+}
+
 // ── Session Lifecycle ──
 
 function handleSessionComplete(sessionId: string): void {
@@ -2748,6 +2841,22 @@ function handleSessionComplete(sessionId: string): void {
       });
     }
     unlockWorkItem(session.itemId);
+  }
+
+  // TRACK-228: Recycle recurring scheduled tasks back to approved after completion.
+  // This bypasses the normal in_review → testing → done pipeline — recurring tasks
+  // don't need owner verification on every run.
+  const completedStates = new Set(["in_review", "done"]);
+  if (completedStates.has(item.state) && isRecurringScheduledTask(item)) {
+    const durationMs = Date.now() - session.startedAt.getTime();
+    recycleScheduledItem(item, true, durationMs);
+    logger.info(
+      { itemId: session.itemId, sessionId, durationMs },
+      "Session completed — recurring scheduled task recycled to approved",
+    );
+    // Immediately try to dispatch the next item now that a slot is free
+    tryDispatch();
+    return;
   }
 
   // Auto-advance based on final item state
@@ -2848,8 +2957,16 @@ function handleSessionError(sessionId: string, message: string): void {
       unlockWorkItem(session.itemId);
     }
 
-    // Auto-advance from in_review to testing (same as handleSessionComplete)
-    if (item.state === "in_review") {
+    // TRACK-228: Recycle recurring scheduled tasks instead of advancing to testing
+    if (completedStates.has(item.state) && isRecurringScheduledTask(item)) {
+      const durationMs = Date.now() - session.startedAt.getTime();
+      recycleScheduledItem(item, true, durationMs);
+      logger.info(
+        { itemId: session.itemId, sessionId },
+        "Post-completion error recovery — recurring scheduled task recycled to approved",
+      );
+    } else if (item.state === "in_review") {
+      // Auto-advance from in_review to testing (same as handleSessionComplete)
       changeWorkItemState(
         session.itemId,
         "testing",
@@ -3068,16 +3185,25 @@ function checkPendingAcknowledgments(): void {
       const comment = relevantComments[i];
 
       if (isOwnerComment(comment.author) && isAcknowledgment(comment.body)) {
-        logger.info(
-          { itemId: item.id, author: comment.author, commentId: comment.id },
-          "Found pending owner acknowledgment — auto-completing item",
-        );
-        changeWorkItemState(
-          item.id,
-          "done",
-          "orchestrator",
-          `Auto-completed: owner acknowledged with "${comment.body.slice(0, 100)}"`,
-        );
+        // TRACK-228: Recycle recurring scheduled tasks instead of completing them
+        if (isRecurringScheduledTask(item)) {
+          logger.info(
+            { itemId: item.id, author: comment.author, commentId: comment.id },
+            "Found pending owner acknowledgment on recurring scheduled task — recycling to approved",
+          );
+          recycleScheduledItem(item, true);
+        } else {
+          logger.info(
+            { itemId: item.id, author: comment.author, commentId: comment.id },
+            "Found pending owner acknowledgment — auto-completing item",
+          );
+          changeWorkItemState(
+            item.id,
+            "done",
+            "orchestrator",
+            `Auto-completed: owner acknowledged with "${comment.body.slice(0, 100)}"`,
+          );
+        }
         break; // Done with this item
       }
 
@@ -3400,17 +3526,26 @@ function startCommentWatcher(): void {
     // Handle comments on items in testing or in_review
     if (item.state === "testing" || item.state === "in_review") {
       if (isAcknowledgment(body)) {
-        // Owner approved the work — auto-complete
-        logger.info(
-          { itemId: work_item_id, author: actor, body: body.slice(0, 100) },
-          "Owner acknowledgment detected — auto-completing item",
-        );
-        changeWorkItemState(
-          work_item_id,
-          "done",
-          "orchestrator",
-          `Auto-completed: owner acknowledged with "${body.slice(0, 100)}"`,
-        );
+        // TRACK-228: Recycle recurring scheduled tasks instead of completing them
+        if (isRecurringScheduledTask(item)) {
+          logger.info(
+            { itemId: work_item_id, author: actor, body: body.slice(0, 100) },
+            "Owner acknowledgment detected on recurring scheduled task — recycling to approved",
+          );
+          recycleScheduledItem(item, true);
+        } else {
+          // Owner approved the work — auto-complete
+          logger.info(
+            { itemId: work_item_id, author: actor, body: body.slice(0, 100) },
+            "Owner acknowledgment detected — auto-completing item",
+          );
+          changeWorkItemState(
+            work_item_id,
+            "done",
+            "orchestrator",
+            `Auto-completed: owner acknowledged with "${body.slice(0, 100)}"`,
+          );
+        }
       } else if (item.state === "testing") {
         // Owner has feedback/questions/change requests during testing
         // Move to in_review with the special marker so coder gets dispatched

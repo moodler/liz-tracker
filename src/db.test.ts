@@ -398,6 +398,105 @@ describe('State Transitions', () => {
     expect(updated.approved_description_hash).toBeTruthy();
   });
 
+  it('SECURITY: system actors CAN recycle scheduled tasks back to approved (TRACK-228)', () => {
+    // Create a scheduled task with requires_code
+    const scheduledItem = createWorkItem({
+      project_id: projectId,
+      title: 'Daily cleanup task',
+      requires_code: true,
+      bot_dispatch: true,
+      space_type: 'scheduled',
+      space_data: JSON.stringify({
+        schedule: { frequency: 'daily', time: '07:00', timezone: 'Australia/Perth' },
+        status: { run_count: 0 },
+        todo: ['Clean temp files'],
+        ignore: [],
+      }),
+    });
+
+    // Human approves it first (establishes approval provenance)
+    changeWorkItemState(scheduledItem.id, 'approved', 'dashboard');
+    const approved = getWorkItem(scheduledItem.id)!;
+    expect(approved.approved_by).toBe('dashboard');
+    expect(approved.approved_by_class).toBe('human');
+    expect(approved.approved_description_hash).toBeTruthy();
+
+    // Move through the lifecycle: approved → in_development → in_review
+    changeWorkItemState(scheduledItem.id, 'in_development', 'Coder');
+    changeWorkItemState(scheduledItem.id, 'in_review', 'Coder');
+
+    // Orchestrator (system actor) recycles back to approved — should succeed
+    expect(() => changeWorkItemState(scheduledItem.id, 'approved', 'orchestrator')).not.toThrow();
+    const recycled = getWorkItem(scheduledItem.id)!;
+    expect(recycled.state).toBe('approved');
+    // Original human approval provenance preserved
+    expect(recycled.approved_by).toBe('dashboard');
+    expect(recycled.approved_by_class).toBe('human');
+    expect(recycled.approved_description_hash).toBeTruthy();
+  });
+
+  it('SECURITY: system actors CANNOT recycle non-scheduled tasks to approved', () => {
+    // Regular code item — system actors must NOT be able to approve
+    const codeItem = createWorkItem({
+      project_id: projectId,
+      title: 'Regular code task',
+      requires_code: true,
+    });
+    expect(() => changeWorkItemState(codeItem.id, 'approved', 'orchestrator')).toThrow(
+      /Only human actors can approve/
+    );
+  });
+
+  it('SECURITY: system actors CANNOT recycle scheduled tasks without human approval provenance', () => {
+    // Scheduled task that was never human-approved
+    const scheduledItem = createWorkItem({
+      project_id: projectId,
+      title: 'Unapproved scheduled task',
+      requires_code: true,
+      space_type: 'scheduled',
+      space_data: JSON.stringify({
+        schedule: { frequency: 'daily' },
+        status: {},
+        todo: [],
+        ignore: [],
+      }),
+    });
+    // No human approval — orchestrator should not be able to approve
+    expect(() => changeWorkItemState(scheduledItem.id, 'approved', 'orchestrator')).toThrow(
+      /Only human actors can approve/
+    );
+  });
+
+  it('SECURITY: system actors CANNOT recycle scheduled tasks with tampered descriptions', () => {
+    // Create and human-approve a scheduled task
+    const scheduledItem = createWorkItem({
+      project_id: projectId,
+      title: 'Scheduled task with tamper test',
+      description: 'Original description',
+      requires_code: true,
+      space_type: 'scheduled',
+      space_data: JSON.stringify({
+        schedule: { frequency: 'daily' },
+        status: {},
+        todo: [],
+        ignore: [],
+      }),
+    });
+    changeWorkItemState(scheduledItem.id, 'approved', 'dashboard');
+
+    // Move through lifecycle
+    changeWorkItemState(scheduledItem.id, 'in_development', 'Coder');
+    changeWorkItemState(scheduledItem.id, 'in_review', 'Coder');
+
+    // Tamper with the description
+    updateWorkItem(scheduledItem.id, { description: 'TAMPERED description' });
+
+    // Orchestrator should NOT be able to recycle — description hash mismatch
+    expect(() => changeWorkItemState(scheduledItem.id, 'approved', 'orchestrator')).toThrow(
+      /Only human actors can approve/
+    );
+  });
+
   it('SECURITY: only human actors can cancel items', () => {
     expect(() => changeWorkItemState(itemId, 'cancelled', 'Coder')).toThrow(
       /Only human actors can cancel/
