@@ -32,9 +32,7 @@ import {
   createExecutionAudit,
   completeExecutionAudit,
   getExpiredScheduledItems,
-  getNonOrchestratedScheduledItems,
   updateWorkItem,
-  emit,
   type WorkItem,
   type Project,
   type Attachment,
@@ -1153,10 +1151,6 @@ function tick(): void {
 
   // Check for expired scheduled items and auto-close them
   checkExpiredScheduledItems();
-
-  // TRACK-228: Trigger due scheduled tasks in non-orchestrated projects
-  // (uses same cron logic as orchestrated dispatch, but routes via webhook to Liz/Harmoni)
-  triggerDueScheduledTasks();
 
   // Check for items in testing/in_review that have been acknowledged by owner
   checkPendingAcknowledgments();
@@ -3330,67 +3324,6 @@ function checkExpiredScheduledItems(): void {
       "orchestrator",
       `Auto-closed: scheduled task expired (due date ${item.date_due} has passed)`,
     );
-  }
-}
-
-/**
- * TRACK-228: Trigger scheduled tasks in non-orchestrated projects when their
- * scheduled time arrives. Uses the same isScheduleTimeDue() cron logic as
- * orchestrated projects, but instead of dispatching to a coding agent, it
- * emits a scheduled_task.due event that the webhook handler in index.ts
- * forwards to Liz/Harmoni.
- *
- * This ensures ALL scheduled tasks across ALL projects use the same cron
- * logic, regardless of whether the project uses orchestration or not:
- * - Orchestrated projects → dispatched to coding agents via tryDispatch()
- * - Non-orchestrated projects → triggered via webhook to Liz/Harmoni
- */
-function triggerDueScheduledTasks(): void {
-  const items = getNonOrchestratedScheduledItems();
-  if (items.length === 0) return;
-
-  for (const item of items) {
-    if (!isScheduleTimeDue(item)) continue;
-
-    const key = getWorkItemKey(item);
-    const project = getProject(item.project_id);
-
-    logger.info(
-      { itemId: item.id, key, projectName: project?.name },
-      "Scheduled task due in non-orchestrated project — triggering via webhook",
-    );
-
-    // Update space_data status to mark as running and prevent re-trigger
-    // on the next tick cycle
-    if (item.space_data) {
-      try {
-        const spaceData = JSON.parse(item.space_data);
-        if (!spaceData.status) spaceData.status = {};
-        spaceData.status.last_run = new Date().toISOString();
-        spaceData.status.last_status = "running";
-        spaceData.status.run_count = (spaceData.status.run_count || 0) + 1;
-        updateWorkItem(item.id, { space_data: JSON.stringify(spaceData) });
-      } catch {
-        logger.warn({ itemId: item.id, key }, "Failed to update scheduled task status");
-      }
-    }
-
-    // Emit event for the webhook handler in index.ts to forward to Liz/Harmoni
-    emit({
-      type: "scheduled_task.due",
-      work_item_id: item.id,
-      project_id: item.project_id,
-      actor: "orchestrator",
-      data: {
-        issue_key: key,
-        title: item.title,
-        description: item.description,
-        space_type: item.space_type,
-        space_data: item.space_data,
-        project_name: project?.name || "",
-      },
-      timestamp: new Date().toISOString(),
-    });
   }
 }
 

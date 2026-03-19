@@ -41,8 +41,7 @@ if (ORCHESTRATOR_ENABLED) {
 
 if (WEBHOOK_URL) {
   startCommentWebhook();
-  startScheduledTaskWebhook();
-  logger.info({ url: WEBHOOK_URL }, "Comment webhook enabled (+ scheduled task triggers)");
+  logger.info({ url: WEBHOOK_URL }, "Comment webhook enabled");
 } else {
   logger.info("Comment webhook disabled (set WEBHOOK_URL to enable)");
 }
@@ -128,42 +127,6 @@ function startCommentWebhook(): void {
     // Fire and forget — don't block the event loop
     fireWebhook(payload).catch((err) => {
       logger.warn({ err: err instanceof Error ? err.message : String(err), key }, "Webhook delivery failed");
-    });
-  });
-}
-
-/**
- * TRACK-228: Fire webhook notifications when scheduled tasks become due
- * in non-orchestrated projects. The orchestrator emits scheduled_task.due
- * events using the same cron logic (isScheduleTimeDue) as orchestrated
- * projects, and this handler forwards them to Liz/Harmoni via webhook.
- *
- * This ensures ALL scheduled tasks use the same timing logic, regardless
- * of whether the project uses orchestration (coding agents) or not (Harmoni).
- */
-function startScheduledTaskWebhook(): void {
-  onTrackerEvent((event) => {
-    if (event.type !== "scheduled_task.due") return;
-
-    const payload = {
-      type: "scheduled_task.due",
-      issue_key: event.data.issue_key,
-      item_id: event.work_item_id,
-      project_id: event.project_id,
-      project_name: event.data.project_name,
-      title: event.data.title,
-      description: event.data.description,
-      space_type: event.data.space_type,
-      space_data: event.data.space_data,
-      timestamp: event.timestamp,
-    };
-
-    // Fire and forget — don't block the event loop
-    fireWebhook(payload).catch((err) => {
-      logger.warn(
-        { err: err instanceof Error ? err.message : String(err), key: event.data.issue_key },
-        "Scheduled task webhook delivery failed",
-      );
     });
   });
 }

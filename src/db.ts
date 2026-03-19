@@ -797,8 +797,7 @@ export type TrackerEventType =
   | "comment.updated"
   | "comment.deleted"
   | "attachment.created"
-  | "attachment.deleted"
-  | "scheduled_task.due";
+  | "attachment.deleted";
 
 export interface TrackerEvent {
   type: TrackerEventType;
@@ -816,7 +815,7 @@ export function onTrackerEvent(listener: TrackerEventListener): void {
   listeners.push(listener);
 }
 
-export function emit(event: TrackerEvent): void {
+function emit(event: TrackerEvent): void {
   for (const listener of listeners) {
     try {
       listener(event);
@@ -2384,32 +2383,6 @@ export function getExpiredScheduledItems(): WorkItem[] {
          AND state NOT IN ('done', 'cancelled')`,
     )
     .all(today) as WorkItem[];
-}
-
-/**
- * Find approved scheduled tasks in non-orchestrated projects that are candidates
- * for triggering via the webhook to Liz/Harmoni. These are scheduled tasks that
- * won't be picked up by getDispatchableItems() (which filters orchestration=1).
- *
- * The caller (orchestrator) uses isScheduleTimeDue() to check if each task's
- * configured schedule time has arrived — same cron logic as orchestrated tasks.
- *
- * TRACK-228: Enables the same scheduled task cron logic for both orchestrated
- * and non-orchestrated projects.
- */
-export function getNonOrchestratedScheduledItems(): WorkItem[] {
-  return db
-    .prepare(
-      `SELECT wi.* FROM tracker_work_items wi
-       JOIN tracker_projects p ON p.id = wi.project_id
-       WHERE wi.space_type = 'scheduled'
-         AND wi.state = 'approved'
-         AND wi.locked_by IS NULL
-         AND p.orchestration = 0
-         AND (wi.session_status IS NULL OR wi.session_status NOT IN ('pending', 'running', 'waiting_for_permission'))
-       ORDER BY wi.created_at ASC`,
-    )
-    .all() as WorkItem[];
 }
 
 // ── Execution Audits (Section 4.6.2) ──
