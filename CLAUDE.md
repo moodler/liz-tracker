@@ -18,7 +18,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/index.ts` | Entry point — init DB, start server, optionally start orchestrator |
 | `src/config.ts` | Config from env vars / `.env` file: PORT, STORE_DIR, TRACKER_PUBLIC_URL, TRACKER_SHORT_URL, OPENCODE_SERVER_URL, OPENCODE_PUBLIC_URL, ORCHESTRATOR_ENABLED, ORCHESTRATOR_INTERVAL, OPENCODE_MAX_CONCURRENT, OPENCODE_MAX_PER_PROJECT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL |
 | `src/logger.ts` | Pino logger with pino-pretty |
-| `src/db.ts` | SQLite database layer — schema, CRUD, events, migrations |
+| `src/db.ts` | SQLite database layer — schema, CRUD, events, migrations, activity logging |
 | `src/api.ts` | HTTP server — REST API + static file serving + MCP routing + generic space route dispatcher |
 | `src/mcp-server.ts` | MCP tool definitions using @modelcontextprotocol/sdk + dynamic space tool registration |
 | `src/orchestrator.ts` | OpenCode orchestrator — dispatches approved items to sessions, monitors via SSE, comment-based auto-completion, review feedback redispatch, expired scheduled item auto-close |
@@ -46,11 +46,11 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/spaces/travel.ts` | Parser, sanitizer, deep merge, 4 API routes, 4 MCP tools, cover image |
 | `src/ui/core.html` | Dashboard shell + space plugin registry + overlay shell |
 | `src/ui/spaces/standard.js` | Registry entry only (~15 lines) |
-| `src/ui/spaces/song.js` | Song UI renderer (~670 lines) |
-| `src/ui/spaces/text.js` | Text UI renderer + inline comments (~560 lines) |
+| `src/ui/spaces/song.js` | Song UI renderer (~731 lines) |
+| `src/ui/spaces/text.js` | Text UI renderer + inline comments (~368 lines) |
 | `src/ui/spaces/engagement.js` | Engagement UI renderer (~680 lines) |
 | `src/ui/spaces/scheduled.js` | Scheduled UI renderer (~850 lines) |
-| `src/ui/spaces/travel.js` | Travel UI renderer — day-by-day timeline, gap detection, segment cards (~880 lines) |
+| `src/ui/spaces/travel.js` | Travel UI renderer — day-by-day timeline, gap detection, segment cards (~1079 lines) |
 | `scripts/build-ui.js` | UI pre-compilation script (~60 lines, zero dependencies) |
 
 ## Development
@@ -710,7 +710,7 @@ Zero changes needed to `api.ts`, `mcp-server.ts`, `db.ts`, or the overlay shell 
 
 ## Conventions
 
-- Database tables are prefixed with `tracker_` (projects, work_items, comments, transitions, watchers, dependencies)
+- Database tables are prefixed with `tracker_` (projects, work_items, comments, transitions, watchers, dependencies, attachments, description_versions, activity_log, execution_audits)
 - All IDs are random hex strings (24 chars)
 - Timestamps are ISO 8601 strings
 - Work items have sequential keys per project (e.g. PROJ-1, PROJ-2)
@@ -719,11 +719,11 @@ Zero changes needed to `api.ts`, `mcp-server.ts`, `db.ts`, or the overlay shell 
 
 ## Dashboard UI Code Organization
 
-The dashboard is a single vanilla JS file wrapped in an IIFE. No frameworks. The source is split into `src/ui/core.html` (~17k lines) + `src/ui/spaces/*.js` (per-space plugin files), assembled into `src/ui/index.html` by `scripts/build-ui.js`. Run `npm run build:ui` after editing UI files.
+The dashboard is a single vanilla JS file wrapped in an IIFE. No frameworks. The source is split into `src/ui/core.html` (~19k lines) + `src/ui/spaces/*.js` (per-space plugin files), assembled into `src/ui/index.html` by `scripts/build-ui.js`. Run `npm run build:ui` after editing UI files.
 
 ### Navigation
 
-The code is organized into ~52 sections, each marked with a comment header:
+The code is organized into ~70 sections, each marked with a comment header:
 ```js
 // ── Section Name ──
 ```
@@ -731,7 +731,7 @@ When adding new features, always add a section header. Use grep for `// ──` 
 
 ### Shared Helpers & Constants
 
-Reusable utilities are in the **"Shared Helpers"** section (line ~6941). Check here before writing new utility code:
+Reusable utilities are in the **"Shared Helpers"** section (line ~10707). Check here before writing new utility code:
 
 | Helper | Purpose |
 | --- | --- |
@@ -746,7 +746,7 @@ Reusable utilities are in the **"Shared Helpers"** section (line ~6941). Check h
 | `buildOpencodeUrl(sessionId, dir)` | Build OpenCode deep link URL |
 | `base64UrlEncode(str)` | Encode string to base64url (for OpenCode directory paths) |
 
-Shared constants (defined near the top of the JS, line ~6657):
+Shared constants (defined near the top of the JS, line ~10111):
 
 | Constant | Purpose |
 | --- | --- |
