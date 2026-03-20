@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { isProcessAlive, resolveOpencodePid, sendSignal, killProcessGracefully, validateAgentConfig, is413Error, isImageTooLargeError, isPostCompletionError, isScheduleTimeDue } from "./orchestrator.js";
-import { base64UrlEncode, buildOpencodeSessionUrl, buildOpencodeDirectoryUrl, buildOpencodeApiSessionUrl } from "./config.js";
+import { base64UrlEncode, buildOpencodeSessionUrl, buildOpencodeDirectoryUrl, buildOpencodeApiSessionUrl, DISPATCH_MODE } from "./config.js";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -822,5 +822,13 @@ describe("isScheduleTimeDue", () => {
       expect(isScheduleTimeDue(item)).toBe(false);
     }
     // If it happens to be 23:59 in Kiritimati, this test gracefully skips
+  });
+});
+
+// ── DISPATCH_MODE config ────────────────────────────────────────────────────
+
+describe("DISPATCH_MODE config", () => {
+  it("defaults to opencode", () => {
+    expect(DISPATCH_MODE).toBe("opencode");
   });
 });

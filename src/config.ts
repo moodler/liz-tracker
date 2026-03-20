@@ -158,6 +158,13 @@ export const CODER_MODEL_PROVIDER =
 export const CODER_MODEL_ID =
   process.env.CODER_MODEL_ID || "claude-opus-4-6";
 
+/**
+ * Dispatch mode: "opencode" uses the OpenCode SDK, "runner" uses the direct
+ * Claude Code Agent SDK session runner.
+ */
+export const DISPATCH_MODE: "opencode" | "runner" =
+  (process.env.DISPATCH_MODE as "opencode" | "runner") || "opencode";
+
 // ── Actor classification ──
 
 /**
