@@ -326,10 +326,10 @@ export const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 
 /**
  * Model to use for AI categorization. Should be fast and cheap.
- * Default: claude-sonnet-4-20250514 (fast, good at structured extraction).
+ * Default: claude-sonnet-4-5-20241022 (fast, good at structured extraction).
  */
 export const AI_CATEGORIZE_MODEL =
-  process.env.AI_CATEGORIZE_MODEL || "claude-sonnet-4-20250514";
+  process.env.AI_CATEGORIZE_MODEL || "claude-sonnet-4-5-20241022";
 
 // ── OpenCode deep link helpers ──
 

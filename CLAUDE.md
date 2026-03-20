@@ -131,7 +131,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 | `CIRCUIT_BREAKER_WINDOW` | `3600000` | Window (ms) for counting failures (1 hour) |
 | `ITEM_DISPATCH_FAILURE_LIMIT` | `3` | Per-item failures before auto-shelving to needs_input |
 | `ANTHROPIC_API_KEY` | (none) | Anthropic API key — enables AI categorization button in the dashboard |
-| `AI_CATEGORIZE_MODEL` | `claude-sonnet-4-20250514` | Model for AI categorization (fast structured extraction) |
+| `AI_CATEGORIZE_MODEL` | `claude-sonnet-4-5-20241022` | Model for AI categorization (fast structured extraction) |
 | `WEBHOOK_URL` | (none) | URL to POST webhook notifications to (comments + scheduled task triggers) |
 | `WEBHOOK_SECRET` | (none) | Shared secret for authenticating webhook payloads (HMAC) |
 
