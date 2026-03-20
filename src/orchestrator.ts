@@ -2354,6 +2354,10 @@ function buildPrompt(
     "",
     "**UI build process:** If this project has a dashboard UI, `src/ui/index.html` is a **build artifact** — do NOT edit it directly. Edit `src/ui/core.html` (the source file) and `src/ui/spaces/*.js` (space plugins), then run `npm run build:ui` to regenerate index.html. Changes to index.html will be overwritten.",
     "",
+    `**Git commits:** Always prefix commit messages with the issue key \`${itemKey}\`. Example: \`${itemKey}: Fix auth token validation\`. Run \`npm test\` before committing. Commit your work before moving the item to in_review.`,
+    "",
+    `**Actor name:** When calling tracker tools (change_state, add_comment, lock, unlock), use actor="Coder" — not your session ID or model name.`,
+    "",
   );
 
   // TRACK-237: For scheduled tasks, add explicit instruction not to modify the description.
