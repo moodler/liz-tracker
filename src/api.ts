@@ -103,8 +103,12 @@ import {
   getRestartStatus,
   cancelRestart,
   isSafeToRestart,
+  subscribeSessionEvents,
+  unsubscribeSessionEvents,
+  steerSession,
+  getActiveSession,
 } from "./orchestrator.js";
-import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL, PORT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL } from "./config.js";
+import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL, PORT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL, DISPATCH_MODE } from "./config.js";
 import { getSpacePlugin, getCoverSpaceTypes } from "./spaces/index.js";
 import { sanitizeScheduledSpaceData } from "./spaces/scheduled.js";
 
@@ -862,21 +866,71 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
       if (parts.length === 3 && parts[2] === "session" && method === "GET") {
         const item = getWorkItem(itemId);
         if (!item) return error(res, "Work item not found", 404);
-        let opencodeUrl: string | null = null;
-        if (item.session_id) {
-          const project = getProject(item.project_id);
-          opencodeUrl = project?.working_directory
-            ? buildOpencodeSessionUrl(
-                item.session_id,
-                project.working_directory,
-              )
-            : `${OPENCODE_PUBLIC_URL}/${item.session_id}`;
-        }
-        return json(res, {
+
+        const response: any = {
           session_id: item.session_id,
           session_status: item.session_status,
-          opencode_url: opencodeUrl,
+          dispatch_mode: DISPATCH_MODE,
+        };
+
+        if (DISPATCH_MODE === "opencode") {
+          let opencodeUrl: string | null = null;
+          if (item.session_id) {
+            const project = getProject(item.project_id);
+            opencodeUrl = project?.working_directory
+              ? buildOpencodeSessionUrl(
+                  item.session_id,
+                  project.working_directory,
+                )
+              : `${OPENCODE_PUBLIC_URL}/${item.session_id}`;
+          }
+          response.opencode_url = opencodeUrl;
+        } else {
+          const session = getActiveSession(item.session_id);
+          response.event_count = session?.events?.length ?? 0;
+        }
+
+        return json(res, response);
+      }
+
+      // GET /items/:id/session/events — SSE stream of runner session events
+      if (parts.length === 4 && parts[2] === "session" && parts[3] === "events" && method === "GET") {
+        const item = getWorkItem(itemId);
+        if (!item) return error(res, "Work item not found", 404);
+
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
         });
+
+        // Send buffered events as catch-up burst
+        const buffered = subscribeSessionEvents(item.id, res);
+        for (let i = 0; i < buffered.length; i++) {
+          const eventId = `${Date.now().toString(36)}_${i}`;
+          res.write(`id: ${eventId}\ndata: ${JSON.stringify(buffered[i])}\n\n`);
+        }
+
+        req.on("close", () => {
+          unsubscribeSessionEvents(item.id, res);
+        });
+        return; // Keep connection open
+      }
+
+      // POST /items/:id/session/steer — send steering message to runner
+      if (parts.length === 4 && parts[2] === "session" && parts[3] === "steer" && method === "POST") {
+        if (!checkAuth(req, res)) return;
+        const item = getWorkItem(itemId);
+        if (!item) return error(res, "Work item not found", 404);
+        const body = await parseBody(req);
+        const message = body.message as string;
+        if (!message || typeof message !== "string") {
+          return error(res, "message is required", 400);
+        }
+        if (!item.session_id) return error(res, "No active session for this item", 409);
+        const success = steerSession(item.session_id, message);
+        if (!success) return error(res, "No active runner session (may have ended)", 409);
+        return json(res, { steered: true, session_id: item.session_id });
       }
 
       // POST /items/:id/session/abort — abort the active session
