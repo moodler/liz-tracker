@@ -10045,6 +10045,7 @@
         let attentionData = null;
         let attentionDataHash = null;
         let opencodePublicUrl = null; // Fetched from server config
+        let dispatchMode = null; // Fetched from server config (e.g. "opencode", "runner")
 
         // ── DOM ──
         const $ = (s, p) => (p || document).querySelector(s);
@@ -12217,10 +12218,11 @@
           const currentProject = projectsCache.find(
             (p) => p.id === currentProjectId,
           );
-          const sessionLink = item.session_id
+          const sessionLink = item.session_id && dispatchMode === "opencode"
             ? `<button onclick="window.open('${esc(buildOpencodeUrl(item.session_id, currentProject?.working_directory))}', 'opencode'); event.stopPropagation();" title="Open in OpenCode">OpenCode \u2197</button>`
             : "";
           const dispatchBtn =
+            dispatchMode === "opencode" &&
             currentProject?.orchestration &&
             currentProject?.working_directory &&
             item.state === "approved" &&
@@ -12893,10 +12895,11 @@
             ? `<span class="attention-badge" style="background:${badge.color};color:${badge.textColor}">${badge.label}</span>`
             : "";
           const agentStatusEmoji = agentStatusHtml(item.session_status);
-          const sessionLink = item.session_id
+          const sessionLink = item.session_id && dispatchMode === "opencode"
             ? `<button onclick="window.open('${esc(buildOpencodeUrl(item.session_id, project?.working_directory))}', 'opencode'); event.stopPropagation();" title="Open in OpenCode">OpenCode \u2197</button>`
             : "";
           const dispatchBtn =
+            dispatchMode === "opencode" &&
             project?.orchestration &&
             project?.working_directory &&
             item.state === "approved" &&
@@ -15408,7 +15411,7 @@
         // Update OpenCode button visibility based on session_id
         function updateDetailOpencodeButton() {
           const btn = $("#markersOpencodeBtn");
-          if (detailSessionId && opencodePublicUrl) {
+          if (detailSessionId && opencodePublicUrl && dispatchMode === "opencode") {
             btn.style.display = "";
           } else {
             btn.style.display = "none";
@@ -18514,6 +18517,7 @@
           try {
             const config = await apiGet("/config");
             if (config.opencodePublicUrl) opencodePublicUrl = config.opencodePublicUrl;
+            if (config.dispatchMode) dispatchMode = config.dispatchMode;
           } catch {}
           // Restore saved comment author name from localStorage
           try {
