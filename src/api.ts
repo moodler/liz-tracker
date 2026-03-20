@@ -444,6 +444,33 @@ async function handleApiRequest(
       }
     }
 
+    // ── SSE session events (before auth — EventSource cannot send headers) ──
+    // Read-only stream of runner session events for the dashboard viewer.
+    if (
+      parts[0] === "items" && parts.length === 4 &&
+      parts[2] === "session" && parts[3] === "events" && method === "GET"
+    ) {
+      const item = getWorkItem(parts[1]);
+      if (!item) return error(res, "Work item not found", 404);
+
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      });
+
+      const buffered = subscribeSessionEvents(item.id, res);
+      for (let i = 0; i < buffered.length; i++) {
+        const eventId = `${Date.now().toString(36)}_${i}`;
+        res.write(`id: ${eventId}\ndata: ${JSON.stringify(buffered[i])}\n\n`);
+      }
+
+      req.on("close", () => {
+        unsubscribeSessionEvents(item.id, res);
+      });
+      return;
+    }
+
     // ── Section 4.8: API Authentication ──
     // ALL API endpoints require authentication when TRACKER_API_TOKEN is set
     if (!checkAuth(req, res)) {
@@ -891,30 +918,6 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
         }
 
         return json(res, response);
-      }
-
-      // GET /items/:id/session/events — SSE stream of runner session events
-      if (parts.length === 4 && parts[2] === "session" && parts[3] === "events" && method === "GET") {
-        const item = getWorkItem(itemId);
-        if (!item) return error(res, "Work item not found", 404);
-
-        res.writeHead(200, {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          "Connection": "keep-alive",
-        });
-
-        // Send buffered events as catch-up burst
-        const buffered = subscribeSessionEvents(item.id, res);
-        for (let i = 0; i < buffered.length; i++) {
-          const eventId = `${Date.now().toString(36)}_${i}`;
-          res.write(`id: ${eventId}\ndata: ${JSON.stringify(buffered[i])}\n\n`);
-        }
-
-        req.on("close", () => {
-          unsubscribeSessionEvents(item.id, res);
-        });
-        return; // Keep connection open
       }
 
       // POST /items/:id/session/steer — send steering message to runner
