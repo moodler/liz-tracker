@@ -10779,15 +10779,67 @@
           let inCode = false,
             codeLang = "",
             codeLines = [];
-          let inList = false,
-            listType = "";
-          let inSubList = false; // tracking nested ul inside ol
+          // Stack-based list nesting: each entry is { type: 'ul'|'ol', indent: number }
+          let listStack = [];
 
           function flushList() {
-            if (inList) {
-              if (inSubList) { html += "</ul></li>"; inSubList = false; }
-              html += `</${listType}>`;
-              inList = false;
+            while (listStack.length > 0) {
+              const top = listStack.pop();
+              html += `</li></${top.type}>`;
+            }
+          }
+
+          function openList(type, startNum) {
+            if (type === "ol" && startNum > 1) return `<ol start="${startNum}">`;
+            return `<${type}>`;
+          }
+
+          function handleListItem(indent, type, content, startNum) {
+            if (listStack.length === 0) {
+              // Start a new top-level list
+              html += `${openList(type, startNum)}<li>${inline(content)}`;
+              listStack.push({ type, indent });
+              return;
+            }
+            const top = listStack[listStack.length - 1];
+            if (indent > top.indent) {
+              // Nested deeper — open a new sub-list inside the current <li>
+              html += `${openList(type, startNum)}<li>${inline(content)}`;
+              listStack.push({ type, indent });
+            } else if (indent < top.indent) {
+              // Dedent — close lists until we reach the right level
+              while (listStack.length > 0 && listStack[listStack.length - 1].indent > indent) {
+                const closed = listStack.pop();
+                html += `</li></${closed.type}>`;
+              }
+              if (listStack.length > 0 && listStack[listStack.length - 1].indent === indent) {
+                // Same level — check if type matches
+                const cur = listStack[listStack.length - 1];
+                if (cur.type !== type) {
+                  // Different list type at same indent — close old, open new
+                  listStack.pop();
+                  html += `</li></${cur.type}>`;
+                  html += `${openList(type, startNum)}<li>${inline(content)}`;
+                  listStack.push({ type, indent });
+                } else {
+                  html += `</li><li>${inline(content)}`;
+                }
+              } else {
+                // No matching level found — start fresh
+                html += `${openList(type, startNum)}<li>${inline(content)}`;
+                listStack.push({ type, indent });
+              }
+            } else {
+              // Same indent level
+              if (top.type !== type) {
+                // Different list type at same indent — close old, open new
+                listStack.pop();
+                html += `</li></${top.type}>`;
+                html += `${openList(type, startNum)}<li>${inline(content)}`;
+                listStack.push({ type, indent });
+              } else {
+                html += `</li><li>${inline(content)}`;
+              }
             }
           }
           function inline(text) {
@@ -10871,14 +10923,13 @@
 
             // Blank line — but don't flush if next non-blank line continues the list
             if (!line.trim()) {
-              if (inList) {
+              if (listStack.length > 0) {
                 let j = i + 1;
                 while (j < lines.length && !lines[j].trim()) j++;
                 if (j < lines.length) {
                   const nextLine = lines[j];
                   const continuesList =
-                    (listType === "ol" && (/^\s*\d+[.)]\s+/.test(nextLine) || /^\s+[-*]\s+/.test(nextLine))) ||
-                    (listType === "ul" && /^\s*[-*]\s+/.test(nextLine));
+                    /^\s*\d+[.)]\s+/.test(nextLine) || /^\s*[-*]\s+/.test(nextLine);
                   if (continuesList) continue; // skip blank line, keep list open
                 }
               }
@@ -10902,44 +10953,18 @@
               continue;
             }
 
-            // Unordered list (or nested sub-list under an ordered list)
+            // Unordered list
             const ulMatch = line.match(/^(\s*)[-*]\s+(.*)/);
             if (ulMatch) {
-              // Indented unordered item inside an ordered list → nest as sub-list
-              if (inList && listType === "ol" && ulMatch[1].length > 0) {
-                if (!inSubList) {
-                  // Re-open the last <li> by replacing trailing </li> with a nested <ul>
-                  html = html.replace(/<\/li>$/, "");
-                  html += "<ul>";
-                  inSubList = true;
-                }
-                html += `<li>${inline(ulMatch[2])}</li>`;
-                continue;
-              }
-              if (inSubList) { html += "</ul></li>"; inSubList = false; }
-              if (!inList || listType !== "ul") {
-                flushList();
-                html += "<ul>";
-                inList = true;
-                listType = "ul";
-              }
-              html += `<li>${inline(ulMatch[2])}</li>`;
+              handleListItem(ulMatch[1].length, "ul", ulMatch[2]);
               continue;
             }
 
             // Ordered list
             const olMatch = line.match(/^(\s*)(\d+)[.)]\s+(.*)/);
             if (olMatch) {
-              // Close any open sub-list before adding next ordered item
-              if (inSubList) { html += "</ul></li>"; inSubList = false; }
-              if (!inList || listType !== "ol") {
-                flushList();
-                const startNum = parseInt(olMatch[2], 10);
-                html += startNum > 1 ? `<ol start="${startNum}">` : "<ol>";
-                inList = true;
-                listType = "ol";
-              }
-              html += `<li>${inline(olMatch[3])}</li>`;
+              const startNum = parseInt(olMatch[2], 10);
+              handleListItem(olMatch[1].length, "ol", olMatch[3], startNum);
               continue;
             }
 
