@@ -2354,9 +2354,11 @@ function buildPrompt(
     "",
     "**UI build process:** If this project has a dashboard UI, `src/ui/index.html` is a **build artifact** — do NOT edit it directly. Edit `src/ui/core.html` (the source file) and `src/ui/spaces/*.js` (space plugins), then run `npm run build:ui` to regenerate index.html. Changes to index.html will be overwritten.",
     "",
-    `**Git commits:** Always prefix commit messages with the issue key \`${itemKey}\`. Example: \`${itemKey}: Fix auth token validation\`. Run \`npm test\` before committing. Commit your work before moving the item to in_review.`,
+    `**Git commits:** Always prefix commit messages with the issue key \`${itemKey}\`. Example: \`${itemKey}: Fix auth token validation\`. Run \`npm run build && npm test\` before committing (build catches type errors and regenerates UI artifacts). Commit ALL your work before moving the item to in_review — never leave uncommitted changes.`,
     "",
     `**Actor name:** When calling tracker tools (change_state, add_comment, lock, unlock), use actor="Coder" — not your session ID or model name.`,
+    "",
+    "**Project conventions:** Read the project's CLAUDE.md file first if one exists — it contains build commands, test patterns, architecture notes, and coding conventions specific to this project.",
     "",
   );
 
