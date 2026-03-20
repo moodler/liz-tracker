@@ -2042,6 +2042,38 @@ function buildPrompt(
 }
 
 /**
+ * Split prompt into system append (security rules) and user prompt (item context).
+ * Used by the runner dispatch path. The system append goes into Claude Code's
+ * system prompt via the Agent SDK, while the user prompt is the conversation message.
+ */
+export function buildPromptParts(
+  item: WorkItem,
+  project: { name: string; short_name: string; working_directory: string; context?: string },
+  sessionId: string,
+): { systemAppend: string; userPrompt: string } {
+  const fullPrompt = buildPrompt(item, project, sessionId);
+
+  const securityMarker = "## Security Rules";
+  const instructionsMarker = "## Instructions";
+
+  const securityStart = fullPrompt.indexOf(securityMarker);
+  const instructionsStart = fullPrompt.indexOf(instructionsMarker);
+
+  if (securityStart === -1 || instructionsStart === -1) {
+    // Fallback: everything goes in the user prompt
+    return { systemAppend: "", userPrompt: fullPrompt };
+  }
+
+  const systemAppend = fullPrompt.slice(securityStart, instructionsStart).trim();
+  const userPrompt =
+    fullPrompt.slice(0, securityStart).trim() +
+    "\n\n" +
+    fullPrompt.slice(instructionsStart).trim();
+
+  return { systemAppend, userPrompt };
+}
+
+/**
  * Build a research/clarification prompt for a work item in 'clarification' state.
  *
  * Unlike buildPrompt() (for coders), this prompt instructs the agent to:
@@ -2206,6 +2238,37 @@ function buildResearchPrompt(
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Split research prompt into system append and user prompt.
+ * Used by the runner dispatch path for clarification/research dispatches.
+ */
+export function buildResearchPromptParts(
+  item: WorkItem,
+  project: { name: string; short_name: string; working_directory: string; context?: string },
+  sessionId: string,
+): { systemAppend: string; userPrompt: string } {
+  const fullPrompt = buildResearchPrompt(item, project, sessionId);
+
+  const securityMarker = "## Security Rules";
+  const instructionsMarker = "## Instructions";
+
+  const securityStart = fullPrompt.indexOf(securityMarker);
+  const instructionsStart = fullPrompt.indexOf(instructionsMarker);
+
+  if (securityStart === -1 || instructionsStart === -1) {
+    // Fallback: everything goes in the user prompt
+    return { systemAppend: "", userPrompt: fullPrompt };
+  }
+
+  const systemAppend = fullPrompt.slice(securityStart, instructionsStart).trim();
+  const userPrompt =
+    fullPrompt.slice(0, securityStart).trim() +
+    "\n\n" +
+    fullPrompt.slice(instructionsStart).trim();
+
+  return { systemAppend, userPrompt };
 }
 
 // ── Stale Session Detection ──

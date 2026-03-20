@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { isProcessAlive, resolveOpencodePid, sendSignal, killProcessGracefully, validateAgentConfig, is413Error, isImageTooLargeError, isPostCompletionError, isScheduleTimeDue } from "./orchestrator.js";
+import { isProcessAlive, resolveOpencodePid, sendSignal, killProcessGracefully, validateAgentConfig, is413Error, isImageTooLargeError, isPostCompletionError, isScheduleTimeDue, buildPromptParts, buildResearchPromptParts } from "./orchestrator.js";
 import { base64UrlEncode, buildOpencodeSessionUrl, buildOpencodeDirectoryUrl, buildOpencodeApiSessionUrl, DISPATCH_MODE } from "./config.js";
 import fs from "fs";
 import path from "path";
@@ -830,5 +830,102 @@ describe("isScheduleTimeDue", () => {
 describe("DISPATCH_MODE config", () => {
   it("defaults to opencode", () => {
     expect(DISPATCH_MODE).toBe("opencode");
+  });
+});
+
+// ── buildPromptParts ──────────────────────────────────────────────────────────
+
+import { _initTestTrackerDatabase, createProject, createWorkItem } from "./db.js";
+
+describe("buildPromptParts", () => {
+  beforeEach(() => {
+    _initTestTrackerDatabase();
+  });
+
+  it("splits coder prompt into systemAppend (security rules) and userPrompt (context + instructions)", () => {
+    const project = createProject({
+      name: "Test Project",
+      short_name: "TEST",
+      working_directory: "/tmp/test-project",
+    });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: "Implement feature X",
+      description: "Add a new widget to the dashboard",
+      requires_code: true,
+    });
+
+    const { systemAppend, userPrompt } = buildPromptParts(
+      item,
+      { name: project.name, short_name: project.short_name, working_directory: "/tmp/test-project" },
+      "test-session-123",
+    );
+
+    // systemAppend should contain security rules
+    expect(systemAppend).toContain("Security Rules");
+    expect(systemAppend).toContain("Blocked File Patterns");
+
+    // systemAppend should NOT contain instructions
+    expect(systemAppend).not.toContain("## Instructions");
+
+    // userPrompt should contain item context
+    expect(userPrompt).toContain("Add a new widget to the dashboard");
+    expect(userPrompt).toContain("## Instructions");
+
+    // userPrompt should NOT contain security rules
+    expect(userPrompt).not.toContain("## Security Rules");
+  });
+
+  it("includes session ID in userPrompt", () => {
+    const project = createProject({
+      name: "Test",
+      working_directory: "/tmp/test",
+    });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: "Task",
+      description: "Do something",
+      requires_code: true,
+    });
+
+    const { userPrompt } = buildPromptParts(
+      item,
+      { name: project.name, short_name: project.short_name, working_directory: "/tmp/test" },
+      "session-abc",
+    );
+
+    expect(userPrompt).toContain("session-abc");
+  });
+});
+
+// ── buildResearchPromptParts ──────────────────────────────────────────────────
+
+describe("buildResearchPromptParts", () => {
+  beforeEach(() => {
+    _initTestTrackerDatabase();
+  });
+
+  it("returns full prompt as userPrompt when no security rules section exists", () => {
+    const project = createProject({
+      name: "Research Project",
+      short_name: "RES",
+      working_directory: "/tmp/research",
+    });
+    const item = createWorkItem({
+      project_id: project.id,
+      title: "Research topic Y",
+      description: "Investigate how to optimize queries",
+    });
+
+    const { systemAppend, userPrompt } = buildResearchPromptParts(
+      item,
+      { name: project.name, short_name: project.short_name, working_directory: "/tmp/research" },
+      "research-session-456",
+    );
+
+    // Research prompts don't have Security Rules section, so fallback applies
+    expect(systemAppend).toBe("");
+    expect(userPrompt).toContain("Investigate how to optimize queries");
+    expect(userPrompt).toContain("Research Task");
   });
 });
