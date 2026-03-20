@@ -2392,11 +2392,14 @@ function handleSseEvent(raw: Record<string, unknown>): void {
     }
 
     case "message.part.updated": {
-      // Check if this is a CompactionPart
+      // Any message part update indicates the agent is actively working.
+      // Update lastActivityAt to prevent stale session detection.
+      const session = activeSessions.get(sessionId)!;
+      session.lastActivityAt = new Date();
+
+      // Check if this is a CompactionPart — needs special handling
       const part = properties.part as { type?: string; auto?: boolean; overflow?: boolean } | undefined;
       if (part?.type === "compaction") {
-        const session = activeSessions.get(sessionId)!;
-        session.lastActivityAt = new Date();
         markSessionCompacting(session, `compaction part (auto=${part.auto}, overflow=${part.overflow})`);
 
         // Cancel any deferred error — compaction is in progress
@@ -2511,6 +2514,16 @@ function handleSseEvent(raw: Record<string, unknown>): void {
           { sessionId, itemId: session.itemId, permissionId: repliedPermissionId, response },
           "Permission responded to — session can continue",
         );
+      }
+      break;
+    }
+
+    default: {
+      // Any other session-scoped event (e.g., file.edited, command.executed, todo.updated)
+      // indicates the session is still active. Update lastActivityAt to prevent timeout.
+      const session = activeSessions.get(sessionId);
+      if (session) {
+        session.lastActivityAt = new Date();
       }
       break;
     }
