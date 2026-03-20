@@ -59,9 +59,12 @@ import {
   buildOpencodeDirectoryUrl,
   HUMAN_ACTORS,
   AGENT_ACTORS,
+  DISPATCH_MODE,
 } from "./config.js";
 import { logger } from "./logger.js";
-import { execFileSync } from "child_process";
+import { execFileSync, spawn, type ChildProcess } from "child_process";
+import { createInterface } from "readline";
+import type { RunnerEvent, RunnerConfig } from "./runner-types.js";
 
 // ── Helpers ──
 
@@ -459,6 +462,12 @@ interface ActiveSession {
     type: string;
     title: string;
   };
+  /** Child process handle when using runner dispatch mode. */
+  childProcess?: ChildProcess;
+  /** Buffered runner events for dashboard SSE viewer (max 200). */
+  events?: RunnerEvent[];
+  /** Agent SDK session ID for potential resume. */
+  sdkSessionId?: string;
 }
 
 /**
@@ -498,6 +507,66 @@ let intervalHandle: ReturnType<typeof setInterval> | null = null;
 let sseAbortController: AbortController | null = null;
 const activeSessions = new Map<string, ActiveSession>();
 let lastTick: Date | null = null;
+
+// SSE subscribers for runner session events: itemId → Set of response objects
+const sseSubscribers = new Map<string, Set<any>>();
+
+function pushSessionEvent(itemId: string, event: RunnerEvent): void {
+  const subscribers = sseSubscribers.get(itemId);
+  if (!subscribers) return;
+  const data = JSON.stringify(event);
+  const eventId = Date.now().toString(36);
+  for (const res of subscribers) {
+    try {
+      res.write(`id: ${eventId}\ndata: ${data}\n\n`);
+    } catch {
+      subscribers.delete(res);
+    }
+  }
+}
+
+export function subscribeSessionEvents(itemId: string, res: any): RunnerEvent[] {
+  if (!sseSubscribers.has(itemId)) sseSubscribers.set(itemId, new Set());
+  sseSubscribers.get(itemId)!.add(res);
+  for (const session of activeSessions.values()) {
+    if (session.itemId === itemId && session.events) {
+      return [...session.events];
+    }
+  }
+  return [];
+}
+
+export function unsubscribeSessionEvents(itemId: string, res: any): void {
+  sseSubscribers.get(itemId)?.delete(res);
+}
+
+/**
+ * Send a steering message to a runner session's child process via stdin.
+ * Returns true if the message was sent, false if the session is not a runner session
+ * or the stdin is not writable.
+ */
+export function steerSession(sessionId: string, message: string): boolean {
+  const session = activeSessions.get(sessionId);
+  if (!session?.childProcess?.stdin?.writable) return false;
+  try {
+    session.childProcess.stdin.write(JSON.stringify({ event: "steer", message }) + "\n");
+    const steerEvent: RunnerEvent = { event: "text", content: `[Human]: ${message}` };
+    if (session.events) {
+      session.events.push(steerEvent);
+      if (session.events.length > 200) session.events.shift();
+    }
+    pushSessionEvent(session.itemId, steerEvent);
+    return true;
+  } catch { return false; }
+}
+
+/**
+ * Get an active session by its session ID.
+ */
+export function getActiveSession(sessionId: string | null): ActiveSession | undefined {
+  if (!sessionId) return undefined;
+  return activeSessions.get(sessionId);
+}
 
 /**
  * Count active sessions for a given project.
@@ -797,7 +866,7 @@ export async function dispatchItem(
   }
 
   try {
-    const result = await dispatch(item);
+    const result = await (DISPATCH_MODE === "runner" ? dispatchViaRunner(item) : dispatch(item));
     if (result) {
       // Build a deep link URL so the caller can open the session in a browser
       const opencodeUrl = buildOpencodeSessionUrl(result, project.working_directory);
@@ -1254,7 +1323,7 @@ function tryDispatch(): void {
         }
 
         try {
-          await dispatch(item);
+          await (DISPATCH_MODE === "runner" ? dispatchViaRunner(item) : dispatch(item));
         } catch (err) {
           logger.error({ err, itemId: item.id }, "Dispatch failed");
         }
@@ -1336,7 +1405,7 @@ function tryClarify(): void {
         }
 
         try {
-          await dispatchForClarification(item);
+          await (DISPATCH_MODE === "runner" ? dispatchForClarificationViaRunner(item) : dispatchForClarification(item));
         } catch (err) {
           logger.error({ err, itemId: item.id }, "Clarification dispatch failed");
         }
@@ -1414,7 +1483,7 @@ function tryDispatchFromReview(): void {
         }
 
         try {
-          await dispatch(item);
+          await (DISPATCH_MODE === "runner" ? dispatchViaRunner(item) : dispatch(item));
         } catch (err) {
           logger.error({ err, itemId: item.id }, "Review feedback dispatch failed");
         }
@@ -1746,6 +1815,254 @@ async function dispatchForClarification(item: WorkItem): Promise<string | null> 
     clearSessionInfo(item.id);
 
     // Per-item failure tracking (TRACK-137)
+    recordItemDispatchFailure(item.id, errMsg);
+    recordFailure(errMsg, item.id);
+
+    return null;
+  }
+}
+
+// ── Runner Dispatch ──
+
+/**
+ * Dispatch a work item via the session runner child process.
+ * This is the runner-mode equivalent of dispatch().
+ */
+async function dispatchViaRunner(item: WorkItem): Promise<string | null> {
+  return _dispatchViaRunnerImpl(item, "coder");
+}
+
+/**
+ * Dispatch a clarification/research item via the session runner child process.
+ * This is the runner-mode equivalent of dispatchForClarification().
+ */
+async function dispatchForClarificationViaRunner(item: WorkItem): Promise<string | null> {
+  return _dispatchViaRunnerImpl(item, "research");
+}
+
+/**
+ * Shared implementation for runner dispatch (coder and research modes).
+ */
+async function _dispatchViaRunnerImpl(
+  item: WorkItem,
+  promptType: "coder" | "research",
+): Promise<string | null> {
+  const project = getProject(item.project_id);
+  if (!project) {
+    logger.warn({ itemId: item.id }, "Runner dispatch skipped: project not found");
+    return null;
+  }
+  if (!project.working_directory) {
+    logger.warn(
+      { itemId: item.id, projectId: project.id },
+      "Runner dispatch skipped: no working_directory on project",
+    );
+    return null;
+  }
+
+  const itemKey = getWorkItemKey(item);
+  const sessionTitle = promptType === "research"
+    ? `[Research] ${itemKey}: ${item.title}`
+    : `${itemKey}: ${item.title}`;
+
+  // Generate a local session ID for the runner
+  const sessionId = `runner_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+  // Mark as pending before spawning
+  setSessionInfo(item.id, sessionId, "pending");
+
+  try {
+    // Build prompt parts
+    const { systemAppend, userPrompt } = promptType === "research"
+      ? buildResearchPromptParts(item, project as Parameters<typeof buildResearchPromptParts>[1], sessionId)
+      : buildPromptParts(item, project as Parameters<typeof buildPromptParts>[1], sessionId);
+
+    // Collect embeddable image attachments
+    const MAX_EMBED_SIZE = 4.5 * 1024 * 1024;
+    const attachments = listAttachments(item.id);
+    const attachmentList: RunnerConfig["attachments"] = [];
+    for (const attachment of attachments) {
+      if (EMBEDDABLE_IMAGE_TYPES.has(attachment.mime_type)) {
+        try {
+          const filePath = path.join(STORE_DIR, attachment.storage_path);
+          if (fs.existsSync(filePath)) {
+            const actualSize = fs.statSync(filePath).size;
+            if (actualSize > MAX_EMBED_SIZE) {
+              logger.warn(
+                { itemId: item.id, filename: attachment.filename, actualSize, limit: MAX_EMBED_SIZE },
+                "Skipping oversized image attachment (runner)",
+              );
+              continue;
+            }
+            attachmentList.push({
+              path: filePath,
+              mime: attachment.mime_type,
+              filename: attachment.filename,
+            });
+          }
+        } catch (err) {
+          logger.warn({ err, attachmentId: attachment.id }, "Failed to read attachment for runner");
+        }
+      }
+    }
+
+    // Spawn the runner child process
+    const child = spawn(
+      process.execPath,
+      [path.join(__dirname, "session-runner.js")],
+      {
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd: project.working_directory,
+      },
+    );
+
+    // Register in active sessions
+    activeSessions.set(sessionId, {
+      itemId: item.id,
+      projectId: project.id,
+      sessionId,
+      startedAt: new Date(),
+      lastActivityAt: new Date(),
+      childProcess: child,
+      events: [],
+    });
+
+    // Create execution audit record
+    createExecutionAudit({
+      work_item_id: item.id,
+      session_id: sessionId,
+    });
+
+    logger.info(
+      { itemId: item.id, itemKey, sessionId, title: sessionTitle, pid: child.pid, promptType },
+      "Spawned session runner",
+    );
+
+    // Write config to child stdin
+    const config: RunnerConfig = {
+      event: "config",
+      itemKey,
+      prompt: userPrompt,
+      systemPromptAppend: systemAppend,
+      cwd: project.working_directory,
+      model: `${CODER_MODEL_PROVIDER}/${CODER_MODEL_ID}`,
+      maxTurns: 200,
+      promptType,
+      attachments: attachmentList,
+    };
+    child.stdin!.write(JSON.stringify(config) + "\n");
+
+    // Read stdout line-by-line for runner events
+    const rl = createInterface({ input: child.stdout! });
+    let sessionCompleted = false;
+
+    rl.on("line", (line: string) => {
+      let evt: RunnerEvent;
+      try {
+        evt = JSON.parse(line) as RunnerEvent;
+      } catch {
+        logger.debug({ line }, "Non-JSON runner output");
+        return;
+      }
+
+      const session = activeSessions.get(sessionId);
+      if (!session) return;
+
+      // Update activity timestamp for all events
+      session.lastActivityAt = new Date();
+
+      // Buffer events for dashboard viewer
+      if (session.events) {
+        session.events.push(evt);
+        if (session.events.length > 200) session.events.shift();
+      }
+
+      // Push to SSE subscribers
+      pushSessionEvent(session.itemId, evt);
+
+      // Route events into existing state machine
+      switch (evt.event) {
+        case "started":
+          if (evt.sdkSessionId) session.sdkSessionId = evt.sdkSessionId;
+          if (evt.pid) session.pid = evt.pid;
+          setSessionInfo(item.id, sessionId, "running", evt.pid);
+          updateSessionStatus(item.id, "running");
+          logger.info(
+            { itemId: item.id, sessionId, sdkSessionId: evt.sdkSessionId, pid: evt.pid },
+            "Runner session started",
+          );
+          break;
+
+        case "completed":
+          sessionCompleted = true;
+          logger.info(
+            { itemId: item.id, sessionId, result: evt.result, duration: evt.duration, turns: evt.turns, cost: evt.cost },
+            "Runner session completed",
+          );
+          handleSessionComplete(sessionId);
+          break;
+
+        case "error":
+          if (!evt.recoverable) {
+            sessionCompleted = true;
+            logger.error(
+              { itemId: item.id, sessionId, message: evt.message },
+              "Runner session error (non-recoverable)",
+            );
+            handleSessionError(sessionId, evt.message);
+          } else {
+            logger.warn(
+              { itemId: item.id, sessionId, message: evt.message },
+              "Runner session error (recoverable)",
+            );
+          }
+          break;
+
+        case "status":
+          logger.debug({ itemId: item.id, sessionId, status: evt.status }, "Runner status update");
+          break;
+
+        case "heartbeat":
+          logger.debug({ itemId: item.id, sessionId, elapsed: evt.elapsed, turns: evt.turns }, "Runner heartbeat");
+          break;
+      }
+    });
+
+    // Handle stderr (log as warnings)
+    if (child.stderr) {
+      const stderrRl = createInterface({ input: child.stderr });
+      stderrRl.on("line", (line: string) => {
+        logger.warn({ sessionId, itemId: item.id }, `Runner stderr: ${line}`);
+      });
+    }
+
+    // Handle child process exit
+    child.on("exit", (code, signal) => {
+      if (!sessionCompleted) {
+        const session = activeSessions.get(sessionId);
+        if (session && !session.aborting) {
+          const errMsg = sanitizeErrorMessage(
+            `Runner process exited unexpectedly (code=${code}, signal=${signal})`,
+          );
+          logger.error({ itemId: item.id, sessionId, code, signal }, "Runner process exited without completion");
+          handleSessionError(sessionId, errMsg);
+        }
+      }
+    });
+
+    updateSessionStatus(item.id, "running");
+
+    logger.info(
+      { itemId: item.id, sessionId },
+      "Runner dispatch initiated",
+    );
+
+    return sessionId;
+  } catch (err) {
+    const errMsg = sanitizeErrorMessage(err instanceof Error ? err.message : String(err));
+    logger.error({ err: errMsg, itemId: item.id }, "Failed to dispatch item via runner");
+    clearSessionInfo(item.id);
+
     recordItemDispatchFailure(item.id, errMsg);
     recordFailure(errMsg, item.id);
 
@@ -2333,6 +2650,12 @@ export async function abortSession(
   // completion during the race window where SDK abort triggers an idle event.
   session.aborting = true;
 
+  if (DISPATCH_MODE === "runner" && session.childProcess) {
+    // Runner mode: send abort message via stdin, then escalate to signals
+    try { session.childProcess.stdin?.write(JSON.stringify({ event: "abort" }) + "\n"); } catch {}
+    setTimeout(() => { if (session.childProcess && !session.childProcess.killed) session.childProcess.kill("SIGTERM"); }, 5000);
+    setTimeout(() => { if (session.childProcess && !session.childProcess.killed) session.childProcess.kill("SIGKILL"); }, 10000);
+  } else {
   let sdkAbortSucceeded = false;
   try {
     // Step 1: SDK-level abort — clean API call
@@ -2364,6 +2687,7 @@ export async function abortSession(
       logger.warn({ sessionId, pid: session.pid }, "Process still alive after SIGHUP + SIGTERM — may be a zombie");
     }
   }
+  } // end else (OpenCode SDK abort path)
 
   // Clean up deferred errors for this session
   cancelDeferredError(sessionId);
