@@ -1253,8 +1253,11 @@
       }
       .detail-body {
         flex: 1;
-        overflow-y: auto;
+        overflow: hidden;
         padding: 20px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
       }
       .desc-rendered {
         font-size: 1rem;
@@ -1669,6 +1672,63 @@
         color: #fff;
       }
 
+      /* ── Detail Tabs ── */
+      .detail-tabs {
+        display: flex;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+        padding: 0 20px;
+        gap: 0;
+        background: rgba(0,0,0,0.1);
+      }
+      .detail-tab {
+        padding: 10px 16px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: color 0.15s, border-color 0.15s;
+        user-select: none;
+        -webkit-user-select: none;
+        white-space: nowrap;
+      }
+      .detail-tab:hover {
+        color: var(--text);
+      }
+      .detail-tab.active {
+        color: var(--highlight);
+        border-bottom-color: var(--highlight);
+      }
+      .detail-tab-badge {
+        display: inline-block;
+        background: var(--highlight);
+        color: #fff;
+        font-size: 0.7rem;
+        font-weight: 600;
+        border-radius: 8px;
+        padding: 1px 6px;
+        margin-left: 6px;
+        vertical-align: middle;
+        min-width: 16px;
+        text-align: center;
+      }
+      .detail-tab-agent {
+        margin-left: 6px;
+        vertical-align: middle;
+        font-size: 0.85em;
+      }
+      .detail-tab-content {
+        display: none;
+      }
+      .detail-tab-content.active {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+      }
+
       /* ── Comments ── */
       .comment-sort-header {
         display: flex;
@@ -1819,14 +1879,6 @@
         justify-content: center;
         gap: 12px;
         padding: 16px 0;
-      }
-      .markers-done-btn {
-        font-size: 0.9rem;
-        padding: 8px 24px;
-      }
-      .markers-approve-btn {
-        font-size: 0.9rem;
-        padding: 8px 24px;
       }
       .markers-opencode-btn {
         font-size: 0.9rem;
@@ -1995,32 +2047,57 @@
       .activity-compact-list {
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 0;
         max-height: 300px;
         overflow-y: auto;
       }
+      #detailTabActivity .activity-compact-list {
+        max-height: calc(100vh - 300px);
+        min-height: 200px;
+      }
+      .activity-compact-day-header {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-dim);
+        padding: 12px 0 6px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        margin-bottom: 4px;
+        font-weight: 600;
+      }
+      .activity-compact-day-header:first-child {
+        padding-top: 0;
+      }
       .activity-compact-item {
         display: flex;
-        gap: 8px;
+        gap: 10px;
         font-size: 0.85rem;
-        padding: 4px 0;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.04);
         color: var(--text-primary);
-        line-height: 1.3;
+        line-height: 1.4;
+      }
+      .activity-compact-item:last-child {
+        border-bottom: none;
       }
       .activity-compact-time {
         color: var(--text-dim);
         font-size: 0.75rem;
         white-space: nowrap;
         min-width: 42px;
+        padding-top: 1px;
       }
-      .activity-compact-summary {
+      .activity-compact-content {
         flex: 1;
+        color: var(--text-primary);
       }
       .activity-compact-actor {
-        color: var(--text-muted);
-        font-size: 0.8rem;
-        white-space: nowrap;
+        font-weight: 500;
       }
+      .activity-compact-actor.human { color: #00b894; }
+      .activity-compact-actor.agent { color: #6c5ce7; }
+      .activity-compact-actor.system { color: #fdcb6e; }
+      .activity-compact-actor.api { color: #636e72; }
 
       @media (max-width: 480px) {
         .activity-panel {
@@ -3304,6 +3381,16 @@
           width: 100%;
           display: flex;
           justify-content: flex-end;
+        }
+        .detail-tabs {
+          padding: 0 12px;
+          gap: 0;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        .detail-tab {
+          padding: 8px 12px;
+          font-size: 0.8rem;
         }
         .detail-body {
           padding: 14px;
@@ -4693,6 +4780,8 @@
         display: flex;
         justify-content: flex-end;
       }
+      html.is-ipad .detail-tabs { padding: 0 14px; }
+      html.is-ipad .detail-tab { padding: 8px 12px; font-size: 0.82rem; }
       html.is-ipad .detail-body { padding: 14px; }
       html.is-ipad .detail-row {
         flex-direction: column;
@@ -9401,7 +9490,15 @@
           </button>
         </div>
       </div>
+      <div class="detail-tabs" id="detailTabs">
+        <div class="detail-tab active" data-tab="settings">Settings</div>
+        <div class="detail-tab" data-tab="comments">Comments<span class="detail-tab-badge" id="detailTabCommentCount" style="display:none"></span></div>
+        <div class="detail-tab" data-tab="sessions">Sessions<span class="detail-tab-agent" id="detailTabSessionAgent" style="display:none">🤖</span></div>
+        <div class="detail-tab" data-tab="activity">Activity</div>
+      </div>
       <div class="detail-body">
+        <!-- Settings Tab -->
+        <div class="detail-tab-content active" id="detailTabSettings" data-tab="settings">
         <div class="detail-section">
           <div class="detail-field">
             <input
@@ -9560,6 +9657,12 @@
             </div>
           </div>
         </div>
+        <div class="markers-done-wrapper">
+          <button class="btn btn-ghost markers-opencode-btn" id="markersOpencodeBtn" style="display:none">OpenCode ↗</button>
+        </div>
+        </div>
+        <!-- Comments Tab -->
+        <div class="detail-tab-content" id="detailTabComments" data-tab="comments">
         <div class="detail-section">
           <div class="comment-sort-header">
             <h3>Comments</h3>
@@ -9593,15 +9696,17 @@
             </div>
           </div>
         </div>
-        <div class="markers-done-wrapper">
-          <button class="btn btn-ghost markers-approve-btn" id="markersApproveBtn" style="display:none">Re-approve</button>
-          <button class="btn btn-ghost markers-done-btn" id="markersDoneBtn">Mark as Done</button>
-          <button class="btn btn-ghost markers-opencode-btn" id="markersOpencodeBtn" style="display:none">OpenCode ↗</button>
         </div>
-        <div id="sessionViewerContainer"></div>
-        <div class="detail-section">
-          <h3>Activity</h3>
-          <div class="activity-compact-list" id="detailActivity"></div>
+        <!-- Sessions Tab -->
+        <div class="detail-tab-content" id="detailTabSessions" data-tab="sessions">
+        <div id="sessionViewerContainer" style="display:flex; flex-direction:column; flex:1; min-height:0;"></div>
+        </div>
+        <!-- Activity Tab -->
+        <div class="detail-tab-content" id="detailTabActivity" data-tab="activity">
+        <div class="detail-section" style="display:flex; flex-direction:column; flex:1; min-height:0;">
+          <h3 style="flex-shrink:0;">Activity</h3>
+          <div class="activity-compact-list" id="detailActivity" style="flex:1; overflow-y:auto; min-height:0;"></div>
+        </div>
         </div>
       </div>
       </div>
@@ -10310,6 +10415,22 @@
             return null;
           }
 
+          // For opencode dispatch mode, show an "Open in OpenCode" button instead of session viewer
+          if (dispatchMode === "opencode") {
+            const proj = projectsCache.find(p => p.id === item.project_id);
+            const url = buildOpencodeUrl(item.session_id, proj?.working_directory);
+            const statusInfo = SESSION_STATUS_MAP[item.session_status] || { emoji: "\u2753", tooltip: item.session_status };
+            container.innerHTML = `
+              <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; min-height:200px; gap:16px; padding:24px;">
+                <div style="font-size:13px; color:var(--text-muted);">This session is managed by OpenCode <span title="${esc(statusInfo.tooltip)}">${statusInfo.emoji}</span></div>
+                <button class="btn btn-primary" onclick="window.open('${esc(url)}', 'opencode');" style="font-size:14px; padding:8px 20px;">
+                  Open in OpenCode &#8599;
+                </button>
+              </div>
+            `;
+            return null;
+          }
+
           // For completed/failed sessions, show the transcript from the audit log
           if (item.session_status === 'completed' || item.session_status === 'failed') {
             _renderTranscriptViewer(container, item);
@@ -10317,14 +10438,14 @@
           }
 
           container.innerHTML = `
-            <div class="session-viewer" style="border:1px solid var(--border); border-radius:var(--radius); margin:12px 0; overflow:hidden;">
-              <div style="padding:8px 12px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--bg-card);">
+            <div class="session-viewer" style="border:1px solid var(--border); border-radius:var(--radius); margin:12px 0; overflow:hidden; display:flex; flex-direction:column; flex:1; min-height:0;">
+              <div style="padding:8px 12px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--bg-card); flex-shrink:0;">
                 <span style="font-weight:600; font-size:13px;">Agent Session</span>
                 <div style="display:flex; gap:6px; align-items:center;">
-                  <span class="sv-status" style="font-size:12px;">${agentStatusHtml(item.session_status)}</span>
+                  <span class="sv-status" style="font-size:12px;">${(() => { const s = SESSION_STATUS_MAP[item.session_status] || { emoji: "\u2753", tooltip: item.session_status }; return `<span title="${esc(s.tooltip)}">${s.emoji}</span>`; })()}</span>
                 </div>
               </div>
-              <div class="sv-events" style="max-height:400px; overflow-y:auto; padding:8px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.7; background:var(--bg);">
+              <div class="sv-events" style="flex:1; overflow-y:auto; padding:8px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.7; background:var(--bg);">
                 <div style="color:var(--text-muted); font-style:italic;">Connecting to session\u2026</div>
               </div>
               <div style="padding:8px 12px; border-top:1px solid var(--border); display:flex; gap:8px; background:var(--bg-card);">
@@ -10400,7 +10521,7 @@
           switch (event.event) {
             case 'started':
               div.style.color = 'var(--text-muted)';
-              div.textContent = '\u25b6 Session started (' + event.sessionId + ')';
+              div.textContent = '\ud83e\udd16 Session started (' + event.sessionId + ')';
               break;
             case 'tool_use':
               div.style.color = 'var(--text)';
@@ -10442,35 +10563,142 @@
           container.appendChild(div);
         }
 
+        /** Extract text content from transcript events for summarization. */
+        function _transcriptText(events) {
+          return events
+            .filter(e => e.event === 'text' && e.content)
+            .map(e => e.content.trim())
+            .join('\n')
+            .slice(0, 4000);
+        }
+
+        /** Get AI-generated session title. Uses cached title from audit if available, otherwise calls API. */
+        async function _aiSessionTitle(events, audit) {
+          // Return cached title if already stored on the audit record
+          if (audit && audit.session_title) return audit.session_title;
+          const text = _transcriptText(events);
+          if (!text) return null;
+          try {
+            const resp = await fetch('/api/v1/items/ai-session-summary', {
+              method: 'POST',
+              headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audit_id: audit ? audit.id : undefined, transcript: text }),
+            });
+            if (!resp.ok) return null;
+            const data = await resp.json();
+            return data.title || null;
+          } catch { return null; }
+        }
+
+        /** Format an ISO date string as a short readable date. */
+        function _shortDate(iso) {
+          if (!iso) return '';
+          const d = new Date(iso);
+          return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) +
+            ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        }
+
         /** Render a read-only transcript viewer for completed/failed sessions. */
         async function _renderTranscriptViewer(container, item) {
           container.innerHTML = `
-            <div class="session-viewer" style="border:1px solid var(--border); border-radius:var(--radius); margin:12px 0; overflow:hidden;">
-              <div style="padding:8px 12px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--bg-card);">
+            <div class="session-viewer" style="border:1px solid var(--border); border-radius:var(--radius); margin:12px 0; overflow:hidden; display:flex; flex-direction:column; flex:1; min-height:0;">
+              <div style="padding:8px 12px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--bg-card); flex-shrink:0;">
                 <span style="font-weight:600; font-size:13px;">Agent Session Transcript</span>
-                <span style="font-size:12px;">${agentStatusHtml(item.session_status)}</span>
+                <span style="font-size:12px;">${(() => { const s = SESSION_STATUS_MAP[item.session_status] || { emoji: "\u2753", tooltip: item.session_status }; return `<span title="${esc(s.tooltip)}">${s.emoji}</span>`; })()}</span>
               </div>
-              <div class="sv-events" style="max-height:400px; overflow-y:auto; padding:8px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.7; background:var(--bg);">
+              <div class="sv-events" style="flex:1; overflow-y:auto; padding:8px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.7; background:var(--bg);">
                 <div style="color:var(--text-muted); font-style:italic;">Loading transcript\u2026</div>
               </div>
             </div>
           `;
+          const viewerEl = container.querySelector('.session-viewer');
           const eventsEl = container.querySelector('.sv-events');
           try {
             const resp = await fetch(`/api/v1/items/${item.id}/audits`, { headers: getAuthHeaders() });
             if (!resp.ok) throw new Error('Failed to load audits');
             const audits = await resp.json();
-            // Find the most recent audit with a transcript
-            const audit = audits.find(a => a.transcript);
-            if (!audit || !audit.transcript) {
+            // Filter audits that have transcripts, oldest first for display
+            const withTranscripts = audits.filter(a => a.transcript).reverse();
+            if (withTranscripts.length === 0) {
               eventsEl.innerHTML = '<div style="color:var(--text-muted); font-style:italic;">No transcript available for this session.</div>';
               return;
             }
-            const events = JSON.parse(audit.transcript);
-            eventsEl.innerHTML = '';
-            for (const event of events) {
-              _appendSessionEvent(eventsEl, event);
+            // Single session — show as before
+            if (withTranscripts.length === 1) {
+              const events = JSON.parse(withTranscripts[0].transcript);
+              eventsEl.innerHTML = '';
+              for (const event of events) {
+                _appendSessionEvent(eventsEl, event);
+              }
+              return;
             }
+            // Multiple sessions — show expandable list
+            const headerEl = viewerEl.querySelector('div > span');
+            headerEl.textContent = `Agent Session Transcripts (${withTranscripts.length} sessions)`;
+            eventsEl.innerHTML = '';
+            eventsEl.style.padding = '0';
+            eventsEl.style.fontFamily = 'inherit';
+            eventsEl.style.fontSize = 'inherit';
+            eventsEl.style.lineHeight = 'inherit';
+            eventsEl.style.maxHeight = '';
+
+            withTranscripts.forEach((audit, idx) => {
+              const events = JSON.parse(audit.transcript);
+              const fallback = 'Session ' + (idx + 1);
+              const date = _shortDate(audit.started_at || audit.created_at);
+              const statusMap = { success: '\u2713', failure: '\u2717', timeout: '\u29d6', pending: '\u2026' };
+              const statusIcon = statusMap[audit.exit_status] || '';
+              const statusColor = audit.exit_status === 'failure' ? 'var(--highlight)' : audit.exit_status === 'success' ? '#28a745' : 'var(--text-muted)';
+
+              const sessionEl = document.createElement('div');
+              sessionEl.style.borderBottom = '1px solid var(--border-light)';
+
+              const headerRow = document.createElement('div');
+              headerRow.style.cssText = 'padding:8px 12px; cursor:pointer; display:flex; align-items:center; gap:8px; user-select:none;';
+              headerRow.onmouseover = () => headerRow.style.background = 'var(--bg-hover)';
+              headerRow.onmouseout = () => headerRow.style.background = '';
+
+              const arrow = document.createElement('span');
+              arrow.textContent = '\u25b6';
+              arrow.style.cssText = 'font-size:10px; transition:transform 0.15s; color:var(--text-muted); flex-shrink:0;';
+
+              const titleSpan = document.createElement('span');
+              titleSpan.style.cssText = 'font-size:13px; font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+              titleSpan.textContent = fallback;
+              titleSpan.style.color = 'var(--text-muted)';
+              _aiSessionTitle(events, audit).then(aiTitle => {
+                titleSpan.textContent = aiTitle || fallback;
+                titleSpan.style.color = '';
+              });
+
+              const metaSpan = document.createElement('span');
+              metaSpan.style.cssText = 'font-size:11px; color:var(--text-muted); flex-shrink:0; display:flex; align-items:center; gap:6px;';
+              metaSpan.innerHTML = `<span style="color:${esc(statusColor)}">${esc(statusIcon)}</span> ${esc(date)}`;
+
+              headerRow.appendChild(arrow);
+              headerRow.appendChild(titleSpan);
+              headerRow.appendChild(metaSpan);
+
+              const body = document.createElement('div');
+              body.style.cssText = 'display:none; max-height:400px; overflow-y:auto; padding:8px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.7; background:var(--bg); border-top:1px solid var(--border-light);';
+
+              let loaded = false;
+              headerRow.onclick = () => {
+                const isOpen = body.style.display !== 'none';
+                body.style.display = isOpen ? 'none' : 'block';
+                arrow.style.transform = isOpen ? '' : 'rotate(90deg)';
+                if (!loaded) {
+                  loaded = true;
+                  for (const event of events) {
+                    _appendSessionEvent(body, event);
+                  }
+                }
+              };
+
+              sessionEl.appendChild(headerRow);
+              sessionEl.appendChild(body);
+              eventsEl.appendChild(sessionEl);
+            });
           } catch (err) {
             eventsEl.innerHTML = '<div style="color:var(--text-muted); font-style:italic;">Failed to load transcript.</div>';
           }
@@ -14215,6 +14443,50 @@
 
         // __SPACE_PLUGINS__
 
+        // ── Detail Tabs ──
+        let activeDetailTab = "settings";
+        // Track tabs that were skipped during refresh and need updating when switched to
+        const _detailTabStale = { sessions: null, activity: null };
+
+        function switchDetailTab(tabName) {
+          // Refresh stale tabs when switching to them
+          if (tabName === "sessions" && _detailTabStale.sessions) {
+            renderSessionViewer($("#sessionViewerContainer"), _detailTabStale.sessions);
+            _detailTabStale.sessions = null;
+          }
+          if (tabName === "activity" && _detailTabStale.activity) {
+            loadItemActivity(_detailTabStale.activity);
+            _detailTabStale.activity = null;
+          }
+          activeDetailTab = tabName;
+          $$(".detail-tab", $("#detailTabs")).forEach(t => {
+            t.classList.toggle("active", t.dataset.tab === tabName);
+          });
+          $$(".detail-tab-content", $(".detail-body")).forEach(c => {
+            c.classList.toggle("active", c.dataset.tab === tabName);
+          });
+          // Scroll to top of detail body when switching tabs
+          $(".detail-body").scrollTop = 0;
+        }
+
+        $("#detailTabs").addEventListener("click", (e) => {
+          const tab = e.target.closest(".detail-tab");
+          if (tab) switchDetailTab(tab.dataset.tab);
+        });
+
+        function updateDetailTabBadges(item) {
+          const badge = $("#detailTabCommentCount");
+          if (item.comments && item.comments.length > 0) {
+            badge.textContent = item.comments.length;
+            badge.style.display = "";
+          } else {
+            badge.style.display = "none";
+          }
+          // Show robot emoji on Sessions tab when agent is actively running
+          const agentBadge = $("#detailTabSessionAgent");
+          agentBadge.style.display = (item.session_status === "running") ? "" : "none";
+        }
+
         // ── Detail Panel ──
         async function openDetail(itemId, forceStandard) {
           // Check local cache for space_type to route to space overlay
@@ -14233,6 +14505,8 @@
           detailOverlay.classList.add("open");
           detailPanel.classList.add("open");
           document.body.style.overflow = "hidden";
+          // Reset to Settings tab when opening a new item
+          switchDetailTab("settings");
 
           try {
             const item = await apiGet(`/items/${itemId}`);
@@ -14262,18 +14536,7 @@
             }
             // Update OpenCode button visibility based on session_id
             updateDetailOpencodeButton();
-            // Scroll to newest comment if comments exist
-            if (item.comments && item.comments.length) {
-              const commentSort = localStorage.getItem(STORAGE_COMMENT_SORT_KEY) || "asc";
-              requestAnimationFrame(() => {
-                const target = commentSort === "desc"
-                  ? $("#detailComments").firstElementChild
-                  : $("#detailComments").lastElementChild;
-                if (target) {
-                  target.scrollIntoView({ block: "end", behavior: "instant" });
-                }
-              });
-            }
+            // No longer auto-scroll to comments — they are on a separate tab now
           } catch (e) {
             toast("Failed to load item: " + e.message, "error");
             closeDetail();
@@ -14504,6 +14767,9 @@
           detailSnapshot = snapshotDetail();
           $("#detailSave").disabled = true;
 
+          // Update tab badges (keep current tab — don't reset on refresh)
+          updateDetailTabBadges(item);
+
           // State pills
           const pillsEl = $("#detailStatePills");
           pillsEl.innerHTML = "";
@@ -14516,11 +14782,6 @@
             pill.addEventListener("click", () => changeState(item.id, state));
             pillsEl.appendChild(pill);
           });
-
-          // Show Re-approve button for states where re-approval makes sense
-          const approveBtn = $("#markersApproveBtn");
-          const showApprove = ["in_development", "in_review", "testing", "needs_input"].includes(item.state);
-          approveBtn.style.display = showApprove ? "" : "none";
 
           // Comments
           const commentSortOrder = localStorage.getItem(STORAGE_COMMENT_SORT_KEY) || "asc";
@@ -14580,10 +14841,22 @@
           renderAttachments(item.attachments || []);
 
           // Session viewer (live SSE feed for runner-mode sessions)
-          renderSessionViewer($("#sessionViewerContainer"), item);
+          // Skip re-render if user is actively viewing sessions tab to avoid disrupting SSE/transcript state
+          if (activeDetailTab === "sessions") {
+            _detailTabStale.sessions = item;
+          } else {
+            renderSessionViewer($("#sessionViewerContainer"), item);
+            _detailTabStale.sessions = null;
+          }
 
           // Per-item activity (async, non-blocking)
-          loadItemActivity(item.id);
+          // Skip reload if user is actively viewing activity tab to avoid reformatting
+          if (activeDetailTab === "activity") {
+            _detailTabStale.activity = item.id;
+          } else {
+            loadItemActivity(item.id);
+            _detailTabStale.activity = null;
+          }
         }
 
         // ── Blocker Picker ──
@@ -15386,26 +15659,6 @@
             try { localStorage.setItem(STORAGE_AUTHOR_KEY, name); } catch {}
             showCommentAuthorDisplay(name);
           }
-        });
-
-        // Mark as Done convenience button
-        $("#markersDoneBtn").addEventListener("click", async () => {
-          if (!detailItemId) return;
-          const author = $("#commentAuthor").value.trim() || DEFAULT_AUTHOR;
-          try {
-            await apiPost(`/items/${detailItemId}/comments`, { body: "done", author });
-            const item = await apiGet(`/items/${detailItemId}`);
-            populateDetail(item);
-            toast("Marked as done");
-          } catch (e) {
-            toast("Failed to add comment: " + e.message, "error");
-          }
-        });
-
-        // Re-approve convenience button
-        $("#markersApproveBtn").addEventListener("click", async () => {
-          if (!detailItemId) return;
-          await changeState(detailItemId, "approved");
         });
 
         // Update OpenCode button visibility based on session_id
@@ -17570,17 +17823,33 @@
               return;
             }
             el.innerHTML = "";
+            const today = new Date().toISOString().slice(0, 10);
+            const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+            let lastDay = "";
             entries.forEach(entry => {
+              const day = entry.created_at.slice(0, 10);
+              if (day !== lastDay) {
+                lastDay = day;
+                const header = document.createElement("div");
+                header.className = "activity-compact-day-header";
+                if (day === today) header.textContent = "Today";
+                else if (day === yesterday) header.textContent = "Yesterday";
+                else {
+                  const d = new Date(day + "T00:00:00");
+                  header.textContent = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined });
+                }
+                el.appendChild(header);
+              }
               const div = document.createElement("div");
               div.className = "activity-compact-item";
               const time = new Date(entry.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-              const day = entry.created_at.slice(0, 10);
-              const today = new Date().toISOString().slice(0, 10);
-              const dateStr = day === today ? time : `${new Date(entry.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${time}`;
+              const actorClass = entry.actor_class || "api";
               div.innerHTML = `
-                <span class="activity-compact-time">${esc(dateStr)}</span>
-                <span class="activity-compact-summary">${esc(entry.summary)}</span>
-                <span class="activity-compact-actor">(${esc(entry.actor)})</span>
+                <span class="activity-compact-time">${esc(time)}</span>
+                <span class="activity-compact-content">
+                  <span class="activity-compact-actor ${actorClass}">${esc(entry.actor)}</span>
+                  ${esc(entry.summary)}
+                </span>
               `;
               el.appendChild(div);
             });

@@ -583,6 +583,15 @@ export function initTrackerDatabase(): void {
     // Column already exists
   }
 
+  // Add session_title column to execution audits (cached AI-generated summary)
+  try {
+    db.exec(
+      "ALTER TABLE tracker_execution_audits ADD COLUMN session_title TEXT DEFAULT NULL",
+    );
+  } catch {
+    // Column already exists
+  }
+
   // Backfill: set bot_dispatch=1 for all items that have requires_code=1
   // (preserves existing behavior — items that had requires_code were previously auto-dispatched)
   try {
@@ -2780,6 +2789,8 @@ export interface ExecutionAudit {
   git_branch: string | null;
   git_diff_stats: string | null;
   created_at: string;
+  transcript?: string | null;
+  session_title?: string | null;
 }
 
 /** Create an execution audit record when a session starts. */
@@ -2848,6 +2859,20 @@ export function getExecutionAudits(workItemId: string): ExecutionAudit[] {
       "SELECT * FROM tracker_execution_audits WHERE work_item_id = ? ORDER BY created_at DESC",
     )
     .all(workItemId) as ExecutionAudit[];
+}
+
+/** Get a single execution audit by ID. */
+export function getExecutionAudit(auditId: string): ExecutionAudit | undefined {
+  return db
+    .prepare("SELECT * FROM tracker_execution_audits WHERE id = ?")
+    .get(auditId) as ExecutionAudit | undefined;
+}
+
+/** Save a cached AI-generated session title on an audit record. */
+export function setAuditSessionTitle(auditId: string, title: string): void {
+  db.prepare(
+    "UPDATE tracker_execution_audits SET session_title = ? WHERE id = ?",
+  ).run(title, auditId);
 }
 
 // ── Attention Items (cross-project) ──

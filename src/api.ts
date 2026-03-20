@@ -22,7 +22,7 @@
  *   Search:    GET /search?q=...&project_id=...
  *   Dispatch:  POST /items/:id/dispatch
  *   Session:   GET /items/:id/session, POST /items/:id/session/abort
- *   AI:        POST /items/ai-categorize
+ *   AI:        POST /items/ai-categorize, POST /items/ai-session-summary
  *   Orchestrator: GET /orchestrator/status, POST /orchestrator/pause, POST /orchestrator/resume
  */
 
@@ -74,6 +74,8 @@ import {
   getRecentItems,
   getAttentionItems,
   getExecutionAudits,
+  getExecutionAudit,
+  setAuditSessionTitle,
   createAttachment,
   getAttachment,
   listAttachments,
@@ -689,7 +691,7 @@ async function handleApiRequest(
     // ── Work Items (direct access) ──
     if (parts[0] === "items") {
       const itemId =
-        parts[1] === "clear-stale-locks" || parts[1] === "recent" || parts[1] === "ai-categorize" ? parts[1] : resolveItemId(parts[1]);
+        parts[1] === "clear-stale-locks" || parts[1] === "recent" || parts[1] === "ai-categorize" || parts[1] === "ai-session-summary" ? parts[1] : resolveItemId(parts[1]);
 
       // POST /items/clear-stale-locks (note: before :id routes)
       if (
@@ -836,6 +838,78 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
         } catch (e) {
           logger.error({ error: e }, "AI categorization failed");
           return error(res, `AI categorization failed: ${(e as Error).message}`, 500);
+        }
+      }
+
+      // POST /items/ai-session-summary — AI-powered session transcript summarization
+      // Accepts { audit_id, transcript }. If audit_id is given and already has a cached
+      // session_title, returns it immediately without calling the AI.
+      if (
+        parts.length === 2 &&
+        parts[1] === "ai-session-summary" &&
+        method === "POST"
+      ) {
+        if (!ANTHROPIC_API_KEY) {
+          return error(res, "AI summarization not configured (ANTHROPIC_API_KEY not set)", 501);
+        }
+        const body = await parseBody(req);
+        const auditId = body.audit_id ? String(body.audit_id) : "";
+
+        // Check cache: if audit_id provided and already has a title, return it
+        if (auditId) {
+          const audit = getExecutionAudit(auditId);
+          if (audit && audit.session_title) {
+            return json(res, { title: audit.session_title, cached: true });
+          }
+        }
+
+        const transcript = body.transcript ? String(body.transcript) : "";
+        if (!transcript.trim()) {
+          return error(res, "transcript is required");
+        }
+        try {
+          const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": ANTHROPIC_API_KEY,
+              "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+              model: AI_CATEGORIZE_MODEL,
+              max_tokens: 100,
+              system: "You summarize agent coding session transcripts into a single short title (max 60 chars). The title should describe what the session accomplished or attempted. Return ONLY the title text, nothing else. No quotes, no punctuation at the end.",
+              messages: [{ role: "user", content: `Summarize this agent session transcript into a short title:\n\n${transcript}` }],
+            }),
+          });
+          if (!anthropicRes.ok) {
+            const errBody = await anthropicRes.text();
+            logger.error({ status: anthropicRes.status, body: errBody }, "Anthropic API error (session summary)");
+            return error(res, `AI service error: ${anthropicRes.status}`, 502);
+          }
+          const anthropicData = await anthropicRes.json() as {
+            content: Array<{ type: string; text: string }>;
+          };
+          const textContent = anthropicData.content?.find((c: { type: string }) => c.type === "text");
+          if (!textContent || !("text" in textContent)) {
+            return error(res, "AI returned no text content", 502);
+          }
+          let title = textContent.text.trim();
+          if (title.length > 80) title = title.slice(0, 77) + "\u2026";
+
+          // Cache the title on the audit record if audit_id was provided
+          if (auditId) {
+            try {
+              setAuditSessionTitle(auditId, title);
+            } catch (e) {
+              logger.warn({ error: e, auditId }, "Failed to cache session title");
+            }
+          }
+
+          return json(res, { title, cached: false });
+        } catch (e) {
+          logger.error({ error: e }, "AI session summary failed");
+          return error(res, `AI session summary failed: ${(e as Error).message}`, 500);
         }
       }
 

@@ -85,6 +85,11 @@ function detectMimeType(filename: string): string {
   return mimeMap[ext] || "application/octet-stream";
 }
 
+/** Normalize runner session IDs (e.g. "runner_mmyp5r1d_2uppg1") to "Coder" for display. */
+function normalizeRunnerActor(name: string): string {
+  return /^runner_/i.test(name) ? "Coder" : name;
+}
+
 /** Format bytes as human-readable string. */
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
@@ -464,7 +469,7 @@ function createMcpServer(): McpServer {
       }
       const targetProject = getProject(args.target_project_id);
       if (!targetProject) return { content: [{ type: "text", text: "Error: Target project not found" }] };
-      const item = moveWorkItem(itemId, args.target_project_id, args.actor);
+      const item = moveWorkItem(itemId, args.target_project_id, args.actor ? normalizeRunnerActor(args.actor) : args.actor);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
       const key = getWorkItemKey(item);
       return { content: [{ type: "text", text: JSON.stringify({ ...item, key, url: buildItemUrl(key) }, null, 2) }] };
@@ -490,7 +495,7 @@ function createMcpServer(): McpServer {
         // cannot bypass the approved/cancelled guard (LIZ-57).
         const MCP_ACTOR_CLASS: ActorClass = "agent";
         const itemId = resolveId(args.item_id);
-        const item = changeWorkItemState(itemId, args.state as WorkItemState, args.actor || "Coder", args.comment, MCP_ACTOR_CLASS);
+        const item = changeWorkItemState(itemId, args.state as WorkItemState, normalizeRunnerActor(args.actor || "Coder"), args.comment, MCP_ACTOR_CLASS);
         if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
         const key = getWorkItemKey(item);
         return { content: [{ type: "text", text: JSON.stringify({ ...item, key, url: buildItemUrl(key) }, null, 2) }] };
@@ -515,7 +520,7 @@ function createMcpServer(): McpServer {
       const item = resolveItem(args.item_id);
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
       try {
-        const comment = createComment({ work_item_id: item.id, author: args.author || "Harmoni", body: args.body });
+        const comment = createComment({ work_item_id: item.id, author: normalizeRunnerActor(args.author || "Harmoni"), body: args.body });
         return { content: [{ type: "text", text: JSON.stringify(comment, null, 2) }] };
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -585,7 +590,7 @@ function createMcpServer(): McpServer {
     },
     async (args) => {
       const itemId = resolveId(args.item_id);
-      const item = lockWorkItem(itemId, args.agent);
+      const item = lockWorkItem(itemId, normalizeRunnerActor(args.agent));
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
       const key = getWorkItemKey(item);
       return { content: [{ type: "text", text: JSON.stringify({ ...item, key, url: buildItemUrl(key) }, null, 2) }] };
