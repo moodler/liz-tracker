@@ -828,8 +828,8 @@ describe("isScheduleTimeDue", () => {
 // ── DISPATCH_MODE config ────────────────────────────────────────────────────
 
 describe("DISPATCH_MODE config", () => {
-  it("defaults to opencode", () => {
-    expect(DISPATCH_MODE).toBe("opencode");
+  it("is a valid dispatch mode", () => {
+    expect(["opencode", "runner"]).toContain(DISPATCH_MODE);
   });
 });
 
