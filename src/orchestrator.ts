@@ -1997,7 +1997,7 @@ async function _dispatchViaRunnerImpl(
       prompt: userPrompt,
       systemPromptAppend: systemAppend,
       cwd: project.working_directory,
-      model: `${CODER_MODEL_PROVIDER}/${CODER_MODEL_ID}`,
+      model: CODER_MODEL_ID,
       maxTurns: 200,
       promptType,
       attachments: attachmentList,
