@@ -523,7 +523,13 @@ function countActiveSessionsForProject(projectId: string): number {
 let dispatching = false;
 
 // Circuit breaker state (Section 4.7.2)
-const recentFailures: Date[] = [];
+// Each failure records the timestamp and the associated error message for diagnostics.
+interface CircuitBreakerFailure {
+  timestamp: Date;
+  errorMessage: string;
+  itemId?: string;
+}
+const recentFailures: CircuitBreakerFailure[] = [];
 let circuitBroken = false;
 
 // Per-item dispatch failure tracking (TRACK-137)
@@ -642,7 +648,7 @@ export function getOrchestratorStatus(): {
     failures: number;
     threshold: number;
     windowMs: number;
-    recentFailures: string[];
+    recentFailures: Array<{ time: string; error: string; itemId?: string }>;
   };
   activeSessions: Array<{
     sessionId: string;
@@ -665,7 +671,11 @@ export function getOrchestratorStatus(): {
       failures: recentFailures.length,
       threshold: CIRCUIT_BREAKER_THRESHOLD,
       windowMs: CIRCUIT_BREAKER_WINDOW,
-      recentFailures: recentFailures.map((d) => d.toISOString()),
+      recentFailures: recentFailures.map((f) => ({
+        time: f.timestamp.toISOString(),
+        error: f.errorMessage,
+        itemId: f.itemId,
+      })),
     },
     activeSessions: Array.from(activeSessions.values()).map((s) => ({
       sessionId: s.sessionId,
@@ -1439,7 +1449,7 @@ async function dispatch(item: WorkItem): Promise<string | null> {
     // No state change needed — the pre-flight check runs before the session is created.
 
     // Trigger circuit breaker for repeated failures
-    recordFailure();
+    recordFailure(errorMsg, item.id);
 
     return null;
   }
@@ -1568,7 +1578,7 @@ async function dispatch(item: WorkItem): Promise<string | null> {
     // This catches errors from session.create or promptAsync that don't reach
     // the SSE handleSessionError path (e.g. network errors, SDK failures).
     recordItemDispatchFailure(item.id, errMsg);
-    recordFailure();
+    recordFailure(errMsg, item.id);
 
     return null;
   }
@@ -1597,6 +1607,7 @@ async function dispatchForClarification(item: WorkItem): Promise<string | null> 
   // Pre-flight agent config validation (v1.2.17 --attach validation)
   const agentCheck = validateAgentConfig();
   if (!agentCheck.valid) {
+    const errorMsg = `Agent config validation failed (clarification): ${agentCheck.error}`;
     logger.error(
       { itemId: item.id, agentPath: agentCheck.agentPath, error: agentCheck.error },
       "Pre-flight agent validation failed — aborting clarification dispatch",
@@ -1606,7 +1617,7 @@ async function dispatchForClarification(item: WorkItem): Promise<string | null> 
       author: "orchestrator",
       body: `Clarification dispatch aborted: tracker-worker agent is misconfigured.\n\n**Error:** ${agentCheck.error}\n\nFix the agent config file and the orchestrator will retry on the next dispatch cycle.`,
     });
-    recordFailure();
+    recordFailure(errorMsg, item.id);
     return null;
   }
 
@@ -1724,7 +1735,7 @@ async function dispatchForClarification(item: WorkItem): Promise<string | null> 
 
     // Per-item failure tracking (TRACK-137)
     recordItemDispatchFailure(item.id, errMsg);
-    recordFailure();
+    recordFailure(errMsg, item.id);
 
     return null;
   }
@@ -3225,23 +3236,25 @@ function handleSessionError(sessionId: string, message: string): void {
   // a single broken item gets shelved after ITEM_DISPATCH_FAILURE_LIMIT attempts.
   recordItemDispatchFailure(session.itemId, message);
 
+  // Log the session failure first, before checking circuit breaker,
+  // so the error message appears in logs before the circuit breaker warning.
+  logger.error(
+    { itemId: session.itemId, sessionId, message },
+    "Session failed",
+  );
+
   // Circuit breaker check (Section 4.7.2)
   // Don't penalize circuit breaker if this was a 413 error that was deferred
   // (the session tried to recover but ultimately failed) — UNLESS it's an
   // image-too-large error (TRACK-137), which is never recoverable via compaction.
   if (!is413Error(message) || isImageTooLargeError(message)) {
-    recordFailure();
+    recordFailure(message, session.itemId);
   } else {
     logger.info(
       { sessionId, itemId: session.itemId },
       "413 error did not recover — session failed, but not counting toward circuit breaker",
     );
   }
-
-  logger.error(
-    { itemId: session.itemId, sessionId, message },
-    "Session failed",
-  );
 
   // Try to dispatch the next item now that a slot is free
   // (unless circuit breaker just tripped)
@@ -3254,22 +3267,39 @@ function handleSessionError(sessionId: string, message: string): void {
  * Record a failure for circuit breaker tracking (Section 4.7.2).
  * If CIRCUIT_BREAKER_THRESHOLD failures occur within CIRCUIT_BREAKER_WINDOW,
  * auto-pause the orchestrator.
+ *
+ * @param errorMessage - The error message that caused the failure (for diagnostics)
+ * @param itemId - Optional item ID associated with the failure
  */
-function recordFailure(): void {
+function recordFailure(errorMessage: string, itemId?: string): void {
   const now = Date.now();
-  recentFailures.push(new Date(now));
+  recentFailures.push({ timestamp: new Date(now), errorMessage, itemId });
 
   // Prune old failures outside the window
   const cutoff = now - CIRCUIT_BREAKER_WINDOW;
-  while (recentFailures.length > 0 && recentFailures[0].getTime() < cutoff) {
+  while (recentFailures.length > 0 && recentFailures[0].timestamp.getTime() < cutoff) {
     recentFailures.shift();
   }
 
   if (recentFailures.length >= CIRCUIT_BREAKER_THRESHOLD && !circuitBroken) {
     circuitBroken = true;
     paused = true;
+
+    // Build a summary of recent failures for the log
+    const failureSummary = recentFailures.map((f) => ({
+      time: f.timestamp.toISOString(),
+      error: f.errorMessage,
+      itemId: f.itemId,
+    }));
+
     logger.warn(
-      { failures: recentFailures.length, threshold: CIRCUIT_BREAKER_THRESHOLD },
+      {
+        failures: recentFailures.length,
+        threshold: CIRCUIT_BREAKER_THRESHOLD,
+        triggeringError: errorMessage,
+        triggeringItemId: itemId,
+        recentFailures: failureSummary,
+      },
       "Circuit breaker triggered — orchestrator auto-paused after repeated failures",
     );
     // This would ideally send an alert notification
