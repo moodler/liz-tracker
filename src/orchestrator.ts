@@ -317,6 +317,21 @@ export function validateAgentConfig(configPath?: string): AgentConfigValidation 
   }
 }
 
+/**
+ * Validate that the session runner script exists (for runner dispatch mode).
+ * Unlike validateAgentConfig() which checks the OpenCode agent markdown file,
+ * this checks for the compiled session-runner.js that gets spawned as a child process.
+ */
+export function validateAgentConfigForRunner(
+  runnerPath?: string,
+): { valid: boolean; error?: string } {
+  const expectedPath = runnerPath ?? path.join(__dirname, "session-runner.js");
+  if (!fs.existsSync(expectedPath)) {
+    return { valid: false, error: `Session runner not found at ${expectedPath}. Run 'npm run build' first.` };
+  }
+  return { valid: true };
+}
+
 // ── OpenCode Project Resolution ──
 
 /**
@@ -639,25 +654,41 @@ export function startOrchestrator(): void {
     "Orchestrator starting",
   );
 
-  // Validate agent config at startup (warn-only, don't block startup)
-  const agentValidation = validateAgentConfig();
-  if (agentValidation.valid) {
-    logger.info(
-      { agentPath: agentValidation.agentPath, sizeBytes: agentValidation.sizeBytes },
-      "Agent config validated: tracker-worker agent is configured",
-    );
+  // Validate config at startup (warn-only, don't block startup)
+  if (DISPATCH_MODE === "runner") {
+    const runnerValidation = validateAgentConfigForRunner();
+    if (runnerValidation.valid) {
+      logger.info("Session runner validated: session-runner.js found");
+    } else {
+      logger.warn(
+        { error: runnerValidation.error },
+        "Session runner validation failed — dispatches will fail until 'npm run build' is run",
+      );
+    }
   } else {
-    logger.warn(
-      { agentPath: agentValidation.agentPath, error: agentValidation.error },
-      "Agent config validation failed — dispatches will fail until the agent config is fixed",
-    );
+    const agentValidation = validateAgentConfig();
+    if (agentValidation.valid) {
+      logger.info(
+        { agentPath: agentValidation.agentPath, sizeBytes: agentValidation.sizeBytes },
+        "Agent config validated: tracker-worker agent is configured",
+      );
+    } else {
+      logger.warn(
+        { agentPath: agentValidation.agentPath, error: agentValidation.error },
+        "Agent config validation failed — dispatches will fail until the agent config is fixed",
+      );
+    }
   }
 
   // Recover any sessions that were active before restart
-  recoverActiveSessions();
-
-  // Start SSE event monitoring
-  startEventStream();
+  if (DISPATCH_MODE === "runner") {
+    recoverRunnerSessions();
+  } else {
+    recoverActiveSessions();
+    // Start SSE event monitoring (only needed for opencode mode —
+    // runner mode gets events via child process stdout, not OpenCode SSE)
+    startEventStream();
+  }
 
   // Listen for comment events to auto-complete items acknowledged by owner
   startCommentWatcher();
@@ -1847,6 +1878,23 @@ async function _dispatchViaRunnerImpl(
   item: WorkItem,
   promptType: "coder" | "research",
 ): Promise<string | null> {
+  // Pre-flight: check that the session runner script exists
+  const runnerCheck = validateAgentConfigForRunner();
+  if (!runnerCheck.valid) {
+    const errorMsg = `Runner validation failed: ${runnerCheck.error}`;
+    logger.error(
+      { itemId: item.id, error: runnerCheck.error },
+      "Pre-flight runner validation failed — aborting dispatch",
+    );
+    createComment({
+      work_item_id: item.id,
+      author: "orchestrator",
+      body: `Dispatch aborted: session runner is not available.\n\n**Error:** ${runnerCheck.error}\n\nRun \`npm run build\` and the orchestrator will retry on the next dispatch cycle.`,
+    });
+    recordFailure(errorMsg, item.id);
+    return null;
+  }
+
   const project = getProject(item.project_id);
   if (!project) {
     logger.warn({ itemId: item.id }, "Runner dispatch skipped: project not found");
@@ -4349,6 +4397,52 @@ function recoverActiveSessions(): void {
   // missed because the SSE stream wasn't connected yet.
   if (recoveredSessionIds.length > 0) {
     setTimeout(() => pollRecoveredSessionStatus(recoveredSessionIds), 5000);
+  }
+}
+
+/**
+ * Recover runner sessions after tracker restart.
+ *
+ * Runner child processes die when the parent (tracker) process exits, so any
+ * sessions still marked as 'running' or 'pending' in the DB are stale. We
+ * clean them up: clear session info, unlock the item, and add a comment.
+ */
+function recoverRunnerSessions(): void {
+  const items = getActiveSessionItems();
+  if (items.length === 0) return;
+
+  let recovered = 0;
+  for (const item of items) {
+    if (!item.session_id) continue;
+
+    // For runner sessions, the stored PID is the child process PID.
+    // If the process is still alive somehow, leave it alone.
+    const pid = item.opencode_pid;
+    if (pid !== null && pid !== undefined && isProcessAlive(pid)) {
+      logger.info(
+        { itemId: item.id, sessionId: item.session_id, pid },
+        "Runner session PID still alive after restart — skipping recovery",
+      );
+      continue;
+    }
+
+    logger.info(
+      { itemId: item.id, sessionId: item.session_id, pid },
+      "Recovering stale runner session (child process dead after restart)",
+    );
+
+    clearSessionInfo(item.id);
+    unlockWorkItem(item.id);
+    createComment({
+      work_item_id: item.id,
+      author: "orchestrator",
+      body: `Runner session \`${item.session_id}\` was orphaned by a tracker restart. The child process (PID ${pid ?? "unknown"}) is no longer running. Session state has been cleaned up — the item will be re-dispatched on the next cycle.`,
+    });
+    recovered++;
+  }
+
+  if (recovered > 0) {
+    logger.info(`Recovered ${recovered} stale runner session(s) after restart`);
   }
 }
 
