@@ -15176,7 +15176,9 @@
             // Delete handler
             div.querySelector('.attachment-delete').addEventListener('click', async (e) => {
               e.stopPropagation();
+              trackActivity(); // Keep user "active" so periodic refresh doesn't overwrite DOM
               if (!confirm(`Delete "${a.filename}"?`)) return;
+              trackActivity(); // Reset after confirm() blocked the thread
               try {
                 await apiDelete(`/attachments/${a.id}?actor=${DEFAULT_AUTHOR}`);
                 div.remove();
