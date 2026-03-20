@@ -64,6 +64,7 @@ import {
   HUMAN_ACTORS,
   AGENT_ACTORS,
   DISPATCH_MODE,
+  PORT,
 } from "./config.js";
 import { logger } from "./logger.js";
 import { execFileSync, spawn, type ChildProcess } from "child_process";
@@ -2001,6 +2002,7 @@ async function _dispatchViaRunnerImpl(
       maxTurns: 200,
       promptType,
       attachments: attachmentList,
+      trackerMcpUrl: `http://localhost:${PORT}/mcp`,
     };
     child.stdin!.write(JSON.stringify(config) + "\n");
 

@@ -76,6 +76,7 @@ export interface RunnerConfig {
   maxTurns: number;
   promptType: "coder" | "research";
   attachments: Array<{ path: string; mime: string; filename: string }>;
+  trackerMcpUrl?: string;
 }
 
 export interface RunnerSteerMessage {

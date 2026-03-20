@@ -275,6 +275,12 @@ export async function main(): Promise<void> {
   });
 
   try {
+    // Build MCP server config — include tracker MCP if URL provided
+    const mcpServers: Record<string, any> = {};
+    if (config.trackerMcpUrl) {
+      mcpServers["tracker"] = { type: "http", url: config.trackerMcpUrl };
+    }
+
     const q = query({
       prompt: config.prompt,
       options: {
@@ -291,6 +297,7 @@ export async function main(): Promise<void> {
           append: config.systemPromptAppend,
         },
         abortController,
+        ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
       },
     });
     queryHandle = q;
