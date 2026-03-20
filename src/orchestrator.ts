@@ -1323,6 +1323,18 @@ function tryClarify(): void {
           continue;
         }
 
+        // TRACK-237: Scheduled task time gating applies to clarification dispatch too.
+        // A scheduled task in clarification state should still respect its schedule —
+        // don't dispatch research at any arbitrary time just because it's in clarification.
+        if (!isScheduleTimeDue(item)) {
+          const key = getWorkItemKey(item);
+          logger.debug(
+            { itemId: item.id, key },
+            "Skipping clarification dispatch: scheduled task not yet due",
+          );
+          continue;
+        }
+
         try {
           await dispatchForClarification(item);
         } catch (err) {
@@ -1971,15 +1983,32 @@ function buildPrompt(
     "",
   );
 
+  // TRACK-237: For scheduled tasks, add explicit instruction not to modify the description.
+  // The description is the persistent task definition that runs on each schedule.
+  // Status updates and findings should be added as comments, not description changes.
+  const isScheduledTask = item.space_type === "scheduled";
+  
   if (item.requires_code) {
     // Standard coder dispatch — full implementation workflow
-    lines.push(
-      "Implement this work item. Follow your tracker-worker workflow:",
-      "1. Move to in_development and lock the item",
-      "2. Implement the changes described above",
-      "3. Run tests/build to verify",
-      "4. Comment with a summary, move to in_review, and unlock",
-    );
+    if (isScheduledTask) {
+      lines.push(
+        "Implement this scheduled task. Follow this workflow:",
+        "1. Move to in_development and lock the item",
+        "2. Execute the task as described above",
+        "3. **Add a comment** summarizing what was done, any findings, or status updates",
+        "4. Move to in_review and unlock",
+        "",
+        "**⚠️ IMPORTANT: This is a scheduled (recurring) task.** Do NOT modify the description. The description is the permanent task definition that runs on each schedule. All status updates, findings, and results must be added as **comments only**.",
+      );
+    } else {
+      lines.push(
+        "Implement this work item. Follow your tracker-worker workflow:",
+        "1. Move to in_development and lock the item",
+        "2. Implement the changes described above",
+        "3. Run tests/build to verify",
+        "4. Comment with a summary, move to in_review, and unlock",
+      );
+    }
   } else {
     // No-code dispatch — research/think/respond only
     lines.push(
@@ -2090,42 +2119,82 @@ function buildResearchPrompt(
     lines.push("");
   }
 
-  lines.push(
-    "## Your Task: Research & Spec Improvement",
-    "",
-    "You are a **research agent**, not a coder. Your job is to investigate this topic and improve the spec so a human can make an informed decision about whether and how to implement it.",
-    "",
-    "**Do NOT implement any code.** Do NOT make code changes to the project.",
-    "",
-    "### Steps to follow:",
-    "",
-    "1. **Lock the item** — call `tracker_change_state` with state=\"in_development\" and actor=\"Coder\", then call `tracker_lock_item` with agent=\"Coder\"",
-    "",
-    "2. **Research the topic** — investigate using available tools:",
-    "   - Read relevant source files in the working directory to understand current state",
-    "   - Fetch web pages or documentation if relevant",
-    "   - Search the codebase for relevant patterns or existing implementations",
-    "",
-    "3. **Update the description** — call `tracker_update_item` to improve the description with:",
-    "   - Clear problem statement",
-    "   - Concrete implementation approach",
-    "   - Edge cases and considerations",
-    "   - Acceptance criteria",
-    "",
-    "4. **Report findings** — call `tracker_add_comment` with a detailed summary of your research, including:",
-    "   - What you found",
-    "   - Recommended approach",
-    "   - Any concerns or trade-offs",
-    "   - Estimated complexity",
-    "",
-    "5. **Move back to brainstorming** — call `tracker_change_state` with state=\"brainstorming\" and actor=\"Coder\", with a comment summarizing what you did. This signals to the human that your research is ready for review.",
-    "",
-    "6. **Unlock the item** — call `tracker_unlock_item`",
-    "",
-    `Use item_id="${item.id}" for all tracker tool calls.`,
-    "",
-    "**Important:** You must move the item to 'brainstorming' when done (not 'in_review'). The human will review your research and either approve the item for development or refine it further.",
-  );
+  // TRACK-237: Scheduled tasks have a persistent description that defines the task.
+  // The agent should NOT modify the description — only add comments with findings.
+  // For non-scheduled items, the research agent can improve the description.
+  const isScheduledTask = item.space_type === "scheduled";
+
+  if (isScheduledTask) {
+    lines.push(
+      "## Your Task: Research for Scheduled Task",
+      "",
+      "You are a **research agent** for a **scheduled (recurring) task**. Your job is to investigate the current state and report findings.",
+      "",
+      "**⚠️ CRITICAL:** This is a scheduled task with a persistent description. Do NOT modify the description. The description is the permanent task definition that runs on each schedule. Report all findings as **comments only**.",
+      "",
+      "**Do NOT implement any code.** Do NOT make code changes to the project.",
+      "",
+      "### Steps to follow:",
+      "",
+      "1. **Lock the item** — call `tracker_change_state` with state=\"in_development\" and actor=\"Coder\", then call `tracker_lock_item` with agent=\"Coder\"",
+      "",
+      "2. **Research the topic** — investigate using available tools:",
+      "   - Read relevant source files in the working directory to understand current state",
+      "   - Fetch web pages or documentation if relevant",
+      "   - Search the codebase for relevant patterns or existing implementations",
+      "",
+      "3. **Report findings as a comment** — call `tracker_add_comment` with a detailed summary of your research, including:",
+      "   - What you found",
+      "   - Current state analysis",
+      "   - Any concerns or recommendations",
+      "   - Do NOT call `tracker_update_item` to change the description",
+      "",
+      "4. **Move back to brainstorming** — call `tracker_change_state` with state=\"brainstorming\" and actor=\"Coder\", with a comment summarizing what you did.",
+      "",
+      "5. **Unlock the item** — call `tracker_unlock_item`",
+      "",
+      `Use item_id="${item.id}" for all tracker tool calls.`,
+      "",
+      "**Important:** Do NOT modify the description of scheduled tasks. The description is the permanent task definition. All findings and status updates must be added as comments.",
+    );
+  } else {
+    lines.push(
+      "## Your Task: Research & Spec Improvement",
+      "",
+      "You are a **research agent**, not a coder. Your job is to investigate this topic and improve the spec so a human can make an informed decision about whether and how to implement it.",
+      "",
+      "**Do NOT implement any code.** Do NOT make code changes to the project.",
+      "",
+      "### Steps to follow:",
+      "",
+      "1. **Lock the item** — call `tracker_change_state` with state=\"in_development\" and actor=\"Coder\", then call `tracker_lock_item` with agent=\"Coder\"",
+      "",
+      "2. **Research the topic** — investigate using available tools:",
+      "   - Read relevant source files in the working directory to understand current state",
+      "   - Fetch web pages or documentation if relevant",
+      "   - Search the codebase for relevant patterns or existing implementations",
+      "",
+      "3. **Update the description** — call `tracker_update_item` to improve the description with:",
+      "   - Clear problem statement",
+      "   - Concrete implementation approach",
+      "   - Edge cases and considerations",
+      "   - Acceptance criteria",
+      "",
+      "4. **Report findings** — call `tracker_add_comment` with a detailed summary of your research, including:",
+      "   - What you found",
+      "   - Recommended approach",
+      "   - Any concerns or trade-offs",
+      "   - Estimated complexity",
+      "",
+      "5. **Move back to brainstorming** — call `tracker_change_state` with state=\"brainstorming\" and actor=\"Coder\", with a comment summarizing what you did. This signals to the human that your research is ready for review.",
+      "",
+      "6. **Unlock the item** — call `tracker_unlock_item`",
+      "",
+      `Use item_id="${item.id}" for all tracker tool calls.`,
+      "",
+      "**Important:** You must move the item to 'brainstorming' when done (not 'in_review'). The human will review your research and either approve the item for development or refine it further.",
+    );
+  }
 
   if (sessionId) {
     lines.push(
