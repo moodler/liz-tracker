@@ -574,6 +574,15 @@ export function initTrackerDatabase(): void {
     // Column already exists
   }
 
+  // Add transcript column to execution audits (stores runner event log as JSON)
+  try {
+    db.exec(
+      "ALTER TABLE tracker_execution_audits ADD COLUMN transcript TEXT DEFAULT NULL",
+    );
+  } catch {
+    // Column already exists
+  }
+
   // Backfill: set bot_dispatch=1 for all items that have requires_code=1
   // (preserves existing behavior — items that had requires_code were previously auto-dispatched)
   try {
@@ -2810,6 +2819,7 @@ export function completeExecutionAudit(
     files_created?: string[];
     files_deleted?: string[];
     git_diff_stats?: string;
+    transcript?: string;
   },
 ): void {
   const ts = now();
@@ -2817,7 +2827,7 @@ export function completeExecutionAudit(
     `UPDATE tracker_execution_audits SET
       completed_at = ?, exit_status = ?,
       files_modified = ?, files_created = ?, files_deleted = ?,
-      git_diff_stats = ?
+      git_diff_stats = ?, transcript = ?
      WHERE session_id = ?`,
   ).run(
     ts,
@@ -2826,6 +2836,7 @@ export function completeExecutionAudit(
     JSON.stringify(data.files_created || []),
     JSON.stringify(data.files_deleted || []),
     data.git_diff_stats || null,
+    data.transcript || null,
     sessionId,
   );
 }

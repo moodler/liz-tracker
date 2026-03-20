@@ -1715,6 +1715,7 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
     if (parts[0] === "config" && parts.length === 1 && method === "GET") {
       return json(res, {
         opencodePublicUrl: OPENCODE_PUBLIC_URL,
+        dispatchMode: DISPATCH_MODE,
       });
     }
 

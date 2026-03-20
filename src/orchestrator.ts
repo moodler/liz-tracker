@@ -3543,11 +3543,16 @@ function handleSessionComplete(sessionId: string): void {
     return;
   }
 
+  // Capture transcript before removing session (runner mode events buffer)
+  const transcript = session.events?.length
+    ? JSON.stringify(session.events)
+    : undefined;
+
   activeSessions.delete(sessionId);
   updateSessionStatus(session.itemId, "completed");
 
   // Record execution audit (Section 4.6.2)
-  completeExecutionAudit(sessionId, { exit_status: "success" });
+  completeExecutionAudit(sessionId, { exit_status: "success", transcript });
 
   // Clear per-item failure counter on success (TRACK-137)
   clearItemDispatchFailures(session.itemId);
@@ -3731,11 +3736,16 @@ function handleSessionError(sessionId: string, message: string): void {
     return;
   }
 
+  // Capture transcript before removing session
+  const transcript = session.events?.length
+    ? JSON.stringify(session.events)
+    : undefined;
+
   activeSessions.delete(sessionId);
   updateSessionStatus(session.itemId, "failed");
 
   // Record execution audit (Section 4.6.2)
-  completeExecutionAudit(sessionId, { exit_status: "failure" });
+  completeExecutionAudit(sessionId, { exit_status: "failure", transcript });
 
   // TRACK-235: Update scheduled task status for failed runs too, so the dashboard
   // accurately reflects that a run was attempted (even if it failed).

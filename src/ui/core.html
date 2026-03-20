@@ -10304,9 +10304,14 @@
           const existing = _sessionViewerSources.get(item.id);
           if (existing) { existing.close(); _sessionViewerSources.delete(item.id); }
 
-          if (!item.session_id || !item.session_status ||
-              item.session_status === 'completed' || item.session_status === 'failed') {
+          if (!item.session_id || !item.session_status) {
             container.innerHTML = '';
+            return null;
+          }
+
+          // For completed/failed sessions, show the transcript from the audit log
+          if (item.session_status === 'completed' || item.session_status === 'failed') {
+            _renderTranscriptViewer(container, item);
             return null;
           }
 
@@ -10434,6 +10439,40 @@
               return;
           }
           container.appendChild(div);
+        }
+
+        /** Render a read-only transcript viewer for completed/failed sessions. */
+        async function _renderTranscriptViewer(container, item) {
+          container.innerHTML = `
+            <div class="session-viewer" style="border:1px solid var(--border); border-radius:var(--radius); margin:12px 0; overflow:hidden;">
+              <div style="padding:8px 12px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--bg-card);">
+                <span style="font-weight:600; font-size:13px;">Agent Session Transcript</span>
+                <span style="font-size:12px;">${agentStatusHtml(item.session_status)}</span>
+              </div>
+              <div class="sv-events" style="max-height:400px; overflow-y:auto; padding:8px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.7; background:var(--bg);">
+                <div style="color:var(--text-muted); font-style:italic;">Loading transcript\u2026</div>
+              </div>
+            </div>
+          `;
+          const eventsEl = container.querySelector('.sv-events');
+          try {
+            const resp = await fetch(`/api/v1/items/${item.id}/audits`, { headers: getAuthHeaders() });
+            if (!resp.ok) throw new Error('Failed to load audits');
+            const audits = await resp.json();
+            // Find the most recent audit with a transcript
+            const audit = audits.find(a => a.transcript);
+            if (!audit || !audit.transcript) {
+              eventsEl.innerHTML = '<div style="color:var(--text-muted); font-style:italic;">No transcript available for this session.</div>';
+              return;
+            }
+            const events = JSON.parse(audit.transcript);
+            eventsEl.innerHTML = '';
+            for (const event of events) {
+              _appendSessionEvent(eventsEl, event);
+            }
+          } catch (err) {
+            eventsEl.innerHTML = '<div style="color:var(--text-muted); font-style:italic;">Failed to load transcript.</div>';
+          }
         }
 
         // ── Shared Helpers ──
