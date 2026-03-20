@@ -15282,10 +15282,13 @@
         });
 
         // ── Paste to upload ──
-        // Listen on the detail panel so paste works whenever the panel is open,
-        // regardless of which element has focus.
-        detailPanel.addEventListener('paste', (e) => {
+        // Listen on document so paste works whenever the detail panel is open,
+        // regardless of which element has focus (paste events only fire on the
+        // focused element and bubble up — detailPanel won't receive them if
+        // focus is on document.body).
+        document.addEventListener('paste', (e) => {
           if (!detailItemId) return;
+          if (!detailPanel.classList.contains('open')) return;
           const items = e.clipboardData && e.clipboardData.items;
           if (!items) return;
 
