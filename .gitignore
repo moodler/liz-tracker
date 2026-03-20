@@ -12,3 +12,4 @@ logs/
 .tracker_lock
 src/ui/index.html
 CLAUDE-LOCAL.md
+*.swp
