@@ -1960,12 +1960,18 @@ async function _dispatchViaRunnerImpl(
     }
 
     // Spawn the runner child process
+    // Strip ANTHROPIC_API_KEY from the runner's environment so Claude Code
+    // uses the Max subscription instead of API key billing.
+    const runnerEnv = { ...process.env };
+    delete runnerEnv.ANTHROPIC_API_KEY;
+
     const child = spawn(
       process.execPath,
       [path.join(__dirname, "session-runner.js")],
       {
         stdio: ["pipe", "pipe", "pipe"],
         cwd: project.working_directory,
+        env: runnerEnv,
       },
     );
 
