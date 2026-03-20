@@ -15179,9 +15179,10 @@
               if (!confirm(`Delete "${a.filename}"?`)) return;
               try {
                 await apiDelete(`/attachments/${a.id}?actor=${DEFAULT_AUTHOR}`);
+                div.remove();
+                const remaining = listEl.querySelectorAll('.attachment-item').length;
+                countEl.textContent = remaining > 0 ? `(${remaining})` : '';
                 toast(`Deleted "${a.filename}"`);
-                const item = await apiGet(`/items/${detailItemId}`);
-                renderAttachments(item.attachments || []);
               } catch (err) {
                 toast('Failed to delete: ' + err.message, 'error');
               }
