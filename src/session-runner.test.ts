@@ -5,6 +5,11 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { spawn } from "child_process";
+import { createInterface } from "readline";
+import { writeFileSync, unlinkSync, mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { mapSdkMessage } from "./session-runner.js";
 import type { UUID } from "crypto";
 
@@ -320,5 +325,130 @@ describe("mapSdkMessage — unknown types", () => {
 
     const events = mapSdkMessage(msg as any);
     expect(events).toHaveLength(0);
+  });
+});
+
+// ── Runner stdio protocol integration ───────────────────────────────────────
+
+describe("runner stdio protocol integration", () => {
+  it("receives events from runner child process", async () => {
+    // Create a mock runner script that emits known events
+    const tmpDir = mkdtempSync(join(tmpdir(), "runner-test-"));
+    const mockScript = join(tmpDir, "mock-runner.js");
+    writeFileSync(mockScript, `
+      const rl = require('readline').createInterface({ input: process.stdin });
+      rl.once('line', (line) => {
+        const config = JSON.parse(line);
+        // Emit started
+        process.stdout.write(JSON.stringify({ event: "started", sessionId: "runner_test123", pid: process.pid }) + "\\n");
+        // Emit tool use
+        setTimeout(() => {
+          process.stdout.write(JSON.stringify({ event: "tool_use", tool: "Edit", file: "src/test.ts" }) + "\\n");
+        }, 50);
+        // Emit text
+        setTimeout(() => {
+          process.stdout.write(JSON.stringify({ event: "text", content: "Fixed the bug" }) + "\\n");
+        }, 100);
+        // Emit completed
+        setTimeout(() => {
+          process.stdout.write(JSON.stringify({ event: "completed", result: "success", duration: 1, turns: 1, cost: 0.01 }) + "\\n");
+          process.exit(0);
+        }, 150);
+      });
+    `);
+
+    const child = spawn(process.execPath, [mockScript], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    const events: any[] = [];
+    const rl = createInterface({ input: child.stdout!, crlfDelay: Infinity });
+
+    const done = new Promise<void>((resolve, reject) => {
+      rl.on("line", (line) => {
+        try {
+          events.push(JSON.parse(line));
+        } catch {}
+      });
+      child.on("exit", () => resolve());
+      child.on("error", reject);
+      setTimeout(() => reject(new Error("Timeout")), 5000);
+    });
+
+    // Send config
+    child.stdin!.write(JSON.stringify({
+      event: "config",
+      itemKey: "TEST-1",
+      prompt: "Fix the bug",
+      systemPromptAppend: "",
+      cwd: "/tmp",
+      model: "sonnet",
+      maxTurns: 1,
+      promptType: "coder",
+      attachments: [],
+    }) + "\n");
+
+    await done;
+    rl.close();
+
+    // Verify events
+    expect(events).toHaveLength(4);
+    expect(events[0]).toMatchObject({ event: "started", sessionId: "runner_test123" });
+    expect(events[1]).toMatchObject({ event: "tool_use", tool: "Edit", file: "src/test.ts" });
+    expect(events[2]).toMatchObject({ event: "text", content: "Fixed the bug" });
+    expect(events[3]).toMatchObject({ event: "completed", result: "success" });
+
+    // Cleanup
+    try { unlinkSync(mockScript); } catch {}
+  });
+
+  it("handles steer message on stdin", async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "runner-test-"));
+    const mockScript = join(tmpDir, "mock-runner-steer.js");
+    writeFileSync(mockScript, `
+      const rl = require('readline').createInterface({ input: process.stdin });
+      let lineNum = 0;
+      rl.on('line', (line) => {
+        lineNum++;
+        const msg = JSON.parse(line);
+        if (msg.event === 'config') {
+          process.stdout.write(JSON.stringify({ event: "started", sessionId: "runner_steer", pid: process.pid }) + "\\n");
+        } else if (msg.event === 'steer') {
+          process.stdout.write(JSON.stringify({ event: "text", content: "Received: " + msg.message }) + "\\n");
+          process.stdout.write(JSON.stringify({ event: "completed", result: "success", duration: 1, turns: 1 }) + "\\n");
+          process.exit(0);
+        }
+      });
+    `);
+
+    const child = spawn(process.execPath, [mockScript], { stdio: ["pipe", "pipe", "pipe"] });
+    const events: any[] = [];
+    const rl = createInterface({ input: child.stdout!, crlfDelay: Infinity });
+
+    const done = new Promise<void>((resolve, reject) => {
+      rl.on("line", (line) => { try { events.push(JSON.parse(line)); } catch {} });
+      child.on("exit", () => resolve());
+      setTimeout(() => reject(new Error("Timeout")), 5000);
+    });
+
+    // Send config
+    child.stdin!.write(JSON.stringify({
+      event: "config", itemKey: "TEST-2", prompt: "test", systemPromptAppend: "",
+      cwd: "/tmp", model: "sonnet", maxTurns: 1, promptType: "coder", attachments: [],
+    }) + "\n");
+
+    // Wait for started event, then send steer
+    await new Promise(r => setTimeout(r, 100));
+    child.stdin!.write(JSON.stringify({ event: "steer", message: "change direction" }) + "\n");
+
+    await done;
+    rl.close();
+
+    expect(events.some(e => e.event === "started")).toBe(true);
+    expect(events.some(e => e.event === "text" && e.content.includes("change direction"))).toBe(true);
+    expect(events.some(e => e.event === "completed")).toBe(true);
+
+    // Cleanup
+    try { unlinkSync(mockScript); } catch {}
   });
 });
