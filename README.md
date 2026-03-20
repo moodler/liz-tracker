@@ -52,7 +52,12 @@ Any MCP-compatible AI agent can manage your tracker programmatically via 50+ too
 
 ### AI Orchestrator
 
-Optionally let the tracker automatically dispatch approved work items to [OpenCode](https://opencode.ai) AI coding sessions. The orchestrator:
+Optionally let the tracker automatically dispatch approved work items to AI coding sessions. Two dispatch backends are supported:
+
+- **Session Runner** (`DISPATCH_MODE=runner`) — runs Claude Code directly via the Agent SDK as a child process. No external services needed. Includes a dashboard session viewer with live activity feed, human steering, and persistent transcripts.
+- **OpenCode** (`DISPATCH_MODE=opencode`) — dispatches to [OpenCode](https://opencode.ai) sessions via its SDK.
+
+The orchestrator:
 
 - Polls for approved items and creates coding sessions automatically
 - Sends research agents to flesh out specs during the clarification phase
@@ -62,6 +67,7 @@ Optionally let the tracker automatically dispatch approved work items to [OpenCo
 - **Scheduled task time gating** — scheduled tasks wait for their configured time/day before dispatching, with timezone-aware checks for daily, weekly, hourly, and monthly frequencies
 - **Recurring scheduled task recycling** — when a recurring scheduled task completes, the orchestrator automatically recycles it back to `approved` for the next execution cycle, preserving original human approval provenance
 - **Expired scheduled task auto-close** — scheduled tasks with a past due date are automatically moved to done
+- **Dashboard session viewer** — watch agent activity in real-time (tool calls, reasoning, errors), send steering messages to redirect the agent, and review session transcripts after completion
 - Includes safety features: actor classification (only humans can approve), description integrity checks, circuit breakers, per-item retry limits, and an emergency stop button
 
 ### Other Features
@@ -71,6 +77,7 @@ Optionally let the tracker automatically dispatch approved work items to [OpenCo
 - **Dependencies** — link items that block each other
 - **Cover images** — visual cover art for Song and Travel items
 - **Deep links** — shareable URLs that open directly to any item, with Open Graph meta tags for rich link previews in iMessage, Slack, etc.
+- **Activity log** — unified timeline of all mutations (state changes, comments, description edits, attachments) with actor attribution and filtering
 - **AI categorization** — one-click AI-powered field extraction from description text
 - **Search** — full-text search across all items
 - **Today dashboard** — cross-project attention view showing items needing action, with priority sorting and due date display
@@ -135,7 +142,9 @@ src/
 ├── db.ts             # SQLite database layer (schema, CRUD, migrations)
 ├── api.ts            # HTTP server — REST API + static files + MCP routing + OG meta tag injection
 ├── mcp-server.ts     # MCP tool definitions (50+ tools, including dynamic space plugin tools)
-├── orchestrator.ts   # AI orchestrator — dispatches work to OpenCode sessions, monitors via SSE
+├── orchestrator.ts   # AI orchestrator — dispatches work to coding sessions, monitors progress
+├── session-runner.ts # Session runner — direct Claude Code execution via Agent SDK
+├── runner-types.ts   # Shared types for runner stdio JSON protocol
 ├── logger.ts         # Pino logger
 ├── spaces/           # Space plugin backends (types, registry, per-space logic)
 │   ├── types.ts      # SpacePlugin interface
@@ -241,6 +250,14 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | `PATCH` | `/api/v1/items/:id/travel/segments` | Update a travel segment |
 | `DELETE` | `/api/v1/items/:id/travel/segments` | Remove travel segments |
 
+### Activity Log
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/v1/activity` | List recent activity (global, filterable by project, item, action, actor, since, search) |
+| `GET` | `/api/v1/projects/:id/activity` | Activity for a specific project |
+| `GET` | `/api/v1/items/:id/activity` | Activity for a specific item |
+
 ### Cross-Project Views
 
 | Method | Path | Description |
@@ -261,10 +278,12 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | `GET` | `/api/v1/orchestrator/restart` | Check restart status |
 | `DELETE` | `/api/v1/orchestrator/restart` | Cancel pending restart |
 | `GET` | `/api/v1/orchestrator/safe-to-restart` | Check if safe to restart |
-| `POST` | `/api/v1/items/:id/dispatch` | Manually dispatch an item to OpenCode |
+| `POST` | `/api/v1/items/:id/dispatch` | Manually dispatch an item |
 | `GET` | `/api/v1/items/:id/session` | Get session info for an item |
 | `POST` | `/api/v1/items/:id/session/abort` | Abort active session for an item |
-| `GET` | `/api/v1/items/:id/audits` | Execution audits for an item |
+| `GET` | `/api/v1/items/:id/session/events` | SSE stream of session events (runner mode) |
+| `POST` | `/api/v1/items/:id/session/steer` | Send steering message to running agent (runner mode) |
+| `GET` | `/api/v1/items/:id/audits` | Execution audits for an item (includes transcripts) |
 
 ### Utility
 
@@ -283,9 +302,29 @@ Tools cover: project and item CRUD, state transitions, comments, watchers, depen
 
 ## AI Orchestrator Setup
 
-The orchestrator is disabled by default. To enable it:
+The orchestrator is disabled by default. Two dispatch backends are available.
 
-1. **Install [OpenCode](https://opencode.ai)** and start the server:
+### Option A: Session Runner (recommended)
+
+Uses the Claude Agent SDK to run Claude Code directly — no external services needed.
+
+1. **Enable in `.env`:**
+   ```
+   ORCHESTRATOR_ENABLED=true
+   DISPATCH_MODE=runner
+   ```
+
+2. **Set a working directory** on each project you want to orchestrate (via project settings in the dashboard).
+
+3. **Ensure Claude Code is installed** and authenticated (the runner uses your Claude Max subscription or API key).
+
+That's it. The tracker spawns Claude Code sessions as child processes and communicates via stdio JSON.
+
+### Option B: OpenCode
+
+Uses [OpenCode](https://opencode.ai) as the session manager.
+
+1. **Install OpenCode** and start the server:
    ```bash
    opencode serve --hostname 0.0.0.0 --port 3000
    ```
@@ -306,6 +345,7 @@ The orchestrator is disabled by default. To enable it:
 3. **Enable in `.env`:**
    ```
    ORCHESTRATOR_ENABLED=true
+   DISPATCH_MODE=opencode
    OPENCODE_SERVER_URL=http://localhost:3000
    ```
 
@@ -316,6 +356,7 @@ The orchestrator is disabled by default. To enable it:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `ORCHESTRATOR_ENABLED` | `false` | Master switch |
+| `DISPATCH_MODE` | `opencode` | `runner` (direct Claude Code) or `opencode` (OpenCode SDK) |
 | `OPENCODE_SERVER_URL` | `http://localhost:3000` | OpenCode server URL for API calls |
 | `OPENCODE_PUBLIC_URL` | (same as server URL) | OpenCode URL for browser deep links |
 | `ORCHESTRATOR_INTERVAL` | `30000` | Poll interval (ms) |
@@ -355,7 +396,8 @@ npm run test:coverage # Coverage report
 Tests use [Vitest](https://vitest.dev/) with an in-memory SQLite database. Test suites cover:
 
 - `src/db.test.ts` — actor classification, state transitions, security rules, project/item CRUD, locks, dependencies, comments, approval provenance, cross-project moves
-- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers, error classification, scheduled task time gating
+- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers, error classification, scheduled task time gating, prompt splitting
+- `src/session-runner.test.ts` — SDK message mapping, stdio protocol integration tests (event flow, steering)
 - `src/spaces/travel.test.ts` — type-aware segment deduplication keys
 
 ## License
