@@ -1828,6 +1828,10 @@
         font-size: 0.9rem;
         padding: 8px 24px;
       }
+      .markers-opencode-btn {
+        font-size: 0.9rem;
+        padding: 8px 24px;
+      }
 
       /* ── Activity Log Panel ── */
       .activity-panel-overlay {
@@ -9592,6 +9596,7 @@
         <div class="markers-done-wrapper">
           <button class="btn btn-ghost markers-approve-btn" id="markersApproveBtn" style="display:none">Re-approve</button>
           <button class="btn btn-ghost markers-done-btn" id="markersDoneBtn">Mark as Done</button>
+          <button class="btn btn-ghost markers-opencode-btn" id="markersOpencodeBtn" style="display:none">OpenCode ↗</button>
         </div>
         <div class="detail-section">
           <h3>Activity</h3>
@@ -10025,6 +10030,7 @@
         let trackerDataHash = null; // JSON hash for change detection
         let detailItemId = null;
         let detailItemKey = null; // display key (e.g. "TRACK-42") for hash routing
+        let detailSessionId = null; // session_id for OpenCode button
         let refreshTimer = null;
         let projectsCache = [];
         let selectedMenuTheme = "midnight";
@@ -14046,6 +14052,7 @@
               detailPanel.classList.remove("open");
               document.body.style.overflow = "";
               detailItemId = null;
+              detailSessionId = null;
               openSpaceOverlay(itemId);
               return;
             }
@@ -14059,9 +14066,12 @@
             }
             // Update URL hash for deep linking
             detailItemKey = item.key || null;
+            detailSessionId = item.session_id || null;
             if (detailItemKey) {
               history.replaceState(null, "", `#/item/${detailItemKey}`);
             }
+            // Update OpenCode button visibility based on session_id
+            updateDetailOpencodeButton();
             // Scroll to newest comment if comments exist
             if (item.comments && item.comments.length) {
               const commentSort = localStorage.getItem(STORAGE_COMMENT_SORT_KEY) || "asc";
@@ -14868,6 +14878,7 @@
           document.body.style.overflow = "";
           detailItemId = null;
           detailItemKey = null;
+          detailSessionId = null;
           // Remove project-specific theme from detail panel
           delete detailPanel.dataset.theme;
           // Clear URL hash
@@ -15197,6 +15208,26 @@
         $("#markersApproveBtn").addEventListener("click", async () => {
           if (!detailItemId) return;
           await changeState(detailItemId, "approved");
+        });
+
+        // Update OpenCode button visibility based on session_id
+        function updateDetailOpencodeButton() {
+          const btn = $("#markersOpencodeBtn");
+          if (detailSessionId && opencodePublicUrl) {
+            btn.style.display = "";
+          } else {
+            btn.style.display = "none";
+          }
+        }
+
+        // OpenCode button — open the session in OpenCode
+        $("#markersOpencodeBtn").addEventListener("click", () => {
+          if (!detailSessionId) return;
+          const proj = projectsCache.find((p) => p.id === ($("#detailProject") || {}).value);
+          const url = buildOpencodeUrl(detailSessionId, proj?.working_directory);
+          if (url && url !== "#") {
+            window.open(url, "opencode");
+          }
         });
 
         async function deleteComment(commentId) {
