@@ -302,6 +302,33 @@ export async function main(): Promise<void> {
     });
     queryHandle = q;
 
+    // Feed steering messages into the query via streamInput.
+    // This async iterable yields messages from steerQueue as they arrive.
+    const steerIterable: AsyncIterable<SDKUserMessage> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next(): Promise<IteratorResult<SDKUserMessage>> {
+            if (steerQueue.length > 0) {
+              return Promise.resolve({ value: steerQueue.shift()!, done: false });
+            }
+            // Wait for the next steer message or abort
+            return new Promise((resolve) => {
+              steerResolve = () => {
+                if (steerQueue.length > 0) {
+                  resolve({ value: steerQueue.shift()!, done: false });
+                }
+              };
+              // End the iterable when the abort controller fires
+              const onAbort = () => resolve({ value: undefined as any, done: true });
+              abortController.signal.addEventListener("abort", onAbort, { once: true });
+            });
+          },
+        };
+      },
+    };
+    // Start streaming input in the background (don't await — it runs until abort/done)
+    q.streamInput(steerIterable).catch(() => {});
+
     // Process SDK messages
     for await (const msg of q) {
       const events = mapSdkMessage(
