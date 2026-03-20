@@ -2352,6 +2352,8 @@ function buildPrompt(
     "",
     "IMPORTANT: The project code is in the working directory above. Your shell CWD is already set to this directory. Do NOT search for the project — it is right here. Do NOT glob or search from your home directory.",
     "",
+    "**UI build process:** If this project has a dashboard UI, `src/ui/index.html` is a **build artifact** — do NOT edit it directly. Edit `src/ui/core.html` (the source file) and `src/ui/spaces/*.js` (space plugins), then run `npm run build:ui` to regenerate index.html. Changes to index.html will be overwritten.",
+    "",
   );
 
   // TRACK-237: For scheduled tasks, add explicit instruction not to modify the description.
