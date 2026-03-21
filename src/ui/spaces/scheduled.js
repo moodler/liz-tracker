@@ -244,8 +244,8 @@ function renderSpaceScheduled(item) {
 
   // Status badge
   let lastStatusBadge = '<span class="scheduled-status-badge never">Never run</span>';
-  if (status.last_status === "success") lastStatusBadge = '<span class="scheduled-status-badge success">Success</span>';
-  else if (status.last_status === "error") lastStatusBadge = '<span class="scheduled-status-badge error">Error</span>';
+  if (status.last_status === "success" || status.last_status === "completed") lastStatusBadge = '<span class="scheduled-status-badge success">Success</span>';
+  else if (status.last_status === "error" || status.last_status === "failed") lastStatusBadge = '<span class="scheduled-status-badge error">Error</span>';
   else if (status.last_status === "running") lastStatusBadge = '<span class="scheduled-status-badge running">Running</span>';
 
   spaceBody.innerHTML = `
@@ -694,8 +694,8 @@ function refreshScheduledDashboard(item) {
   }
 
   let lastStatusBadge = '<span class="scheduled-status-badge never">Never run</span>';
-  if (status.last_status === "success") lastStatusBadge = '<span class="scheduled-status-badge success">Success</span>';
-  else if (status.last_status === "error") lastStatusBadge = '<span class="scheduled-status-badge error">Error</span>';
+  if (status.last_status === "success" || status.last_status === "completed") lastStatusBadge = '<span class="scheduled-status-badge success">Success</span>';
+  else if (status.last_status === "error" || status.last_status === "failed") lastStatusBadge = '<span class="scheduled-status-badge error">Error</span>';
   else if (status.last_status === "running") lastStatusBadge = '<span class="scheduled-status-badge running">Running</span>';
 
   dashboard.innerHTML = `

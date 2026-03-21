@@ -3777,6 +3777,23 @@ function handleSessionError(sessionId: string, message: string): void {
     if (item.locked_by) {
       unlockWorkItem(session.itemId);
     }
+
+    // TRACK-251: Recycle recurring scheduled tasks back to approved even on failure,
+    // so they run again on the next scheduled cycle. Without this, a failed session
+    // leaves the task stuck (not recycled) and it never runs again.
+    if (isRecurringScheduledTask(item)) {
+      const key = getWorkItemKey(item);
+      changeWorkItemState(
+        item.id,
+        "approved",
+        "orchestrator",
+        `Recurring scheduled task session failed — recycled to approved for next dispatch cycle`,
+      );
+      logger.info(
+        { itemId: session.itemId, key, sessionId },
+        "Session failed — recurring scheduled task recycled to approved",
+      );
+    }
   }
 
   // Per-item failure tracking (TRACK-137): count failures per item so that
