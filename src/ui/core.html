@@ -11210,7 +11210,7 @@
             }
 
             // Headings
-            const hMatch = line.match(/^(#{1,3})\s+(.+)/);
+            const hMatch = line.match(/^(#{1,6})\s+(.+)/);
             if (hMatch) {
               flushList();
               const lvl = hMatch[1].length;
