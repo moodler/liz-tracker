@@ -2366,6 +2366,8 @@ function buildPrompt(
     "",
     "**Project conventions:** Read the project's CLAUDE.md file first if one exists — it contains build commands, test patterns, architecture notes, and coding conventions specific to this project.",
     "",
+    "**Naming note:** The assistant/agent in this system is called **Harmoni**. Voice transcription sometimes renders this as \"Harmony\" — treat both spellings as referring to the same entity.",
+    "",
   );
 
   // TRACK-237: For scheduled tasks, add explicit instruction not to modify the description.
@@ -2535,6 +2537,12 @@ function buildResearchPrompt(
     }
     lines.push("");
   }
+
+  // Naming clarification for agents
+  lines.push(
+    "**Naming note:** The assistant/agent in this system is called **Harmoni**. Voice transcription sometimes renders this as \"Harmony\" — treat both spellings as referring to the same entity.",
+    "",
+  );
 
   // TRACK-237: Scheduled tasks have a persistent description that defines the task.
   // The agent should NOT modify the description — only add comments with findings.
