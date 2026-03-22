@@ -39,6 +39,7 @@ function renderSpacePresentation(item) {
         <!-- Tab 2: Slides -->
         <div class="pres-tab-panel" id="presTabSlides">
           <div class="pres-editor-toolbar">
+            <button class="space-btn" id="presRebuildBtn" title="Build and publish slides as artefact">Rebuild</button>
             <div class="toolbar-spacer"></div>
             <span class="pres-save-indicator" id="presSlidesSaveIndicator"></span>
           </div>
@@ -204,6 +205,18 @@ function renderSpacePresentation(item) {
     }
   });
 
+  // Load latest slides from disk (may be newer than DB if edited via Slidev dev server)
+  if (spaceItemId) {
+    apiGet(`/items/${spaceItemId}/presentation/slides-file`).then(data => {
+      if (data.slides_md && data.source === "file") {
+        const ta = document.getElementById("presSlidesTextarea");
+        if (ta && ta.value !== data.slides_md) {
+          ta.value = data.slides_md;
+        }
+      }
+    }).catch(() => {}); // Non-critical — fall back to DB content
+  }
+
   // ── Tab 2: Slides ──
   const slidesTextarea = $("#presSlidesTextarea");
   const slidesSaveIndicator = $("#presSlidesSaveIndicator");
@@ -219,6 +232,27 @@ function renderSpacePresentation(item) {
     if ((e.metaKey || e.ctrlKey) && e.key === "s") {
       e.preventDefault();
       savePresSlides();
+    }
+  });
+
+  // Rebuild button — build and publish slides as artefact
+  $("#presRebuildBtn").addEventListener("click", async () => {
+    const btn = $("#presRebuildBtn");
+    btn.disabled = true;
+    btn.textContent = "Rebuilding...";
+    try {
+      const result = await apiPost(`/items/${spaceItemId}/presentation/rebuild`, {});
+      toast("Slides published!", "success");
+      // Update artifact URL input if it changed
+      if (result.artefact_url) {
+        const urlInput = $("#presArtifactUrl");
+        if (urlInput) urlInput.value = result.artefact_url;
+      }
+    } catch (e) {
+      toast("Rebuild failed: " + (e.message || e), "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Rebuild";
     }
   });
 

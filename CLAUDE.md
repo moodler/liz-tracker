@@ -44,7 +44,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/spaces/engagement.ts` | Parser, 6 API routes, 7 MCP tools |
 | `src/spaces/scheduled.ts` | Parser, sanitizer, 4 API routes, 4 MCP tools |
 | `src/spaces/travel.ts` | Parser, sanitizer, deep merge, 4 API routes, 4 MCP tools, cover image |
-| `src/spaces/presentation.ts` | Parser, sanitizer, 2 API routes (slides/artifact PATCH) |
+| `src/spaces/presentation.ts` | Parser, sanitizer, 4 API routes (slides/artifact PATCH, slides-file GET, rebuild POST), filesystem sync |
 | `src/ui/core.html` | Dashboard shell + space plugin registry + overlay shell |
 | `src/ui/spaces/standard.js` | Registry entry only (~15 lines) |
 | `src/ui/spaces/song.js` | Song UI renderer (~731 lines) |

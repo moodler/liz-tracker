@@ -13,8 +13,15 @@
  * - Discussion sidebar (always visible)
  */
 
-import { updateWorkItem } from "../db.js";
+import { writeFileSync, readFileSync, mkdirSync, accessSync } from "fs";
+import { execSync } from "child_process";
+import { join } from "path";
+import { getWorkItemKey, updateWorkItem } from "../db.js";
 import type { SpacePlugin, SpaceApiRoute, WorkItem } from "./types.js";
+
+// ── Filesystem Constants ──
+
+const SLIDES_DIR = join(process.env.HOME || "", "liz", "data", "slides");
 
 // ── Data Layer ──
 
@@ -98,6 +105,18 @@ const presentationApiRoutes: SpaceApiRoute[] = [
 
       const updated = updateWorkItem(item.id, { space_data: JSON.stringify(spaceData) });
       if (!updated) return errorResponse(res, "Failed to update work item", 500);
+
+      // Sync slides to disk for Slidev integration
+      const itemKey = getWorkItemKey(item);
+      try {
+        mkdirSync(SLIDES_DIR, { recursive: true });
+        const filepath = join(SLIDES_DIR, `slides_${itemKey}.md`);
+        writeFileSync(filepath, body.slides_md as string, "utf-8");
+      } catch (err) {
+        // Log but don't fail — DB is already updated
+        console.error(`Failed to sync slides to disk: slides_${itemKey}.md`, err);
+      }
+
       jsonResponse(res, { slides_md: spaceData.slides_md });
     },
   },
@@ -117,6 +136,67 @@ const presentationApiRoutes: SpaceApiRoute[] = [
       jsonResponse(res, { artifact_url: spaceData.artifact_url });
     },
   },
+  // GET /items/:id/presentation/slides-file — read slides from disk (latest file content)
+  {
+    method: "GET",
+    path: "slides-file",
+    handler: async (_req, res, item) => {
+      const itemKey = getWorkItemKey(item);
+      const filepath = join(SLIDES_DIR, `slides_${itemKey}.md`);
+      try {
+        const content = readFileSync(filepath, "utf-8");
+        jsonResponse(res, { slides_md: content, source: "file" });
+      } catch {
+        // File doesn't exist yet — return DB content
+        const spaceData = parsePresentationSpaceData(item.space_data);
+        jsonResponse(res, { slides_md: spaceData.slides_md, source: "db" });
+      }
+    },
+  },
+  // POST /items/:id/presentation/rebuild — build and publish slides as artefact
+  {
+    method: "POST",
+    path: "rebuild",
+    handler: async (_req, res, item) => {
+      const itemKey = getWorkItemKey(item);
+      const slidesFile = join(SLIDES_DIR, `slides_${itemKey}.md`);
+
+      try {
+        accessSync(slidesFile);
+      } catch {
+        return errorResponse(res, `Slides file not found: slides_${itemKey}.md`, 404);
+      }
+
+      const python = join(process.env.HOME || "", "liz", "venv", "bin", "python3");
+      const renderScript = join(process.env.HOME || "", "liz", "skills", "slides", "render.py");
+
+      try {
+        const slidesContent = readFileSync(slidesFile, "utf-8");
+        const result = execSync(
+          `${python} ${renderScript} --issue-key ${itemKey} --publish --format pdf`,
+          { input: slidesContent, encoding: "utf-8", timeout: 120000, cwd: join(process.env.HOME || "", "liz") },
+        );
+
+        const parsed = JSON.parse(result.trim());
+
+        // Auto-update artifact_url in space_data
+        if (parsed.artefact_url) {
+          const spaceData = parsePresentationSpaceData(item.space_data);
+          spaceData.artifact_url = parsed.artefact_url;
+          updateWorkItem(item.id, { space_data: JSON.stringify(spaceData) });
+        }
+
+        jsonResponse(res, {
+          status: "ok",
+          artefact_url: parsed.artefact_url || null,
+          files: parsed.files || [],
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errorResponse(res, `Rebuild failed: ${msg}`, 500);
+      }
+    },
+  },
 ];
 
 // ── Agent Reference ──
@@ -130,7 +210,13 @@ Tab-based workspace for developing presentations:
 - **Tab 3 (Artifact)** → stored in \`space_data.artifact_url\`. URL embedded as an iframe.
 - **Discussion** → comments sidebar (always visible)
 
-Use \`tracker_update_item\` to update description. Use the PATCH API routes or \`tracker_update_item\` with \`space_data\` to update slides/artifact.`;
+Use \`tracker_update_item\` to update description. Use the PATCH API routes or \`tracker_update_item\` with \`space_data\` to update slides/artifact.
+
+API routes:
+- \`PATCH /items/:id/presentation/slides\` — save slides markdown (also syncs to disk at ~/liz/data/slides/slides_{KEY}.md)
+- \`PATCH /items/:id/presentation/artifact\` — update artifact URL
+- \`GET /items/:id/presentation/slides-file\` — read slides from disk (may be newer than DB if edited via Slidev)
+- \`POST /items/:id/presentation/rebuild\` — build slides and publish as artefact (auto-updates artifact URL)`;
 
 // ── Plugin Export ──
 
