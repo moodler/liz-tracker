@@ -90,16 +90,60 @@ export const TRACKER_SHORT_URL = (
   process.env.TRACKER_SHORT_URL || TRACKER_PUBLIC_URL
 ).replace(/\/+$/, "");
 
+// ── Dynamic dashboard base URL ──
+
+/**
+ * The last base URL used by a browser to access the tracker dashboard.
+ * Updated on every dashboard page load (GET / or deep-link HTML requests)
+ * from the request's Host header. Persisted to disk so it survives restarts.
+ *
+ * When set, buildItemUrl() uses this instead of the static TRACKER_SHORT_URL,
+ * so MCP responses return URLs reachable from the user's current network
+ * (e.g. different VPN IPs).
+ */
+let _lastDashboardBaseUrl: string | null = null;
+const DASHBOARD_URL_PATH = path.join(STORE_DIR, "last_dashboard_url");
+
+// Load persisted value on startup
+try {
+  if (fs.existsSync(DASHBOARD_URL_PATH)) {
+    const saved = fs.readFileSync(DASHBOARD_URL_PATH, "utf-8").trim();
+    if (saved) _lastDashboardBaseUrl = saved;
+  }
+} catch {
+  // Ignore read errors — fall back to static config
+}
+
+export function setLastDashboardBaseUrl(baseUrl: string): void {
+  if (baseUrl === _lastDashboardBaseUrl) return;
+  _lastDashboardBaseUrl = baseUrl;
+  try {
+    fs.mkdirSync(STORE_DIR, { recursive: true });
+    fs.writeFileSync(DASHBOARD_URL_PATH, baseUrl + "\n", { mode: 0o600 });
+  } catch {
+    // Non-critical — URL still used for this process lifetime
+  }
+}
+
+export function getLastDashboardBaseUrl(): string | null {
+  return _lastDashboardBaseUrl;
+}
+
 /**
  * Build a browser-facing deep link URL to a work item in the tracker dashboard.
- * Uses the shortest possible format: {TRACKER_SHORT_URL}/{KEY}
+ * Uses the shortest possible format: {base}/{KEY}
+ *
+ * Prefers the last URL the user accessed the dashboard from (dynamic, persisted)
+ * so MCP responses include URLs reachable on the user's current network.
+ * Falls back to TRACKER_SHORT_URL if no dashboard access has been recorded.
  *
  * The server handles /{KEY} paths by redirecting to /#/item/{KEY}, so the
  * short URL works as a redirect that resolves to the full dashboard URL.
- * Example: http://t/TRACK-187 → redirects to http://t/#/item/TRACK-187
+ * Example: http://192.168.50.19:1000/TRACK-187 → redirects to /#/item/TRACK-187
  */
 export function buildItemUrl(key: string): string {
-  return `${TRACKER_SHORT_URL}/${encodeURIComponent(key)}`;
+  const base = _lastDashboardBaseUrl || TRACKER_SHORT_URL;
+  return `${base}/${encodeURIComponent(key)}`;
 }
 
 // ── Orchestrator config ──

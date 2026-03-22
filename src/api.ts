@@ -110,7 +110,7 @@ import {
   steerSession,
   getActiveSession,
 } from "./orchestrator.js";
-import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL, PORT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL, DISPATCH_MODE } from "./config.js";
+import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL, PORT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL, DISPATCH_MODE, setLastDashboardBaseUrl } from "./config.js";
 import { getSpacePlugin, getCoverSpaceTypes } from "./spaces/index.js";
 import { sanitizeScheduledSpaceData } from "./spaces/scheduled.js";
 
@@ -1998,6 +1998,18 @@ export function startTrackerServer(port: number): http.Server {
     // show the item title, description, and first image attachment.
     if (method === "GET") {
       const pathname = new URL(url, "http://localhost").pathname;
+
+      // ── Track last dashboard access URL ──
+      // When the browser loads the dashboard (root page or SPA deep link),
+      // capture the base URL from the Host header so MCP responses can
+      // return item URLs reachable on the user's current network.
+      if (pathname === "/" || pathname === "/index.html" || /^\/[A-Za-z]+-\d+$/.test(pathname)) {
+        const host = req.headers.host;
+        if (host) {
+          const proto = (req.headers["x-forwarded-proto"] as string) || "http";
+          setLastDashboardBaseUrl(`${proto}://${host}`);
+        }
+      }
 
       // Static files for dashboard
       let filePath: string;
