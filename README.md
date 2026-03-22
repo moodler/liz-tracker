@@ -28,6 +28,7 @@ Work items aren't just tickets. Each item can open into a full-screen workspace 
 | **Engagement** | Coordination hub for contractors and services — contact card, quote/financials, milestone timeline, document attachments, communications log, and discussion sidebar |
 | **Scheduled** | Recurring task manager — schedule config (daily/weekly/custom cron), live status panel, task instructions, TODO and IGNORE lists, run history |
 | **Travel** | Trip planner — day-by-day itinerary with timezone-aware segments (flights, lodging, transport, activities, restaurants, meetings), automatic gap detection, and cover images |
+| **Presentation** | Presentation development workspace — 3-tab layout (Description, Slides, Artifact) with discussion sidebar, filesystem sync to Slidev, and live rebuild |
 
 Projects choose which space types are available, and you pick the type when creating an item.
 
@@ -155,7 +156,8 @@ src/
 │   ├── text.ts       # Text space backend
 │   ├── engagement.ts # Engagement space backend (6 routes, 7 MCP tools)
 │   ├── scheduled.ts  # Scheduled space backend (4 routes, 4 MCP tools)
-│   └── travel.ts     # Travel space backend (4 routes, 4 MCP tools)
+│   ├── travel.ts     # Travel space backend (4 routes, 4 MCP tools)
+│   └── presentation.ts # Presentation space backend (4 routes, filesystem sync)
 └── ui/
     ├── core.html     # Dashboard shell + plugin registry + overlay
     └── spaces/       # Per-space UI renderers (JS plugins)
@@ -249,6 +251,10 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | `POST` | `/api/v1/items/:id/travel/segments` | Add travel segments |
 | `PATCH` | `/api/v1/items/:id/travel/segments` | Update a travel segment |
 | `DELETE` | `/api/v1/items/:id/travel/segments` | Remove travel segments |
+| `PATCH` | `/api/v1/items/:id/presentation/slides` | Save slides markdown (syncs to disk) |
+| `PATCH` | `/api/v1/items/:id/presentation/artifact` | Update artifact URL |
+| `GET` | `/api/v1/items/:id/presentation/slides-file` | Read slides from disk |
+| `POST` | `/api/v1/items/:id/presentation/rebuild` | Build slides and publish as artifact |
 
 ### Activity Log
 

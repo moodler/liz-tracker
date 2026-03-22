@@ -52,7 +52,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/ui/spaces/engagement.js` | Engagement UI renderer (~680 lines) |
 | `src/ui/spaces/scheduled.js` | Scheduled UI renderer (~850 lines) |
 | `src/ui/spaces/travel.js` | Travel UI renderer — day-by-day timeline, gap detection, segment cards (~1079 lines) |
-| `src/ui/spaces/presentation.js` | Presentation UI renderer — 3 tabs (Description, Slides, Artifact) + discussion sidebar (~310 lines) |
+| `src/ui/spaces/presentation.js` | Presentation UI renderer — 3 tabs (Description, Slides, Artifact) + discussion sidebar (~512 lines) |
 | `scripts/build-ui.js` | UI pre-compilation script (~60 lines, zero dependencies) |
 
 ## Development
@@ -503,6 +503,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 | `engagement` | briefcase (SVG) | Coordination workspace for contractors, services, and external engagements — structured dashboard (contact, quote, milestones, documents, comms log) + discussion sidebar. Uses `space_data` JSON for all structured content. |
 | `scheduled` | clock (SVG) | Scheduled task workspace — schedule config (frequency, time, days), live status panel (next/last run, run count), task instructions editor, TODO list, IGNORE list + run history sidebar. Useful for recurring automated tasks. `space_data` stores a JSON string (see format below). |
 | `travel` | plane (SVG) | Trip planning workspace — day-by-day itinerary with timezone-aware segments (flights, lodging, transport, activities, restaurants, meetings, notes), gap detection, cover image support, and MCP tools for programmatic segment management. `space_data` stores trip metadata + segments array as JSON. |
+| `presentation` | monitor (SVG) | Presentation development workspace — 3-tab layout (Description, Slides, Artifact) with discussion sidebar, filesystem sync to Slidev, and live rebuild. `space_data` stores `slides_md` and `artifact_url`. |
 
 #### Scheduled Task `space_data` Format
 
@@ -674,6 +675,10 @@ tracker_add_travel_segment({
 - `POST /items/:id/travel/segments` — add travel segments (`{ segments: [...] }`)
 - `PATCH /items/:id/travel/segments` — update a travel segment by ID (`{ id: "seg_abc", ...fields }`) — deep merge for nested objects
 - `DELETE /items/:id/travel/segments` — remove travel segments (`{ ids: ["seg_abc", ...] }`)
+- `PATCH /items/:id/presentation/slides` — save slides markdown (syncs to disk at ~/liz/data/slides/slides_{KEY}.md)
+- `PATCH /items/:id/presentation/artifact` — update artifact URL
+- `GET /items/:id/presentation/slides-file` — read slides from disk (may be newer than DB if edited externally)
+- `POST /items/:id/presentation/rebuild` — build slides and publish as artifact (auto-updates artifact URL)
 
 ### UI Sections
 
@@ -688,6 +693,7 @@ tracker_add_travel_segment({
 - `engagement.js` — Engagement space renderer (contact card, quote/financial, milestones, documents, comms log + discussion sidebar)
 - `scheduled.js` — Scheduled task space renderer (schedule config, status panel, task instructions + run history sidebar)
 - `travel.js` — Travel space renderer (day-by-day timeline, segment cards, gap detection, add/edit forms)
+- `presentation.js` — Presentation space renderer (3-tab layout: Description, Slides, Artifact + discussion sidebar)
 - `standard.js` — Registry entry only (standard items use the default detail panel)
 
 ### How It Works
@@ -733,7 +739,7 @@ When adding new features, always add a section header. Use grep for `// ──` 
 
 ### Shared Helpers & Constants
 
-Reusable utilities are in the **"Shared Helpers"** section (line ~10707). Check here before writing new utility code:
+Reusable utilities are in the **"Shared Helpers"** section (line ~10991). Check here before writing new utility code:
 
 | Helper | Purpose |
 | --- | --- |
@@ -748,7 +754,7 @@ Reusable utilities are in the **"Shared Helpers"** section (line ~10707). Check 
 | `buildOpencodeUrl(sessionId, dir)` | Build OpenCode deep link URL |
 | `base64UrlEncode(str)` | Encode string to base64url (for OpenCode directory paths) |
 
-Shared constants (defined near the top of the JS, line ~10111):
+Shared constants (defined near the top of the JS, line ~10395):
 
 | Constant | Purpose |
 | --- | --- |
