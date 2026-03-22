@@ -15,6 +15,7 @@ import { textPlugin } from "./text.js";
 import { engagementPlugin } from "./engagement.js";
 import { scheduledPlugin } from "./scheduled.js";
 import { travelPlugin } from "./travel.js";
+import { presentationPlugin } from "./presentation.js";
 
 registerSpace(standardPlugin);
 registerSpace(songPlugin);
@@ -22,6 +23,7 @@ registerSpace(textPlugin);
 registerSpace(engagementPlugin);
 registerSpace(scheduledPlugin);
 registerSpace(travelPlugin);
+registerSpace(presentationPlugin);
 
 // Re-export registry functions for convenience
 export { registerSpace, getSpacePlugin, listSpacePlugins, getSpaceTypes, getCoverSpaceTypes } from "./registry.js";
