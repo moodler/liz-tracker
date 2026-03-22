@@ -521,7 +521,8 @@ function createMcpServer(): McpServer {
       if (!item) return { content: [{ type: "text", text: "Error: Work item not found" }] };
       try {
         const comment = createComment({ work_item_id: item.id, author: normalizeRunnerActor(args.author || "Harmoni"), body: args.body });
-        return { content: [{ type: "text", text: JSON.stringify(comment, null, 2) }] };
+        const key = getWorkItemKey(item);
+        return { content: [{ type: "text", text: JSON.stringify({ ...comment, item_key: key, item_url: buildItemUrl(key) }, null, 2) }] };
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.includes("Comment blocked")) return { content: [{ type: "text", text: `Error: ${msg}` }] };
@@ -571,7 +572,8 @@ function createMcpServer(): McpServer {
           const code = item.requires_code ? " 💻" : "";
           const plat = item.platform && item.platform !== "any" ? ` 🖥️${item.platform}` : "";
           const due = item.date_due ? ` 📅${item.date_due}` : "";
-          lines.push(`  - [${key}] ${item.title}${priority}${assignee}${lock}${blocked}${code}${plat}${due}`);
+          const url = buildItemUrl(key);
+          lines.push(`  - [${key}](${url}) ${item.title}${priority}${assignee}${lock}${blocked}${code}${plat}${due}`);
         }
         lines.push("");
       }
