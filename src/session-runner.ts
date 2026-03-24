@@ -60,6 +60,7 @@ export function mapSdkMessage(
           sessionId,
           sdkSessionId: initMsg.session_id,
           pid: process.pid,
+          apiKeySource: initMsg.apiKeySource,
         };
         return [ev];
       }

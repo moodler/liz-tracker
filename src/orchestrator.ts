@@ -65,6 +65,8 @@ import {
   AGENT_ACTORS,
   DISPATCH_MODE,
   PORT,
+  WEBHOOK_URL,
+  WEBHOOK_SECRET,
 } from "./config.js";
 import { logger } from "./logger.js";
 import { execFileSync, spawn, type ChildProcess } from "child_process";
@@ -246,6 +248,49 @@ export async function killProcessGracefully(
   // Process is stubborn — still alive after both signals
   logger.warn({ pid }, "Process still alive after SIGHUP + SIGTERM escalation");
   return false;
+}
+
+// ── API Key Source Notification (TRACK-262) ──
+
+/**
+ * Send a webhook notification when a session starts using a non-OAuth auth source.
+ * This alerts the user that sessions are falling back to an API key instead of
+ * using the Max subscription (OAuth), which typically means `claude login` needs
+ * to be run on the server or the OAuth token has expired.
+ */
+async function fireApiKeyNotification(itemKey: string, apiKeySource: string): Promise<void> {
+  if (!WEBHOOK_URL) return;
+
+  const payload = {
+    type: "auth.warning",
+    issue_key: itemKey,
+    message: `Session for ${itemKey} started with "${apiKeySource}" auth instead of OAuth. This means the session is using an API key rather than the Max subscription. Run 'claude login' on the server to restore OAuth authentication.`,
+    apiKeySource,
+    timestamp: new Date().toISOString(),
+  };
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (WEBHOOK_SECRET) {
+    headers["X-Webhook-Secret"] = WEBHOOK_SECRET;
+  }
+
+  const response = await fetch(WEBHOOK_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(5000),
+  });
+
+  if (!response.ok) {
+    logger.warn(
+      { status: response.status },
+      "API key source webhook notification failed",
+    );
+  } else {
+    logger.info({ itemKey, apiKeySource }, "API key source warning notification sent");
+  }
 }
 
 // ── Agent Config Validation ──
@@ -488,6 +533,8 @@ interface ActiveSession {
   events?: RunnerEvent[];
   /** Agent SDK session ID for potential resume. */
   sdkSessionId?: string;
+  /** Auth method reported by the SDK init message (e.g. 'oauth', 'user'). */
+  apiKeySource?: string;
 }
 
 /**
@@ -761,6 +808,7 @@ export function getOrchestratorStatus(): {
     projectId: string;
     startedAt: string;
     pid?: number;
+    apiKeySource?: string;
   }>;
   lastTick: string | null;
   interval: number;
@@ -788,6 +836,7 @@ export function getOrchestratorStatus(): {
       projectId: s.projectId,
       startedAt: s.startedAt.toISOString(),
       pid: s.pid,
+      apiKeySource: s.apiKeySource,
     })),
     lastTick: lastTick?.toISOString() || null,
     interval: ORCHESTRATOR_INTERVAL,
@@ -2045,12 +2094,24 @@ async function _dispatchViaRunnerImpl(
         case "started":
           if (evt.sdkSessionId) session.sdkSessionId = evt.sdkSessionId;
           if (evt.pid) session.pid = evt.pid;
+          if (evt.apiKeySource) session.apiKeySource = evt.apiKeySource;
           setSessionInfo(item.id, sessionId, "running", evt.pid);
           updateSessionStatus(item.id, "running");
           logger.info(
-            { itemId: item.id, sessionId, sdkSessionId: evt.sdkSessionId, pid: evt.pid },
+            { itemId: item.id, sessionId, sdkSessionId: evt.sdkSessionId, pid: evt.pid, apiKeySource: evt.apiKeySource },
             "Runner session started",
           );
+          // Warn if session is NOT using OAuth (Max subscription) — this means
+          // it fell back to an API key, which shouldn't happen since we strip
+          // ANTHROPIC_API_KEY from the runner environment (TRACK-262).
+          if (evt.apiKeySource && evt.apiKeySource !== "oauth") {
+            const itemKey = getWorkItemKey(item);
+            logger.warn(
+              { itemId: item.id, itemKey, sessionId, apiKeySource: evt.apiKeySource },
+              `Session using "${evt.apiKeySource}" auth instead of OAuth — expected OAuth (Max subscription). Check 'claude login' status on this machine.`,
+            );
+            fireApiKeyNotification(itemKey, evt.apiKeySource).catch(() => {});
+          }
           break;
 
         case "completed":

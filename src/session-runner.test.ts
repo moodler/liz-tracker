@@ -46,6 +46,35 @@ describe("mapSdkMessage — system init", () => {
       expect(ev.sessionId).toMatch(/^runner_[0-9a-f]+$/);
       expect(ev.sdkSessionId).toBe(fakeSessionId);
       expect(ev.pid).toBe(process.pid);
+      expect(ev.apiKeySource).toBe("user");
+    }
+  });
+
+  it("propagates oauth apiKeySource", () => {
+    const msg = {
+      type: "system" as const,
+      subtype: "init" as const,
+      apiKeySource: "oauth" as const,
+      claude_code_version: "1.0.0",
+      cwd: "/tmp",
+      tools: [],
+      mcp_servers: [],
+      model: "claude-opus-4-6",
+      permissionMode: "bypassPermissions" as const,
+      slash_commands: [],
+      output_style: "text",
+      skills: [],
+      plugins: [],
+      uuid: fakeUuid,
+      session_id: fakeSessionId,
+    };
+
+    const events = mapSdkMessage(msg);
+    expect(events).toHaveLength(1);
+    const ev = events[0]!;
+    expect(ev.event).toBe("started");
+    if (ev.event === "started") {
+      expect(ev.apiKeySource).toBe("oauth");
     }
   });
 });

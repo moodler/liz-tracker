@@ -8,6 +8,8 @@ export interface RunnerStartedEvent {
   sessionId: string;
   sdkSessionId?: string;
   pid: number;
+  /** Auth method used by the SDK: 'user' | 'project' | 'org' | 'temporary' | 'oauth'. */
+  apiKeySource?: string;
 }
 
 export interface RunnerToolUseEvent {
