@@ -362,6 +362,7 @@ async function savePresDeckConfig() {
   if (!spaceItemId) return;
   const slugInput = $("#presDeckSlugInput");
   const urlInput = $("#presDeckUrlInput");
+  const saveBtn = $("#presDeckSaveConfig");
   if (!slugInput || !urlInput) return;
 
   const slug = slugInput.value.trim();
@@ -370,16 +371,26 @@ async function savePresDeckConfig() {
   if (!slug) { toast("Deck slug is required", "error"); return; }
   if (!url) { toast("DeckWright URL is required", "error"); return; }
 
+  // Show saving feedback on button
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving...";
+  }
+
   try {
     await apiPatch(`/items/${spaceItemId}/presentation/deck`, {
       deck_slug: slug,
       deck_url: url,
     });
     toast("Deck linked!", "success");
-    // Refresh the overlay to show the new deck
-    if (typeof refreshSpaceOverlay === "function") refreshSpaceOverlay();
+    // Full re-render to show the deck thumbnails view
+    if (typeof openSpaceOverlay === "function") openSpaceOverlay(spaceItemId);
   } catch (e) {
     toast("Failed to save deck config: " + (e.message || e), "error");
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Link Deck";
+    }
   }
 }
 

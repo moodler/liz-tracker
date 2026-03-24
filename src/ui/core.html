@@ -8015,10 +8015,11 @@
         gap: 12px;
       }
       .pres-deck-config {
-        padding: 16px;
+        padding: 20px;
         display: flex;
         flex-direction: column;
         gap: 12px;
+        max-width: 400px;
       }
       .pres-deck-config label {
         font-size: 0.8rem;
@@ -8030,13 +8031,28 @@
         border: 1px solid var(--border);
         border-radius: var(--radius);
         color: var(--text);
-        padding: 6px 10px;
-        font-size: 0.8rem;
+        padding: 8px 12px;
+        font-size: 0.85rem;
         outline: none;
         width: 100%;
       }
       .pres-deck-config input:focus {
         border-color: var(--highlight);
+      }
+      .pres-deck-config .pres-deck-open-btn {
+        margin-top: 4px;
+        padding: 10px 20px !important;
+        font-size: 0.9rem !important;
+        border-radius: var(--radius);
+        cursor: pointer;
+        transition: opacity 0.15s, transform 0.1s;
+      }
+      .pres-deck-config .pres-deck-open-btn:active {
+        transform: scale(0.97);
+      }
+      .pres-deck-config .pres-deck-open-btn:disabled {
+        opacity: 0.6;
+        cursor: wait;
       }
       .pres-deck-loading {
         display: flex;
