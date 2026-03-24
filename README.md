@@ -157,7 +157,7 @@ src/
 │   ├── engagement.ts # Engagement space backend (6 routes, 7 MCP tools)
 │   ├── scheduled.ts  # Scheduled space backend (4 routes, 4 MCP tools)
 │   ├── travel.ts     # Travel space backend (4 routes, 4 MCP tools)
-│   └── presentation.ts # Presentation space backend (2 routes, DeckWright integration)
+│   └── presentation.ts # Presentation space backend (4 routes, DeckWright integration + thumbnail proxy)
 └── ui/
     ├── core.html     # Dashboard shell + plugin registry + overlay
     └── spaces/       # Per-space UI renderers (JS plugins)
@@ -253,6 +253,8 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | `DELETE` | `/api/v1/items/:id/travel/segments` | Remove travel segments |
 | `PATCH` | `/api/v1/items/:id/presentation/deck` | Update deck config (slug + URL) |
 | `GET` | `/api/v1/items/:id/presentation/deck-mdx` | Read deck MDX from DeckWright |
+| `GET` | `/api/v1/items/:id/presentation/deck-thumbnails` | Fetch slide thumbnails (cached proxy, `?refresh=1` to bust cache) |
+| `GET` | `/api/v1/items/:id/presentation/deck-thumb` | Serve a cached slide thumbnail image |
 
 ### Activity Log
 

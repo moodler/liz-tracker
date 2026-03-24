@@ -44,7 +44,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/spaces/engagement.ts` | Parser, 6 API routes, 7 MCP tools |
 | `src/spaces/scheduled.ts` | Parser, sanitizer, 4 API routes, 4 MCP tools |
 | `src/spaces/travel.ts` | Parser, sanitizer, deep merge, 4 API routes, 4 MCP tools, cover image |
-| `src/spaces/presentation.ts` | Parser, sanitizer, 3 API routes (deck PATCH, deck-mdx GET, deck-thumbnails GET proxy), DeckWright integration |
+| `src/spaces/presentation.ts` | Parser, sanitizer, 4 API routes (deck PATCH, deck-mdx GET, deck-thumbnails GET proxy, deck-thumb GET cached image), DeckWright integration |
 | `src/ui/core.html` | Dashboard shell + space plugin registry + overlay shell |
 | `src/ui/spaces/standard.js` | Registry entry only (~15 lines) |
 | `src/ui/spaces/song.js` | Song UI renderer (~731 lines) |
@@ -52,7 +52,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/ui/spaces/engagement.js` | Engagement UI renderer (~680 lines) |
 | `src/ui/spaces/scheduled.js` | Scheduled UI renderer (~850 lines) |
 | `src/ui/spaces/travel.js` | Travel UI renderer — day-by-day timeline, gap detection, segment cards (~1079 lines) |
-| `src/ui/spaces/presentation.js` | Presentation UI renderer — 3 tabs (Description, Slides, Deck) + discussion sidebar + DeckWright thumbnails |
+| `src/ui/spaces/presentation.js` | Presentation UI renderer — 3 tabs (Description, Slides, Deck) + discussion sidebar + DeckWright thumbnails (~589 lines) |
 | `scripts/build-ui.js` | UI pre-compilation script (~60 lines, zero dependencies) |
 
 ## Development
@@ -677,6 +677,8 @@ tracker_add_travel_segment({
 - `DELETE /items/:id/travel/segments` — remove travel segments (`{ ids: ["seg_abc", ...] }`)
 - `PATCH /items/:id/presentation/deck` — update deck config (`{ deck_slug?, deck_url? }`)
 - `GET /items/:id/presentation/deck-mdx` — read deck.mdx content from DeckWright content directory
+- `GET /items/:id/presentation/deck-thumbnails` — fetch thumbnail list from DeckWright, cache locally, return tracker-proxied URLs (pass `?refresh=1` to bust cache)
+- `GET /items/:id/presentation/deck-thumb?file=...` — serve a cached deck thumbnail image (no auth required)
 
 ### UI Sections
 
@@ -737,7 +739,7 @@ When adding new features, always add a section header. Use grep for `// ──` 
 
 ### Shared Helpers & Constants
 
-Reusable utilities are in the **"Shared Helpers"** section (line ~10991). Check here before writing new utility code:
+Reusable utilities are in the **"Shared Helpers"** section (line ~11077). Check here before writing new utility code:
 
 | Helper | Purpose |
 | --- | --- |
@@ -752,7 +754,7 @@ Reusable utilities are in the **"Shared Helpers"** section (line ~10991). Check 
 | `buildOpencodeUrl(sessionId, dir)` | Build OpenCode deep link URL |
 | `base64UrlEncode(str)` | Encode string to base64url (for OpenCode directory paths) |
 
-Shared constants (defined near the top of the JS, line ~10395):
+Shared constants (defined near the top of the JS, line ~10480):
 
 | Constant | Purpose |
 | --- | --- |
