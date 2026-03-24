@@ -115,6 +115,16 @@ try {
 }
 
 export function setLastDashboardBaseUrl(baseUrl: string): void {
+  // Only accept URLs whose port matches the tracker's own PORT.
+  // This prevents accidental pollution from other services (e.g. DeckWright on port 2222)
+  // that might proxy through or share a hostname with the tracker.
+  try {
+    const parsed = new URL(baseUrl);
+    const urlPort = parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+    if (String(urlPort) !== String(PORT)) return;
+  } catch {
+    return; // Invalid URL — ignore
+  }
   if (baseUrl === _lastDashboardBaseUrl) return;
   _lastDashboardBaseUrl = baseUrl;
   try {
