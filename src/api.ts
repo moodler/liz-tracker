@@ -473,6 +473,27 @@ async function handleApiRequest(
       return;
     }
 
+    // ── Deck thumbnail serving (unauthenticated — browser <img> tags cannot send headers) ──
+    // GET /items/:id/presentation/deck-thumb?file=X — serve cached thumbnail without auth
+    if (
+      parts[0] === "items" && parts.length === 4 &&
+      parts[2] === "presentation" && parts[3] === "deck-thumb" && method === "GET"
+    ) {
+      const itemId = resolveItemId(parts[1]);
+      const plugin = getSpacePlugin("presentation");
+      if (plugin?.apiRoutes) {
+        const route = plugin.apiRoutes.find(r => r.path === "deck-thumb" && r.method === "GET");
+        if (route) {
+          const item = getWorkItem(itemId);
+          if (!item) return error(res, "Work item not found", 404);
+          if (item.space_type !== "presentation") {
+            return error(res, `Item is not a Presentation (space_type="${item.space_type}")`, 400);
+          }
+          return route.handler(req, res, item);
+        }
+      }
+    }
+
     // ── Section 4.8: API Authentication ──
     // ALL API endpoints require authentication when TRACKER_API_TOKEN is set
     if (!checkAuth(req, res)) {
