@@ -126,14 +126,19 @@ const presentationApiRoutes: SpaceApiRoute[] = [
     },
   },
   // GET /items/:id/presentation/deck-thumbnails — fetch thumbnail list, return tracker-proxied URLs
+  // Pass ?refresh=1 to force re-download all thumbnails from DeckWright (cache bust)
   {
     method: "GET",
     path: "deck-thumbnails",
-    handler: async (_req, res, item) => {
+    handler: async (req, res, item) => {
       const spaceData = parsePresentationSpaceData(item.space_data);
       if (!spaceData.deck_slug) {
         return errorResponse(res, "No deck configured", 400);
       }
+
+      // Check for refresh parameter to force cache invalidation
+      const reqUrl = new URL(req.url || "", "http://localhost");
+      const forceRefresh = reqUrl.searchParams.get("refresh") === "1";
 
       const url = `${DECKWRIGHT_URL}/api/thumbnails?deck=${encodeURIComponent(spaceData.deck_slug)}`;
       try {
@@ -154,8 +159,8 @@ const presentationApiRoutes: SpaceApiRoute[] = [
             const filename = urlPath.split("/").pop() || `thumb-${localThumbs.length}.png`;
             const cachePath = join(slugDir, filename);
 
-            // Fetch and cache if not already cached (or if cached file is empty/corrupt)
-            const needsFetch = !existsSync(cachePath) || readFileSync(cachePath).length === 0;
+            // Fetch and cache if not already cached, empty, or force refresh requested
+            const needsFetch = forceRefresh || !existsSync(cachePath) || readFileSync(cachePath).length === 0;
             if (needsFetch) {
               try {
                 const imgRes = await fetch(srcUrl);

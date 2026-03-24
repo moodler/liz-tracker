@@ -248,6 +248,8 @@ function renderSpacePresentation(item) {
   if (mdxRefreshBtn) {
     mdxRefreshBtn.addEventListener("click", () => {
       presSlidesMdxLoaded = false;
+      const mdxEl = $("#presMdxContent");
+      if (mdxEl) mdxEl.innerHTML = '<div class="pres-mdx-empty">Reloading deck source...</div>';
       loadPresMdx();
     });
   }
@@ -257,10 +259,14 @@ function renderSpacePresentation(item) {
     // Load thumbnails — button URLs will be set up after we get the deck_url from the server
     loadPresDeckThumbnails(deckSlug);
 
-    // Refresh button
+    // Refresh button — force re-download from DeckWright (cache bust)
     const deckRefreshBtn = $("#presDeckRefresh");
     if (deckRefreshBtn) {
-      deckRefreshBtn.addEventListener("click", () => loadPresDeckThumbnails(deckSlug));
+      deckRefreshBtn.addEventListener("click", () => {
+        const content = $("#presDeckContent");
+        if (content) content.innerHTML = '<div class="pres-deck-loading">Refreshing thumbnails...</div>';
+        loadPresDeckThumbnails(deckSlug, true);
+      });
     }
 
     // Config gear button — show config form inline
@@ -322,13 +328,14 @@ async function loadPresMdx() {
 // ── Deck Thumbnails ──
 let presThumbnailPollTimer = null;
 
-async function loadPresDeckThumbnails(slug) {
+async function loadPresDeckThumbnails(slug, forceRefresh) {
   const content = $("#presDeckContent");
   if (!content) return;
 
   try {
     // Use server-side proxy — thumbnails are served through the tracker
-    const data = await apiGet(`/items/${spaceItemId}/presentation/deck-thumbnails`);
+    const refreshParam = forceRefresh ? "?refresh=1" : "";
+    const data = await apiGet(`/items/${spaceItemId}/presentation/deck-thumbnails${refreshParam}`);
     // Build DeckWright URL from the current browser hostname with port 2222
     // This makes it work regardless of which IP/hostname the user is viewing the tracker from
     const deckUrl = `${window.location.protocol}//${window.location.hostname}:2222`;
@@ -354,13 +361,16 @@ async function loadPresDeckThumbnails(slug) {
     if (data.thumbnails && data.thumbnails.length > 0) {
       content.innerHTML = `<div class="pres-deck-thumbnails" id="presDeckThumbs"></div>`;
       const grid = $("#presDeckThumbs");
+      // Cache-bust browser image cache when force-refreshing
+      const cacheBustSuffix = forceRefresh ? `${Date.now()}` : "";
       data.thumbnails.forEach((thumbUrl, i) => {
         const div = document.createElement("div");
         div.className = "pres-deck-thumb";
         div.title = `Slide ${i + 1} — click to open at this slide`;
         // Thumbnail URLs are tracker-local (served through the tracker proxy)
+        const imgSrc = cacheBustSuffix ? thumbUrl + (thumbUrl.includes("?") ? "&" : "?") + "t=" + cacheBustSuffix : thumbUrl;
         div.innerHTML = `
-          <img src="${esc(thumbUrl)}" alt="Slide ${i + 1}" loading="lazy">
+          <img src="${esc(imgSrc)}" alt="Slide ${i + 1}" loading="lazy">
           <div class="pres-deck-thumb-label">Slide ${i + 1}</div>
         `;
         div.addEventListener("click", () => {
