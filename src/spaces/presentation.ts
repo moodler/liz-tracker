@@ -154,8 +154,9 @@ const presentationApiRoutes: SpaceApiRoute[] = [
             const filename = urlPath.split("/").pop() || `thumb-${localThumbs.length}.png`;
             const cachePath = join(slugDir, filename);
 
-            // Fetch and cache if not already cached
-            if (!existsSync(cachePath)) {
+            // Fetch and cache if not already cached (or if cached file is empty/corrupt)
+            const needsFetch = !existsSync(cachePath) || readFileSync(cachePath).length === 0;
+            if (needsFetch) {
               try {
                 const imgRes = await fetch(srcUrl);
                 if (imgRes.ok) {
@@ -167,8 +168,13 @@ const presentationApiRoutes: SpaceApiRoute[] = [
               }
             }
 
-            // Return tracker-relative URL
-            localThumbs.push(`/api/v1/items/${item.id}/presentation/deck-thumb?file=${encodeURIComponent(filename)}`);
+            // Only return URL if the file was actually cached successfully
+            if (existsSync(cachePath)) {
+              localThumbs.push(`/api/v1/items/${item.id}/presentation/deck-thumb?file=${encodeURIComponent(filename)}`);
+            } else {
+              // Use the original DeckWright URL as fallback
+              localThumbs.push(srcUrl);
+            }
           }
           data.thumbnails = localThumbs;
         }

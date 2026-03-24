@@ -308,9 +308,11 @@ async function loadPresDeckThumbnails(slug) {
   try {
     // Use server-side proxy — thumbnails are served through the tracker
     const data = await apiGet(`/items/${spaceItemId}/presentation/deck-thumbnails`);
-    const deckUrl = data.deck_url || "";
+    // Build DeckWright URL from the current browser hostname with port 2222
+    // This makes it work regardless of which IP/hostname the user is viewing the tracker from
+    const deckUrl = `${window.location.protocol}//${window.location.hostname}:2222`;
 
-    // Set up toolbar button URLs now that we have deck_url from the server
+    // Set up toolbar button URLs
     const previewBtn = $("#presDeckPreview");
     if (previewBtn) previewBtn.addEventListener("click", () => window.open(`${deckUrl}/${slug}/`, "_blank"));
 
