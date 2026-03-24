@@ -40,6 +40,7 @@ function renderSpacePresentation(item) {
             <span style="font-size:0.8rem;color:var(--text-dim);">Deck source (read-only)</span>
             <div class="toolbar-spacer"></div>
             <span class="copy-btn-wrap"><button class="space-btn" id="presMdxCopyBtn" title="Copy MDX to clipboard">Copy</button><span class="copy-popup" id="presMdxCopyPopup">Copied!</span></span>
+            <button class="space-btn" id="presMdxRefresh" title="Reload deck source">&#x21bb;</button>
           </div>
           <div id="presMdxContent" class="pres-mdx-viewer">
             <div class="pres-mdx-empty">Loading deck source...</div>
@@ -50,6 +51,7 @@ function renderSpacePresentation(item) {
           ${deckSlug ? `
             <div class="pres-deck-toolbar">
               <span class="pres-deck-info">${esc(deckSlug)}</span>
+              <button class="space-btn" id="presDeckRefresh" title="Reload thumbnails">&#x21bb;</button>
               <button class="space-btn" id="presDeckOverview" title="Open overview">Overview</button>
               <button class="space-btn" id="presDeckPresenter" title="Open presenter view">Presenter</button>
               <button class="space-btn" id="presDeckPreview" title="Open live preview">Open Deck</button>
@@ -63,8 +65,10 @@ function renderSpacePresentation(item) {
               <div>No deck linked yet</div>
               <div class="pres-deck-config" id="presDeckConfigForm">
                 <label>Deck Slug</label>
-                <input type="text" id="presDeckSlugInput" placeholder="e.g. 2026-03-moodlemoot-china" value="${esc(deckSlug)}">
-                <button class="space-btn pres-deck-open-btn" id="presDeckSaveConfig">Link Deck</button>
+                <div class="pres-deck-config-row">
+                  <input type="text" id="presDeckSlugInput" placeholder="e.g. 2026-03-moodlemoot-china" value="${esc(deckSlug)}">
+                  <button class="space-btn pres-deck-save-btn" id="presDeckSaveConfig">Save</button>
+                </div>
               </div>
             </div>
           `}
@@ -239,10 +243,25 @@ function renderSpacePresentation(item) {
     });
   }
 
+  // ── Tab 2: Slides refresh ──
+  const mdxRefreshBtn = $("#presMdxRefresh");
+  if (mdxRefreshBtn) {
+    mdxRefreshBtn.addEventListener("click", () => {
+      presSlidesMdxLoaded = false;
+      loadPresMdx();
+    });
+  }
+
   // ── Tab 3: Deck (thumbnails + preview) ──
   if (deckSlug) {
     // Load thumbnails — button URLs will be set up after we get the deck_url from the server
     loadPresDeckThumbnails(deckSlug);
+
+    // Refresh button
+    const deckRefreshBtn = $("#presDeckRefresh");
+    if (deckRefreshBtn) {
+      deckRefreshBtn.addEventListener("click", () => loadPresDeckThumbnails(deckSlug));
+    }
 
     // Config gear button — show config form inline
     const configBtn = $("#presDeckConfig");
@@ -253,8 +272,10 @@ function renderSpacePresentation(item) {
         content.innerHTML = `
           <div class="pres-deck-config">
             <label>Deck Slug</label>
-            <input type="text" id="presDeckSlugInput" value="${esc(deckSlug)}">
-            <button class="space-btn pres-deck-open-btn" id="presDeckSaveConfig">Save</button>
+            <div class="pres-deck-config-row">
+              <input type="text" id="presDeckSlugInput" value="${esc(deckSlug)}">
+              <button class="space-btn pres-deck-save-btn" id="presDeckSaveConfig">Save</button>
+            </div>
           </div>
         `;
         $("#presDeckSaveConfig").addEventListener("click", () => savePresDeckConfig());
@@ -383,7 +404,7 @@ async function savePresDeckConfig() {
     toast("Failed to save deck config: " + (e.message || e), "error");
     if (saveBtn) {
       saveBtn.disabled = false;
-      saveBtn.textContent = "Link Deck";
+      saveBtn.textContent = "Save";
     }
   }
 }

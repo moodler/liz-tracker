@@ -474,24 +474,37 @@ async function handleApiRequest(
     }
 
     // ── Deck thumbnail serving (unauthenticated — browser <img> tags cannot send headers) ──
-    // GET /items/:id/presentation/deck-thumb?file=X — serve cached thumbnail without auth
+    // GET /items/:id/presentation/deck-thumb?file=X — serve cached thumbnail directly from cache dir
     if (
       parts[0] === "items" && parts.length === 4 &&
       parts[2] === "presentation" && parts[3] === "deck-thumb" && method === "GET"
     ) {
       const itemId = resolveItemId(parts[1]);
-      const plugin = getSpacePlugin("presentation");
-      if (plugin?.apiRoutes) {
-        const route = plugin.apiRoutes.find(r => r.path === "deck-thumb" && r.method === "GET");
-        if (route) {
-          const item = getWorkItem(itemId);
-          if (!item) return error(res, "Work item not found", 404);
-          if (item.space_type !== "presentation") {
-            return error(res, `Item is not a Presentation (space_type="${item.space_type}")`, 400);
-          }
-          return route.handler(req, res, item);
-        }
+      const item = getWorkItem(itemId);
+      if (!item) return error(res, "Work item not found", 404);
+
+      const spaceData = item.space_data ? JSON.parse(item.space_data) : {};
+      const deckSlug = spaceData.deck_slug;
+      if (!deckSlug) return error(res, "No deck configured", 400);
+
+      const file = params.get("file") || "";
+      if (!file || file.includes("..") || file.includes("/")) {
+        return error(res, "Invalid file parameter", 400);
       }
+
+      const cachePath = path.join(STORE_DIR, "deck-thumbs", deckSlug, file);
+      if (!fs.existsSync(cachePath)) return error(res, "Thumbnail not found", 404);
+
+      const data = fs.readFileSync(cachePath);
+      const ext = file.split(".").pop()?.toLowerCase() || "png";
+      const mimeMap: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", svg: "image/svg+xml" };
+      res.writeHead(200, {
+        "Content-Type": mimeMap[ext] || "image/png",
+        "Content-Length": data.length.toString(),
+        "Cache-Control": "public, max-age=86400",
+      });
+      res.end(data);
+      return;
     }
 
     // ── Section 4.8: API Authentication ──

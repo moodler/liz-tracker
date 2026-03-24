@@ -7963,14 +7963,6 @@
         font-size: 0.8rem;
         padding: 5px 10px;
       }
-      .pres-deck-open-btn {
-        background: var(--accent) !important;
-        color: var(--bg) !important;
-        font-weight: 600 !important;
-      }
-      .pres-deck-open-btn:hover {
-        opacity: 0.9;
-      }
       .pres-deck-content {
         flex: 1;
         overflow-y: auto;
@@ -8026,6 +8018,11 @@
         color: var(--text-muted);
         font-weight: 600;
       }
+      .pres-deck-config-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
       .pres-deck-config input {
         background: var(--bg-card);
         border: 1px solid var(--border);
@@ -8034,23 +8031,28 @@
         padding: 8px 12px;
         font-size: 0.85rem;
         outline: none;
-        width: 100%;
+        flex: 1;
       }
       .pres-deck-config input:focus {
         border-color: var(--highlight);
       }
-      .pres-deck-config .pres-deck-open-btn {
-        margin-top: 4px;
-        padding: 10px 20px !important;
-        font-size: 0.9rem !important;
-        border-radius: var(--radius);
+      .pres-deck-save-btn {
+        background: var(--accent) !important;
+        color: var(--bg) !important;
+        font-weight: 600 !important;
+        padding: 8px 16px !important;
+        font-size: 0.85rem !important;
         cursor: pointer;
+        white-space: nowrap;
         transition: opacity 0.15s, transform 0.1s;
       }
-      .pres-deck-config .pres-deck-open-btn:active {
+      .pres-deck-save-btn:hover {
+        opacity: 0.9;
+      }
+      .pres-deck-save-btn:active {
         transform: scale(0.97);
       }
-      .pres-deck-config .pres-deck-open-btn:disabled {
+      .pres-deck-save-btn:disabled {
         opacity: 0.6;
         cursor: wait;
       }
