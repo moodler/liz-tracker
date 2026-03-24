@@ -127,6 +127,34 @@ const presentationApiRoutes: SpaceApiRoute[] = [
       }
     },
   },
+  // GET /items/:id/presentation/deck-thumbnails — proxy DeckWright thumbnail API to avoid CORS
+  {
+    method: "GET",
+    path: "deck-thumbnails",
+    handler: async (_req, res, item) => {
+      const spaceData = parsePresentationSpaceData(item.space_data);
+      if (!spaceData.deck_slug || !spaceData.deck_url) {
+        return errorResponse(res, "No deck configured", 400);
+      }
+
+      const url = `${spaceData.deck_url}/api/thumbnails?deck=${encodeURIComponent(spaceData.deck_slug)}`;
+      try {
+        const upstream = await fetch(url);
+        if (!upstream.ok) return errorResponse(res, `DeckWright returned ${upstream.status}`, upstream.status);
+        const data = await upstream.json() as Record<string, unknown>;
+        // Prefix relative thumbnail URLs with the deck_url so the browser can load them directly
+        if (data.thumbnails && Array.isArray(data.thumbnails)) {
+          data.thumbnails = (data.thumbnails as string[]).map((t: string) =>
+            t.startsWith("http") ? t : `${spaceData.deck_url}${t}`
+          );
+        }
+        jsonResponse(res, data);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        errorResponse(res, `Failed to reach DeckWright: ${msg}`, 502);
+      }
+    },
+  },
 ];
 
 // ── Agent Reference ──
@@ -155,7 +183,8 @@ Use \`tracker_update_item\` to update description. Use the PATCH API route or \`
 
 API routes:
 - \`PATCH /items/:id/presentation/deck\` — update deck_slug and/or deck_url
-- \`GET /items/:id/presentation/deck-mdx\` — read deck.mdx content from DeckWright content directory`;
+- \`GET /items/:id/presentation/deck-mdx\` — read deck.mdx content from DeckWright content directory
+- \`GET /items/:id/presentation/deck-thumbnails\` — proxy DeckWright thumbnail API (avoids CORS)`;
 
 // ── Plugin Export ──
 

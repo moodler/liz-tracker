@@ -53,7 +53,7 @@ function renderSpacePresentation(item) {
               <span class="pres-deck-info">${esc(deckSlug)}</span>
               <button class="space-btn" id="presDeckOverview" title="Open overview">Overview</button>
               <button class="space-btn" id="presDeckPresenter" title="Open presenter view">Presenter</button>
-              <button class="space-btn pres-deck-open-btn" id="presDeckPreview" title="Open live preview">Open Deck</button>
+              <button class="space-btn" id="presDeckPreview" title="Open live preview">Open Deck</button>
               <button class="space-btn" id="presDeckConfig" title="Change deck">&#9881;</button>
             </div>
             <div class="pres-deck-content" id="presDeckContent">
@@ -321,9 +321,8 @@ async function loadPresDeckThumbnails(slug, baseUrl) {
   if (!content) return;
 
   try {
-    const resp = await fetch(`${baseUrl}/api/thumbnails?deck=${encodeURIComponent(slug)}`);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
+    // Use server-side proxy to avoid CORS issues with direct DeckWright requests
+    const data = await apiGet(`/items/${spaceItemId}/presentation/deck-thumbnails`);
 
     if (data.status === "generating") {
       content.innerHTML = '<div class="pres-deck-loading">Generating thumbnails...</div>';
@@ -340,8 +339,9 @@ async function loadPresDeckThumbnails(slug, baseUrl) {
         const div = document.createElement("div");
         div.className = "pres-deck-thumb";
         div.title = `Slide ${i + 1} — click to open at this slide`;
+        // Thumbnail URLs are already absolute (prefixed by server proxy)
         div.innerHTML = `
-          <img src="${esc(baseUrl + thumbUrl)}" alt="Slide ${i + 1}" loading="lazy">
+          <img src="${esc(thumbUrl)}" alt="Slide ${i + 1}" loading="lazy">
           <div class="pres-deck-thumb-label">Slide ${i + 1}</div>
         `;
         div.addEventListener("click", () => {
