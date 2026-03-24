@@ -16,7 +16,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | File | Description |
 | --- | --- |
 | `src/index.ts` | Entry point — init DB, start server, optionally start orchestrator |
-| `src/config.ts` | Config from env vars / `.env` file: PORT, STORE_DIR, TRACKER_PUBLIC_URL, TRACKER_SHORT_URL, OPENCODE_SERVER_URL, OPENCODE_PUBLIC_URL, ORCHESTRATOR_ENABLED, ORCHESTRATOR_INTERVAL, OPENCODE_MAX_CONCURRENT, OPENCODE_MAX_PER_PROJECT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL |
+| `src/config.ts` | Config from env vars / `.env` file: PORT, STORE_DIR, TRACKER_PUBLIC_URL, TRACKER_SHORT_URL, OPENCODE_SERVER_URL, OPENCODE_PUBLIC_URL, ORCHESTRATOR_ENABLED, ORCHESTRATOR_INTERVAL, OPENCODE_MAX_CONCURRENT, OPENCODE_MAX_PER_PROJECT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL, DECKWRIGHT_URL |
 | `src/logger.ts` | Pino logger with pino-pretty |
 | `src/db.ts` | SQLite database layer — schema, CRUD, events, migrations, activity logging |
 | `src/api.ts` | HTTP server — REST API + static file serving + MCP routing + generic space route dispatcher |

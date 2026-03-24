@@ -3,8 +3,9 @@
  *
  * Provides: presentationPlugin
  * Capabilities: versionHistory, liveRefresh
- * API routes: PATCH /items/:id/presentation/deck, GET /items/:id/presentation/deck-mdx
- * Dependencies: db.ts (updateWorkItem)
+ * API routes: PATCH /items/:id/presentation/deck, GET /items/:id/presentation/deck-mdx,
+ *             GET /items/:id/presentation/deck-thumbnails, GET /items/:id/presentation/deck-thumb
+ * Dependencies: db.ts (updateWorkItem), config.ts (DECKWRIGHT_URL, STORE_DIR)
  *
  * Tab-based workspace for developing presentations:
  * - Tab 1: Description (item description field, with version history)
@@ -13,25 +14,25 @@
  * - Discussion sidebar (always visible)
  */
 
-import { readFileSync } from "fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { updateWorkItem } from "../db.js";
+import { DECKWRIGHT_URL, STORE_DIR } from "../config.js";
 import type { SpacePlugin, SpaceApiRoute, WorkItem } from "./types.js";
 
 // ── Filesystem Constants ──
 
 const DECKWRIGHT_DECKS_DIR = join(process.env.HOME || "", "deckwright", "src", "content", "decks");
+const THUMB_CACHE_DIR = join(STORE_DIR, "deck-thumbs");
 
 // ── Data Layer ──
 
 interface PresentationSpaceData {
   deck_slug: string;
-  deck_url: string;
 }
 
 const DEFAULTS: PresentationSpaceData = {
   deck_slug: "",
-  deck_url: "",
 };
 
 function parsePresentationSpaceData(raw: string | null): PresentationSpaceData {
@@ -40,7 +41,6 @@ function parsePresentationSpaceData(raw: string | null): PresentationSpaceData {
     const parsed = JSON.parse(raw);
     return {
       deck_slug: typeof parsed.deck_slug === "string" ? parsed.deck_slug : "",
-      deck_url: typeof parsed.deck_url === "string" ? parsed.deck_url : "",
     };
   } catch {
     return { ...DEFAULTS };
@@ -52,7 +52,6 @@ function sanitizePresentationSpaceData(raw: string): string {
     const parsed = JSON.parse(raw);
     const clean: PresentationSpaceData = {
       deck_slug: typeof parsed.deck_slug === "string" ? parsed.deck_slug : "",
-      deck_url: typeof parsed.deck_url === "string" ? parsed.deck_url : "",
     };
     return JSON.stringify(clean);
   } catch {
@@ -91,7 +90,7 @@ function parseRequestBody(req: import("http").IncomingMessage): Promise<Record<s
 // ── API Routes ──
 
 const presentationApiRoutes: SpaceApiRoute[] = [
-  // PATCH /items/:id/presentation/deck — update deck configuration
+  // PATCH /items/:id/presentation/deck — update deck slug
   {
     method: "PATCH",
     path: "deck",
@@ -101,11 +100,10 @@ const presentationApiRoutes: SpaceApiRoute[] = [
       const spaceData = parsePresentationSpaceData(item.space_data);
 
       if (typeof body.deck_slug === "string") spaceData.deck_slug = body.deck_slug;
-      if (typeof body.deck_url === "string") spaceData.deck_url = body.deck_url;
 
       const updated = updateWorkItem(item.id, { space_data: JSON.stringify(spaceData) });
       if (!updated) return errorResponse(res, "Failed to update work item", 500);
-      jsonResponse(res, { deck_slug: spaceData.deck_slug, deck_url: spaceData.deck_url });
+      jsonResponse(res, { deck_slug: spaceData.deck_slug, deck_url: DECKWRIGHT_URL });
     },
   },
   // GET /items/:id/presentation/deck-mdx — read deck.mdx from DeckWright content directory
@@ -127,31 +125,94 @@ const presentationApiRoutes: SpaceApiRoute[] = [
       }
     },
   },
-  // GET /items/:id/presentation/deck-thumbnails — proxy DeckWright thumbnail API to avoid CORS
+  // GET /items/:id/presentation/deck-thumbnails — fetch thumbnail list, return tracker-proxied URLs
   {
     method: "GET",
     path: "deck-thumbnails",
     handler: async (_req, res, item) => {
       const spaceData = parsePresentationSpaceData(item.space_data);
-      if (!spaceData.deck_slug || !spaceData.deck_url) {
+      if (!spaceData.deck_slug) {
         return errorResponse(res, "No deck configured", 400);
       }
 
-      const url = `${spaceData.deck_url}/api/thumbnails?deck=${encodeURIComponent(spaceData.deck_slug)}`;
+      const url = `${DECKWRIGHT_URL}/api/thumbnails?deck=${encodeURIComponent(spaceData.deck_slug)}`;
       try {
         const upstream = await fetch(url);
         if (!upstream.ok) return errorResponse(res, `DeckWright returned ${upstream.status}`, upstream.status);
         const data = await upstream.json() as Record<string, unknown>;
-        // Prefix relative thumbnail URLs with the deck_url so the browser can load them directly
+
+        // Cache thumbnails and return tracker-local URLs
         if (data.thumbnails && Array.isArray(data.thumbnails)) {
-          data.thumbnails = (data.thumbnails as string[]).map((t: string) =>
-            t.startsWith("http") ? t : `${spaceData.deck_url}${t}`
-          );
+          const slugDir = join(THUMB_CACHE_DIR, spaceData.deck_slug);
+          mkdirSync(slugDir, { recursive: true });
+
+          const localThumbs: string[] = [];
+          for (const t of data.thumbnails as string[]) {
+            const srcUrl = t.startsWith("http") ? t : `${DECKWRIGHT_URL}${t}`;
+            // Extract filename from URL path
+            const urlPath = new URL(srcUrl).pathname;
+            const filename = urlPath.split("/").pop() || `thumb-${localThumbs.length}.png`;
+            const cachePath = join(slugDir, filename);
+
+            // Fetch and cache if not already cached
+            if (!existsSync(cachePath)) {
+              try {
+                const imgRes = await fetch(srcUrl);
+                if (imgRes.ok) {
+                  const buf = Buffer.from(await imgRes.arrayBuffer());
+                  writeFileSync(cachePath, buf);
+                }
+              } catch {
+                // Skip failed thumbnails
+              }
+            }
+
+            // Return tracker-relative URL
+            localThumbs.push(`/api/v1/items/${item.id}/presentation/deck-thumb?file=${encodeURIComponent(filename)}`);
+          }
+          data.thumbnails = localThumbs;
         }
+
+        // Include deck_url so UI can build external links (overview, presenter, open deck)
+        data.deck_url = DECKWRIGHT_URL;
+
         jsonResponse(res, data);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         errorResponse(res, `Failed to reach DeckWright: ${msg}`, 502);
+      }
+    },
+  },
+  // GET /items/:id/presentation/deck-thumb — serve a cached thumbnail image
+  {
+    method: "GET",
+    path: "deck-thumb",
+    handler: async (req, res, item) => {
+      const spaceData = parsePresentationSpaceData(item.space_data);
+      if (!spaceData.deck_slug) {
+        return errorResponse(res, "No deck configured", 400);
+      }
+
+      const reqUrl = new URL(req.url || "", "http://localhost");
+      const file = reqUrl.searchParams.get("file");
+      if (!file || file.includes("..") || file.includes("/")) {
+        return errorResponse(res, "Invalid file parameter", 400);
+      }
+
+      const cachePath = join(THUMB_CACHE_DIR, spaceData.deck_slug, file);
+      try {
+        const data = readFileSync(cachePath);
+        const ext = file.split(".").pop()?.toLowerCase() || "png";
+        const mimeMap: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", svg: "image/svg+xml" };
+        const mime = mimeMap[ext] || "image/png";
+        res.writeHead(200, {
+          "Content-Type": mime,
+          "Content-Length": data.length.toString(),
+          "Cache-Control": "public, max-age=86400",
+        });
+        res.end(data);
+      } catch {
+        errorResponse(res, "Thumbnail not found", 404);
       }
     },
   },
@@ -171,20 +232,20 @@ Tab-based workspace for developing presentations with DeckWright integration:
 ### space_data format
 \`\`\`json
 {
-  "deck_slug": "2026-03-moodlemoot-china",
-  "deck_url": "http://192.168.50.19:2222"
+  "deck_slug": "2026-03-moodlemoot-china"
 }
 \`\`\`
 
 - \`deck_slug\` — DeckWright deck directory name (under ~/deckwright/src/content/decks/)
-- \`deck_url\` — Base URL of the DeckWright server (e.g. http://192.168.50.19:2222)
+- DeckWright URL is configured via \`DECKWRIGHT_URL\` environment variable (default: http://192.168.50.19:2222)
 
 Use \`tracker_update_item\` to update description. Use the PATCH API route or \`tracker_update_item\` with \`space_data\` to update deck config.
 
 API routes:
-- \`PATCH /items/:id/presentation/deck\` — update deck_slug and/or deck_url
+- \`PATCH /items/:id/presentation/deck\` — update deck_slug
 - \`GET /items/:id/presentation/deck-mdx\` — read deck.mdx content from DeckWright content directory
-- \`GET /items/:id/presentation/deck-thumbnails\` — proxy DeckWright thumbnail API (avoids CORS)`;
+- \`GET /items/:id/presentation/deck-thumbnails\` — fetch thumbnail list from DeckWright, cache and serve through tracker
+- \`GET /items/:id/presentation/deck-thumb?file=X\` — serve a cached thumbnail image`;
 
 // ── Plugin Export ──
 

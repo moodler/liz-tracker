@@ -5,7 +5,6 @@ function renderSpacePresentation(item) {
   const description = item.description || "";
   const spaceData = item.space_data ? (typeof item.space_data === "string" ? JSON.parse(item.space_data) : item.space_data) : {};
   const deckSlug = spaceData.deck_slug || "";
-  const deckUrl = spaceData.deck_url || "";
 
   spaceBody.innerHTML = `
     <div class="pres-space" id="presSpace">
@@ -65,8 +64,6 @@ function renderSpacePresentation(item) {
               <div class="pres-deck-config" id="presDeckConfigForm">
                 <label>Deck Slug</label>
                 <input type="text" id="presDeckSlugInput" placeholder="e.g. 2026-03-moodlemoot-china" value="${esc(deckSlug)}">
-                <label>DeckWright URL</label>
-                <input type="text" id="presDeckUrlInput" placeholder="e.g. http://192.168.50.19:2222" value="${esc(deckUrl)}">
                 <button class="space-btn pres-deck-open-btn" id="presDeckSaveConfig">Link Deck</button>
               </div>
             </div>
@@ -243,16 +240,9 @@ function renderSpacePresentation(item) {
   }
 
   // ── Tab 3: Deck (thumbnails + preview) ──
-  if (deckSlug && deckUrl) {
-    // Open deck buttons
-    const previewBtn = $("#presDeckPreview");
-    if (previewBtn) previewBtn.addEventListener("click", () => window.open(`${deckUrl}/${deckSlug}/`, "_blank"));
-
-    const overviewBtn = $("#presDeckOverview");
-    if (overviewBtn) overviewBtn.addEventListener("click", () => window.open(`${deckUrl}/${deckSlug}/overview`, "_blank"));
-
-    const presenterBtn = $("#presDeckPresenter");
-    if (presenterBtn) presenterBtn.addEventListener("click", () => window.open(`${deckUrl}/${deckSlug}/presenter`, "_blank"));
+  if (deckSlug) {
+    // Load thumbnails — button URLs will be set up after we get the deck_url from the server
+    loadPresDeckThumbnails(deckSlug);
 
     // Config gear button — show config form inline
     const configBtn = $("#presDeckConfig");
@@ -264,17 +254,12 @@ function renderSpacePresentation(item) {
           <div class="pres-deck-config">
             <label>Deck Slug</label>
             <input type="text" id="presDeckSlugInput" value="${esc(deckSlug)}">
-            <label>DeckWright URL</label>
-            <input type="text" id="presDeckUrlInput" value="${esc(deckUrl)}">
             <button class="space-btn pres-deck-open-btn" id="presDeckSaveConfig">Save</button>
           </div>
         `;
         $("#presDeckSaveConfig").addEventListener("click", () => savePresDeckConfig());
       });
     }
-
-    // Load thumbnails
-    loadPresDeckThumbnails(deckSlug, deckUrl);
   } else {
     // Config form for linking a deck
     const saveBtn = $("#presDeckSaveConfig");
@@ -316,19 +301,30 @@ async function loadPresMdx() {
 // ── Deck Thumbnails ──
 let presThumbnailPollTimer = null;
 
-async function loadPresDeckThumbnails(slug, baseUrl) {
+async function loadPresDeckThumbnails(slug) {
   const content = $("#presDeckContent");
   if (!content) return;
 
   try {
-    // Use server-side proxy to avoid CORS issues with direct DeckWright requests
+    // Use server-side proxy — thumbnails are served through the tracker
     const data = await apiGet(`/items/${spaceItemId}/presentation/deck-thumbnails`);
+    const deckUrl = data.deck_url || "";
+
+    // Set up toolbar button URLs now that we have deck_url from the server
+    const previewBtn = $("#presDeckPreview");
+    if (previewBtn) previewBtn.addEventListener("click", () => window.open(`${deckUrl}/${slug}/`, "_blank"));
+
+    const overviewBtn = $("#presDeckOverview");
+    if (overviewBtn) overviewBtn.addEventListener("click", () => window.open(`${deckUrl}/${slug}/overview`, "_blank"));
+
+    const presenterBtn = $("#presDeckPresenter");
+    if (presenterBtn) presenterBtn.addEventListener("click", () => window.open(`${deckUrl}/${slug}/presenter`, "_blank"));
 
     if (data.status === "generating") {
       content.innerHTML = '<div class="pres-deck-loading">Generating thumbnails...</div>';
       // Poll until ready
       if (presThumbnailPollTimer) clearTimeout(presThumbnailPollTimer);
-      presThumbnailPollTimer = setTimeout(() => loadPresDeckThumbnails(slug, baseUrl), 3000);
+      presThumbnailPollTimer = setTimeout(() => loadPresDeckThumbnails(slug), 3000);
       return;
     }
 
@@ -339,13 +335,13 @@ async function loadPresDeckThumbnails(slug, baseUrl) {
         const div = document.createElement("div");
         div.className = "pres-deck-thumb";
         div.title = `Slide ${i + 1} — click to open at this slide`;
-        // Thumbnail URLs are already absolute (prefixed by server proxy)
+        // Thumbnail URLs are tracker-local (served through the tracker proxy)
         div.innerHTML = `
           <img src="${esc(thumbUrl)}" alt="Slide ${i + 1}" loading="lazy">
           <div class="pres-deck-thumb-label">Slide ${i + 1}</div>
         `;
         div.addEventListener("click", () => {
-          window.open(`${baseUrl}/${slug}/#${i + 1}`, "_blank");
+          window.open(`${deckUrl}/${slug}/#${i + 1}`, "_blank");
         });
         grid.appendChild(div);
       });
@@ -361,15 +357,12 @@ async function loadPresDeckThumbnails(slug, baseUrl) {
 async function savePresDeckConfig() {
   if (!spaceItemId) return;
   const slugInput = $("#presDeckSlugInput");
-  const urlInput = $("#presDeckUrlInput");
   const saveBtn = $("#presDeckSaveConfig");
-  if (!slugInput || !urlInput) return;
+  if (!slugInput) return;
 
   const slug = slugInput.value.trim();
-  const url = urlInput.value.trim().replace(/\/+$/, ""); // strip trailing slash
 
   if (!slug) { toast("Deck slug is required", "error"); return; }
-  if (!url) { toast("DeckWright URL is required", "error"); return; }
 
   // Show saving feedback on button
   if (saveBtn) {
@@ -380,7 +373,6 @@ async function savePresDeckConfig() {
   try {
     await apiPatch(`/items/${spaceItemId}/presentation/deck`, {
       deck_slug: slug,
-      deck_url: url,
     });
     toast("Deck linked!", "success");
     // Full re-render to show the deck thumbnails view

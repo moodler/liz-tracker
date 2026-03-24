@@ -357,6 +357,18 @@ export const ITEM_DISPATCH_FAILURE_LIMIT = parseInt(
   10,
 );
 
+// ── DeckWright config ──
+
+/**
+ * Base URL of the DeckWright presentation server.
+ * Used by the presentation space plugin for thumbnail proxying and deck links.
+ * Same for all decks in a given tracker installation.
+ * Set via DECKWRIGHT_URL env var or .env file.
+ */
+export const DECKWRIGHT_URL = (
+  process.env.DECKWRIGHT_URL || "http://192.168.50.19:2222"
+).replace(/\/+$/, ""); // Strip trailing slash
+
 // ── AI Categorization ──
 
 /**
