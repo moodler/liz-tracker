@@ -15754,9 +15754,6 @@
           if (location.hash) {
             history.replaceState(null, "", location.pathname + location.search);
           }
-          // Clear AI auto-trigger timer
-          clearTimeout(_aiDetailTimer);
-          _aiDetailTimer = null;
         }
 
         detailOverlay.addEventListener("click", closeDetail);
@@ -16492,9 +16489,6 @@
           createModal.classList.remove("open");
           createModalDirty = false;
           if (createBlockerPickerInstance) createBlockerPickerInstance.reset();
-          // Clear AI auto-trigger timer
-          clearTimeout(_aiCreateTimer);
-          _aiCreateTimer = null;
         }
 
         function markCreateModalDirty() {
