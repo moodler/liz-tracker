@@ -1,12 +1,11 @@
 // ── Space: Presentation ──
 let presSaveTimer = null;
-let presSlidesSaveTimer = null;
 
 function renderSpacePresentation(item) {
   const description = item.description || "";
   const spaceData = item.space_data ? (typeof item.space_data === "string" ? JSON.parse(item.space_data) : item.space_data) : {};
-  const slidesMd = spaceData.slides_md || "";
-  const artifactUrl = spaceData.artifact_url || "";
+  const deckSlug = spaceData.deck_slug || "";
+  const deckUrl = spaceData.deck_url || "";
 
   spaceBody.innerHTML = `
     <div class="pres-space" id="presSpace">
@@ -14,7 +13,7 @@ function renderSpacePresentation(item) {
         <div class="pres-tab-bar">
           <button class="pres-tab active" data-tab="description">Description</button>
           <button class="pres-tab" data-tab="slides">Slides</button>
-          <button class="pres-tab" data-tab="artifact">Artifact</button>
+          <button class="pres-tab" data-tab="deck">Deck</button>
         </div>
         <!-- Tab 1: Description -->
         <div class="pres-tab-panel active" id="presTabDescription">
@@ -36,27 +35,42 @@ function renderSpacePresentation(item) {
           </div>
           <div class="pres-preview-area" id="presPreviewArea" style="display:none;"></div>
         </div>
-        <!-- Tab 2: Slides -->
+        <!-- Tab 2: Slides (read-only MDX viewer) -->
         <div class="pres-tab-panel" id="presTabSlides">
           <div class="pres-editor-toolbar">
-            <button class="space-btn" id="presRebuildBtn" title="Build and publish slides as artefact">Rebuild</button>
+            <span style="font-size:0.8rem;color:var(--text-dim);">Deck source (read-only)</span>
             <div class="toolbar-spacer"></div>
-            <span class="pres-save-indicator" id="presSlidesSaveIndicator"></span>
+            <span class="copy-btn-wrap"><button class="space-btn" id="presMdxCopyBtn" title="Copy MDX to clipboard">Copy</button><span class="copy-popup" id="presMdxCopyPopup">Copied!</span></span>
           </div>
-          <div class="pres-editor-area">
-            <textarea id="presSlidesTextarea" placeholder="Write your slides in Markdown...&#10;&#10;Use --- to separate slides">${esc(slidesMd)}</textarea>
+          <div id="presMdxContent" class="pres-mdx-viewer">
+            <div class="pres-mdx-empty">Loading deck source...</div>
           </div>
         </div>
-        <!-- Tab 3: Artifact -->
-        <div class="pres-tab-panel" id="presTabArtifact">
-          <div class="pres-artifact-toolbar">
-            <input type="text" id="presArtifactUrl" placeholder="Enter artifact URL (https://...)" value="${esc(artifactUrl)}">
-            <button class="space-btn" id="presArtifactLoad">Load</button>
-            <button class="space-btn" id="presArtifactOpen" title="Open in new tab">↗</button>
-          </div>
-          <div class="pres-artifact-frame" id="presArtifactFrame">
-            ${artifactUrl ? `<iframe id="presArtifactIframe" src="${esc(artifactUrl)}" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>` : '<div class="pres-artifact-empty">Enter an artifact URL above to embed it here</div>'}
-          </div>
+        <!-- Tab 3: Deck (thumbnails + preview) -->
+        <div class="pres-tab-panel" id="presTabDeck">
+          ${deckSlug ? `
+            <div class="pres-deck-toolbar">
+              <span class="pres-deck-info">${esc(deckSlug)}</span>
+              <button class="space-btn" id="presDeckOverview" title="Open overview">Overview</button>
+              <button class="space-btn" id="presDeckPresenter" title="Open presenter view">Presenter</button>
+              <button class="space-btn pres-deck-open-btn" id="presDeckPreview" title="Open live preview">Open Deck</button>
+              <button class="space-btn" id="presDeckConfig" title="Change deck">&#9881;</button>
+            </div>
+            <div class="pres-deck-content" id="presDeckContent">
+              <div class="pres-deck-loading">Loading thumbnails...</div>
+            </div>
+          ` : `
+            <div class="pres-deck-empty" id="presDeckEmpty">
+              <div>No deck linked yet</div>
+              <div class="pres-deck-config" id="presDeckConfigForm">
+                <label>Deck Slug</label>
+                <input type="text" id="presDeckSlugInput" placeholder="e.g. 2026-03-moodlemoot-china" value="${esc(deckSlug)}">
+                <label>DeckWright URL</label>
+                <input type="text" id="presDeckUrlInput" placeholder="e.g. http://192.168.50.19:2222" value="${esc(deckUrl)}">
+                <button class="space-btn pres-deck-open-btn" id="presDeckSaveConfig">Link Deck</button>
+              </div>
+            </div>
+          `}
         </div>
       </div>
       <div class="pres-sidebar">
@@ -95,6 +109,11 @@ function renderSpacePresentation(item) {
       $$("#presSpace .pres-tab-panel").forEach(p => p.classList.remove("active"));
       const panel = $(`#presTab${target.charAt(0).toUpperCase() + target.slice(1)}`);
       if (panel) panel.classList.add("active");
+
+      // Lazy-load MDX content on first Slides tab visit
+      if (target === "slides" && !presSlidesMdxLoaded) {
+        loadPresMdx();
+      }
     });
   });
 
@@ -205,72 +224,62 @@ function renderSpacePresentation(item) {
     }
   });
 
-  // Load latest slides from disk (may be newer than DB if edited via Slidev dev server)
-  if (spaceItemId) {
-    apiGet(`/items/${spaceItemId}/presentation/slides-file`).then(data => {
-      if (data.slides_md && data.source === "file") {
-        const ta = document.getElementById("presSlidesTextarea");
-        if (ta && ta.value !== data.slides_md) {
-          ta.value = data.slides_md;
-        }
+  // ── Tab 2: Slides (read-only MDX) ──
+  // Copy MDX button
+  const mdxCopyBtn = $("#presMdxCopyBtn");
+  if (mdxCopyBtn) {
+    mdxCopyBtn.addEventListener("click", () => {
+      const mdxEl = $("#presMdxContent");
+      if (!mdxEl) return;
+      const text = mdxEl.textContent || "";
+      const showPopup = () => {
+        const popup = $("#presMdxCopyPopup");
+        if (popup) { popup.classList.add("show"); setTimeout(() => popup.classList.remove("show"), 1800); }
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(showPopup).catch(() => { toast("Failed to copy", "error"); });
       }
-    }).catch(() => {}); // Non-critical — fall back to DB content
+    });
   }
 
-  // ── Tab 2: Slides ──
-  const slidesTextarea = $("#presSlidesTextarea");
-  const slidesSaveIndicator = $("#presSlidesSaveIndicator");
+  // ── Tab 3: Deck (thumbnails + preview) ──
+  if (deckSlug && deckUrl) {
+    // Open deck buttons
+    const previewBtn = $("#presDeckPreview");
+    if (previewBtn) previewBtn.addEventListener("click", () => window.open(`${deckUrl}/${deckSlug}/`, "_blank"));
 
-  slidesTextarea.addEventListener("input", () => {
-    slidesSaveIndicator.textContent = "Unsaved changes...";
-    slidesSaveIndicator.className = "pres-save-indicator";
-    if (presSlidesSaveTimer) clearTimeout(presSlidesSaveTimer);
-    presSlidesSaveTimer = setTimeout(() => savePresSlides(), 2000);
-  });
+    const overviewBtn = $("#presDeckOverview");
+    if (overviewBtn) overviewBtn.addEventListener("click", () => window.open(`${deckUrl}/${deckSlug}/overview`, "_blank"));
 
-  slidesTextarea.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-      e.preventDefault();
-      savePresSlides();
+    const presenterBtn = $("#presDeckPresenter");
+    if (presenterBtn) presenterBtn.addEventListener("click", () => window.open(`${deckUrl}/${deckSlug}/presenter`, "_blank"));
+
+    // Config gear button — show config form inline
+    const configBtn = $("#presDeckConfig");
+    if (configBtn) {
+      configBtn.addEventListener("click", () => {
+        const content = $("#presDeckContent");
+        if (!content) return;
+        content.innerHTML = `
+          <div class="pres-deck-config">
+            <label>Deck Slug</label>
+            <input type="text" id="presDeckSlugInput" value="${esc(deckSlug)}">
+            <label>DeckWright URL</label>
+            <input type="text" id="presDeckUrlInput" value="${esc(deckUrl)}">
+            <button class="space-btn pres-deck-open-btn" id="presDeckSaveConfig">Save</button>
+          </div>
+        `;
+        $("#presDeckSaveConfig").addEventListener("click", () => savePresDeckConfig());
+      });
     }
-  });
 
-  // Rebuild button — build and publish slides as artefact
-  $("#presRebuildBtn").addEventListener("click", async () => {
-    const btn = $("#presRebuildBtn");
-    btn.disabled = true;
-    btn.textContent = "Rebuilding...";
-    try {
-      const result = await apiPost(`/items/${spaceItemId}/presentation/rebuild`, {});
-      toast("Slides published!", "success");
-      // Update artifact URL input if it changed
-      if (result.artefact_url) {
-        const urlInput = $("#presArtifactUrl");
-        if (urlInput) urlInput.value = result.artefact_url;
-      }
-    } catch (e) {
-      toast("Rebuild failed: " + (e.message || e), "error");
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "Rebuild";
-    }
-  });
-
-  // ── Tab 3: Artifact ──
-  const artifactUrlInput = $("#presArtifactUrl");
-
-  $("#presArtifactLoad").addEventListener("click", () => loadPresArtifact());
-  artifactUrlInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      loadPresArtifact();
-    }
-  });
-
-  $("#presArtifactOpen").addEventListener("click", () => {
-    const url = artifactUrlInput.value.trim();
-    if (url) window.open(url, "_blank");
-  });
+    // Load thumbnails
+    loadPresDeckThumbnails(deckSlug, deckUrl);
+  } else {
+    // Config form for linking a deck
+    const saveBtn = $("#presDeckSaveConfig");
+    if (saveBtn) saveBtn.addEventListener("click", () => savePresDeckConfig());
+  }
 
   // ── Discussion ──
   $("#presCommentSubmit").addEventListener("click", () => submitPresComment());
@@ -280,6 +289,98 @@ function renderSpacePresentation(item) {
       submitPresComment();
     }
   });
+}
+
+// ── MDX Loading ──
+let presSlidesMdxLoaded = false;
+
+async function loadPresMdx() {
+  if (!spaceItemId) return;
+  const mdxEl = $("#presMdxContent");
+  if (!mdxEl) return;
+
+  try {
+    const data = await apiGet(`/items/${spaceItemId}/presentation/deck-mdx`);
+    presSlidesMdxLoaded = true;
+    if (data.mdx) {
+      mdxEl.textContent = data.mdx;
+      mdxEl.classList.remove("pres-mdx-empty");
+    } else {
+      mdxEl.innerHTML = `<div class="pres-mdx-empty">${esc(data.error || "No deck content available")}</div>`;
+    }
+  } catch (e) {
+    mdxEl.innerHTML = `<div class="pres-mdx-empty">Failed to load deck source</div>`;
+  }
+}
+
+// ── Deck Thumbnails ──
+let presThumbnailPollTimer = null;
+
+async function loadPresDeckThumbnails(slug, baseUrl) {
+  const content = $("#presDeckContent");
+  if (!content) return;
+
+  try {
+    const resp = await fetch(`${baseUrl}/api/thumbnails?deck=${encodeURIComponent(slug)}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    if (data.status === "generating") {
+      content.innerHTML = '<div class="pres-deck-loading">Generating thumbnails...</div>';
+      // Poll until ready
+      if (presThumbnailPollTimer) clearTimeout(presThumbnailPollTimer);
+      presThumbnailPollTimer = setTimeout(() => loadPresDeckThumbnails(slug, baseUrl), 3000);
+      return;
+    }
+
+    if (data.thumbnails && data.thumbnails.length > 0) {
+      content.innerHTML = `<div class="pres-deck-thumbnails" id="presDeckThumbs"></div>`;
+      const grid = $("#presDeckThumbs");
+      data.thumbnails.forEach((thumbUrl, i) => {
+        const div = document.createElement("div");
+        div.className = "pres-deck-thumb";
+        div.title = `Slide ${i + 1} — click to open at this slide`;
+        div.innerHTML = `
+          <img src="${esc(baseUrl + thumbUrl)}" alt="Slide ${i + 1}" loading="lazy">
+          <div class="pres-deck-thumb-label">Slide ${i + 1}</div>
+        `;
+        div.addEventListener("click", () => {
+          window.open(`${baseUrl}/${slug}/#${i + 1}`, "_blank");
+        });
+        grid.appendChild(div);
+      });
+    } else {
+      content.innerHTML = '<div class="pres-deck-loading">No slides found in this deck</div>';
+    }
+  } catch (e) {
+    content.innerHTML = `<div class="pres-deck-loading">Failed to load thumbnails: ${esc(e.message || String(e))}</div>`;
+  }
+}
+
+// ── Deck Config ──
+async function savePresDeckConfig() {
+  if (!spaceItemId) return;
+  const slugInput = $("#presDeckSlugInput");
+  const urlInput = $("#presDeckUrlInput");
+  if (!slugInput || !urlInput) return;
+
+  const slug = slugInput.value.trim();
+  const url = urlInput.value.trim().replace(/\/+$/, ""); // strip trailing slash
+
+  if (!slug) { toast("Deck slug is required", "error"); return; }
+  if (!url) { toast("DeckWright URL is required", "error"); return; }
+
+  try {
+    await apiPatch(`/items/${spaceItemId}/presentation/deck`, {
+      deck_slug: slug,
+      deck_url: url,
+    });
+    toast("Deck linked!", "success");
+    // Refresh the overlay to show the new deck
+    if (typeof refreshSpaceOverlay === "function") refreshSpaceOverlay();
+  } catch (e) {
+    toast("Failed to save deck config: " + (e.message || e), "error");
+  }
 }
 
 /** Update word count for presentation description. */
@@ -412,67 +513,6 @@ async function savePresDescription(createVersion = false) {
   }
 }
 
-/** Save slides markdown content. */
-async function savePresSlides() {
-  if (!spaceItemId) return;
-  const textarea = $("#presSlidesTextarea");
-  if (!textarea) return;
-  const slidesSaveIndicator = $("#presSlidesSaveIndicator");
-
-  try {
-    slidesSaveIndicator.textContent = "Saving...";
-    slidesSaveIndicator.className = "pres-save-indicator saving";
-    await apiPatch(`/items/${spaceItemId}/presentation/slides`, {
-      slides_md: textarea.value,
-      actor: DEFAULT_AUTHOR,
-    });
-    slidesSaveIndicator.textContent = "Saved";
-    slidesSaveIndicator.className = "pres-save-indicator saved";
-    setTimeout(() => {
-      if (slidesSaveIndicator.textContent === "Saved") {
-        slidesSaveIndicator.textContent = "";
-      }
-    }, 3000);
-  } catch (e) {
-    slidesSaveIndicator.textContent = "Save failed!";
-    slidesSaveIndicator.className = "pres-save-indicator";
-    toast("Failed to save slides: " + e.message, "error");
-  }
-}
-
-/** Load artifact URL into iframe and save it. */
-async function loadPresArtifact() {
-  const urlInput = $("#presArtifactUrl");
-  const frame = $("#presArtifactFrame");
-  if (!urlInput || !frame) return;
-
-  const url = urlInput.value.trim();
-  if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
-    toast("URL must start with http:// or https://", "error");
-    return;
-  }
-
-  // Save URL to space_data
-  if (spaceItemId) {
-    try {
-      await apiPatch(`/items/${spaceItemId}/presentation/artifact`, {
-        artifact_url: url,
-        actor: DEFAULT_AUTHOR,
-      });
-    } catch (e) {
-      toast("Failed to save artifact URL: " + e.message, "error");
-      return;
-    }
-  }
-
-  // Update iframe
-  if (url) {
-    frame.innerHTML = `<iframe id="presArtifactIframe" src="${esc(url)}" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>`;
-  } else {
-    frame.innerHTML = '<div class="pres-artifact-empty">Enter an artifact URL above to embed it here</div>';
-  }
-}
-
 /** Submit a comment in the presentation discussion. */
 async function submitPresComment() {
   const input = $("#presCommentInput");
@@ -491,7 +531,7 @@ async function submitPresComment() {
     renderPresDiscussion(item.comments || []);
     toast("Comment posted");
   } catch (e) {
-    toast("Failed to post comment: " + e.message, "error");
+    toast("Failed to post comment: " + (e.message || e), "error");
   }
 }
 
@@ -500,13 +540,14 @@ registerSpacePlugin({
   name: "presentation",
   label: "Presentation",
   icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
-  description: "Tab-based workspace for developing presentations",
+  description: "Tab-based workspace for developing presentations with DeckWright",
   capabilities: { versionHistory: true, liveRefresh: true },
   render: renderSpacePresentation,
   refreshDiscussion: renderPresDiscussion,
   refreshDashboard: null,
   cleanup: () => {
     if (presSaveTimer) { clearTimeout(presSaveTimer); presSaveTimer = null; }
-    if (presSlidesSaveTimer) { clearTimeout(presSlidesSaveTimer); presSlidesSaveTimer = null; }
+    if (presThumbnailPollTimer) { clearTimeout(presThumbnailPollTimer); presThumbnailPollTimer = null; }
+    presSlidesMdxLoaded = false;
   },
 });

@@ -44,7 +44,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/spaces/engagement.ts` | Parser, 6 API routes, 7 MCP tools |
 | `src/spaces/scheduled.ts` | Parser, sanitizer, 4 API routes, 4 MCP tools |
 | `src/spaces/travel.ts` | Parser, sanitizer, deep merge, 4 API routes, 4 MCP tools, cover image |
-| `src/spaces/presentation.ts` | Parser, sanitizer, 4 API routes (slides/artifact PATCH, slides-file GET, rebuild POST), filesystem sync |
+| `src/spaces/presentation.ts` | Parser, sanitizer, 2 API routes (deck PATCH, deck-mdx GET), DeckWright integration |
 | `src/ui/core.html` | Dashboard shell + space plugin registry + overlay shell |
 | `src/ui/spaces/standard.js` | Registry entry only (~15 lines) |
 | `src/ui/spaces/song.js` | Song UI renderer (~731 lines) |
@@ -52,7 +52,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/ui/spaces/engagement.js` | Engagement UI renderer (~680 lines) |
 | `src/ui/spaces/scheduled.js` | Scheduled UI renderer (~850 lines) |
 | `src/ui/spaces/travel.js` | Travel UI renderer — day-by-day timeline, gap detection, segment cards (~1079 lines) |
-| `src/ui/spaces/presentation.js` | Presentation UI renderer — 3 tabs (Description, Slides, Artifact) + discussion sidebar (~512 lines) |
+| `src/ui/spaces/presentation.js` | Presentation UI renderer — 3 tabs (Description, Slides, Deck) + discussion sidebar + DeckWright thumbnails |
 | `scripts/build-ui.js` | UI pre-compilation script (~60 lines, zero dependencies) |
 
 ## Development
@@ -503,7 +503,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 | `engagement` | briefcase (SVG) | Coordination workspace for contractors, services, and external engagements — structured dashboard (contact, quote, milestones, documents, comms log) + discussion sidebar. Uses `space_data` JSON for all structured content. |
 | `scheduled` | clock (SVG) | Scheduled task workspace — schedule config (frequency, time, days), live status panel (next/last run, run count), task instructions editor, TODO list, IGNORE list + run history sidebar. Useful for recurring automated tasks. `space_data` stores a JSON string (see format below). |
 | `travel` | plane (SVG) | Trip planning workspace — day-by-day itinerary with timezone-aware segments (flights, lodging, transport, activities, restaurants, meetings, notes), gap detection, cover image support, and MCP tools for programmatic segment management. `space_data` stores trip metadata + segments array as JSON. |
-| `presentation` | monitor (SVG) | Presentation development workspace — 3-tab layout (Description, Slides, Artifact) with discussion sidebar, filesystem sync to Slidev, and live rebuild. `space_data` stores `slides_md` and `artifact_url`. |
+| `presentation` | monitor (SVG) | Presentation development workspace — 3-tab layout (Description, Slides, Deck) with discussion sidebar and DeckWright integration. `space_data` stores `deck_slug` and `deck_url`. |
 
 #### Scheduled Task `space_data` Format
 
@@ -675,10 +675,8 @@ tracker_add_travel_segment({
 - `POST /items/:id/travel/segments` — add travel segments (`{ segments: [...] }`)
 - `PATCH /items/:id/travel/segments` — update a travel segment by ID (`{ id: "seg_abc", ...fields }`) — deep merge for nested objects
 - `DELETE /items/:id/travel/segments` — remove travel segments (`{ ids: ["seg_abc", ...] }`)
-- `PATCH /items/:id/presentation/slides` — save slides markdown (syncs to disk at ~/liz/data/slides/slides_{KEY}.md)
-- `PATCH /items/:id/presentation/artifact` — update artifact URL
-- `GET /items/:id/presentation/slides-file` — read slides from disk (may be newer than DB if edited externally)
-- `POST /items/:id/presentation/rebuild` — build slides and publish as artifact (auto-updates artifact URL)
+- `PATCH /items/:id/presentation/deck` — update deck config (`{ deck_slug?, deck_url? }`)
+- `GET /items/:id/presentation/deck-mdx` — read deck.mdx content from DeckWright content directory
 
 ### UI Sections
 
