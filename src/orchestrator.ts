@@ -2101,9 +2101,8 @@ async function _dispatchViaRunnerImpl(
             { itemId: item.id, sessionId, sdkSessionId: evt.sdkSessionId, pid: evt.pid, apiKeySource: evt.apiKeySource },
             "Runner session started",
           );
-          // Warn if session is NOT using OAuth (Max subscription) — this means
-          // it fell back to an API key, which shouldn't happen since we strip
-          // ANTHROPIC_API_KEY from the runner environment (TRACK-262).
+          // Notify about auth source in the agent conversation so the user sees
+          // it even when not watching the tracker dashboard (TRACK-262).
           if (evt.apiKeySource && evt.apiKeySource !== "oauth") {
             const itemKey = getWorkItemKey(item);
             logger.warn(
@@ -2111,6 +2110,11 @@ async function _dispatchViaRunnerImpl(
               `Session using "${evt.apiKeySource}" auth instead of OAuth — expected OAuth (Max subscription). Check 'claude login' status on this machine.`,
             );
             fireApiKeyNotification(itemKey, evt.apiKeySource).catch(() => {});
+            // Steer the agent to inform the user directly in conversation
+            steerSession(sessionId, `⚠️ AUTH NOTICE: This session started with "${evt.apiKeySource}" authentication instead of OAuth (Max subscription). This means the session is using an API key rather than the Max subscription. Please inform Martin that 'claude login' needs to be run on the server to restore OAuth authentication, and include this notice in your first response.`);
+          } else if (evt.apiKeySource === "oauth") {
+            // Confirm OAuth is active so Martin sees it in the conversation
+            steerSession(sessionId, `✅ AUTH OK: This session is using OAuth authentication (Max subscription). No action needed. You do not need to mention this to the user unless they ask about auth status.`);
           }
           break;
 
