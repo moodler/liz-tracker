@@ -72,6 +72,7 @@ import { logger } from "./logger.js";
 import { execFileSync, spawn, type ChildProcess } from "child_process";
 import { createInterface } from "readline";
 import type { RunnerEvent, RunnerConfig } from "./runner-types.js";
+import { computeNextRun } from "./spaces/scheduled.js";
 
 // ── Helpers ──
 
@@ -3546,6 +3547,10 @@ function updateScheduledTaskStatus(item: WorkItem, success: boolean, durationMs?
     spaceData.status.run_count = (spaceData.status.run_count || 0) + 1;
     if (durationMs !== undefined) {
       spaceData.status.last_duration_ms = durationMs;
+    }
+    // TRACK-264: Compute next_run for the external scheduler path
+    if (spaceData.schedule) {
+      spaceData.status.next_run = computeNextRun(spaceData.schedule);
     }
     updateWorkItem(item.id, { space_data: JSON.stringify(spaceData) });
     logger.debug({ itemId: item.id, key, success, runCount: spaceData.status.run_count }, "Updated scheduled task status");

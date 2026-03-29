@@ -33,6 +33,164 @@ const DEFAULTS: ScheduledSpaceData = {
   ignore: [],
 };
 
+// ── Next Run Computation ──
+
+/**
+ * Compute the next scheduled run time from schedule config.
+ * Returns an ISO string or null (for manual/completed-once/custom frequencies).
+ *
+ * Uses Intl.DateTimeFormat for timezone-aware date arithmetic so that
+ * scheduled times stay consistent across DST boundaries.
+ */
+export function computeNextRun(
+  schedule: Record<string, unknown>,
+  now?: Date,
+): string | null {
+  const frequency = schedule.frequency as string | undefined;
+  if (!frequency || frequency === "manual" || frequency === "custom") return null;
+
+  const scheduledTime = schedule.time as string | undefined; // "HH:MM"
+  const timezone = (schedule.timezone as string) || "UTC";
+
+  if (frequency === "once") {
+    // For 'once', only return the scheduled time if it's in the future
+    // We need a full date for 'once' — but the schedule only stores time,
+    // so 'once' tasks without a next_run already set can't be computed.
+    // Return null and let it be handled by the caller if needed.
+    return null;
+  }
+
+  const currentTime = now || new Date();
+
+  if (frequency === "hourly") {
+    // Next hour boundary from now
+    const next = new Date(currentTime.getTime() + 60 * 60 * 1000);
+    next.setMinutes(0, 0, 0);
+    return next.toISOString();
+  }
+
+  if (!scheduledTime) return null;
+  const [schedHour, schedMinute] = scheduledTime.split(":").map(Number);
+  if (isNaN(schedHour) || isNaN(schedMinute)) return null;
+
+  // Get current date components in the task's timezone
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      weekday: "long",
+    });
+    const parts = formatter.formatToParts(currentTime);
+    const get = (type: string) => parts.find(p => p.type === type)?.value || "";
+
+    const currentHour = parseInt(get("hour"), 10);
+    const currentMinute = parseInt(get("minute"), 10);
+    const currentYear = parseInt(get("year"), 10);
+    const currentMonth = parseInt(get("month"), 10);
+    const currentDay = parseInt(get("day"), 10);
+    const currentWeekday = get("weekday").toLowerCase();
+
+    const currentMinutes = currentHour * 60 + currentMinute;
+    const scheduledMinutes = schedHour * 60 + schedMinute;
+    const isPastToday = currentMinutes >= scheduledMinutes;
+
+    // Helper: build an ISO string for a desired local time in the task's timezone.
+    // Strategy: create a naive UTC date, see what local time it maps to,
+    // then adjust by the offset to land on the desired local time.
+    const buildTzDate = (year: number, month: number, day: number, hour: number, minute: number): string => {
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const naiveUtc = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+      const tzFormatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      const localParts = tzFormatter.formatToParts(naiveUtc);
+      const getP = (type: string) => localParts.find(p => p.type === type)?.value || "";
+      const localDay = parseInt(getP("day"), 10);
+      const localHour = parseInt(getP("hour"), 10);
+      const localMinute = parseInt(getP("minute"), 10);
+      // offset = (local - utc) in minutes, accounting for day wrap
+      const dayDiff = localDay - naiveUtc.getUTCDate();
+      const offsetMin = dayDiff * 1440 + (localHour - hour) * 60 + (localMinute - minute);
+      // We want local=hour:minute, so UTC = naive - offset
+      return new Date(naiveUtc.getTime() - offsetMin * 60 * 1000).toISOString();
+    };
+
+    if (frequency === "daily") {
+      if (!isPastToday) {
+        return buildTzDate(currentYear, currentMonth, currentDay, schedHour, schedMinute);
+      }
+      // Tomorrow
+      const tomorrow = new Date(currentTime.getTime() + 24 * 60 * 60 * 1000);
+      const tmParts = formatter.formatToParts(tomorrow);
+      const tmGet = (type: string) => tmParts.find(p => p.type === type)?.value || "";
+      return buildTzDate(parseInt(tmGet("year"), 10), parseInt(tmGet("month"), 10), parseInt(tmGet("day"), 10), schedHour, schedMinute);
+    }
+
+    if (frequency === "weekly") {
+      const daysOfWeek = schedule.days_of_week as string[] | null;
+      if (!Array.isArray(daysOfWeek) || daysOfWeek.length === 0) {
+        // No days specified — treat like daily
+        if (!isPastToday) {
+          return buildTzDate(currentYear, currentMonth, currentDay, schedHour, schedMinute);
+        }
+        const tomorrow = new Date(currentTime.getTime() + 24 * 60 * 60 * 1000);
+        const tmParts = formatter.formatToParts(tomorrow);
+        const tmGet = (type: string) => tmParts.find(p => p.type === type)?.value || "";
+        return buildTzDate(parseInt(tmGet("year"), 10), parseInt(tmGet("month"), 10), parseInt(tmGet("day"), 10), schedHour, schedMinute);
+      }
+
+      const weekDays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const currentDayIdx = weekDays.indexOf(currentWeekday);
+
+      // Find the next scheduled day (could be today if not past time, or a future day)
+      for (let offset = 0; offset <= 7; offset++) {
+        const checkDate = new Date(currentTime.getTime() + offset * 24 * 60 * 60 * 1000);
+        const checkParts = formatter.formatToParts(checkDate);
+        const checkGet = (type: string) => checkParts.find(p => p.type === type)?.value || "";
+        const checkWeekday = checkGet("weekday").toLowerCase();
+
+        if (daysOfWeek.includes(checkWeekday)) {
+          if (offset === 0 && isPastToday) continue; // Today but already past
+          return buildTzDate(
+            parseInt(checkGet("year"), 10),
+            parseInt(checkGet("month"), 10),
+            parseInt(checkGet("day"), 10),
+            schedHour,
+            schedMinute,
+          );
+        }
+      }
+      return null; // Shouldn't happen with valid days_of_week
+    }
+
+    if (frequency === "monthly") {
+      // 1st of current month if not past, else 1st of next month
+      if (currentDay === 1 && !isPastToday) {
+        return buildTzDate(currentYear, currentMonth, 1, schedHour, schedMinute);
+      }
+      // 1st of next month
+      const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+      const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+      return buildTzDate(nextYear, nextMonth, 1, schedHour, schedMinute);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Parse the space_data JSON from a scheduled task work item.
  * Returns the parsed object with all fields normalised.
@@ -78,6 +236,13 @@ export function sanitizeScheduledSpaceData(spaceDataStr: string, spaceType?: str
 
     if (Array.isArray(parsed.todo)) parsed.todo = coerceToStrings(parsed.todo);
     if (Array.isArray(parsed.ignore)) parsed.ignore = coerceToStrings(parsed.ignore);
+
+    // Recompute next_run when schedule config is present (TRACK-264)
+    if (parsed.schedule && typeof parsed.schedule === "object") {
+      if (!parsed.status) parsed.status = {};
+      parsed.status.next_run = computeNextRun(parsed.schedule);
+    }
+
     return JSON.stringify(parsed);
   } catch {
     return spaceDataStr;
