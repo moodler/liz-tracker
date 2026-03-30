@@ -2104,7 +2104,11 @@ async function _dispatchViaRunnerImpl(
           );
           // Notify about auth source in the agent conversation so the user sees
           // it even when not watching the tracker dashboard (TRACK-262).
-          if (evt.apiKeySource && evt.apiKeySource !== "oauth") {
+          // The SDK's apiKeySource reports "none" when OAuth is the auth method
+          // (because there's no API *key* — OAuth uses tokens). Only warn when
+          // the source indicates a real API key is being used instead of OAuth.
+          const API_KEY_SOURCES = ["user", "project", "org", "temporary"];
+          if (evt.apiKeySource && API_KEY_SOURCES.includes(evt.apiKeySource)) {
             const itemKey = getWorkItemKey(item);
             logger.warn(
               { itemId: item.id, itemKey, sessionId, apiKeySource: evt.apiKeySource },
@@ -2113,9 +2117,13 @@ async function _dispatchViaRunnerImpl(
             fireApiKeyNotification(itemKey, evt.apiKeySource).catch(() => {});
             // Steer the agent to inform the user directly in conversation
             steerSession(sessionId, `⚠️ AUTH NOTICE: This session started with "${evt.apiKeySource}" authentication instead of OAuth (Max subscription). This means the session is using an API key rather than the Max subscription. Please inform Martin that 'claude login' needs to be run on the server to restore OAuth authentication, and include this notice in your first response.`);
-          } else if (evt.apiKeySource === "oauth") {
-            // Confirm OAuth is active so Martin sees it in the conversation
-            steerSession(sessionId, `✅ AUTH OK: This session is using OAuth authentication (Max subscription). No action needed. You do not need to mention this to the user unless they ask about auth status.`);
+          } else if (evt.apiKeySource === "oauth" || evt.apiKeySource === "none") {
+            // "oauth" = SDK explicitly reports OAuth; "none" = no API key found,
+            // meaning OAuth tokens are being used (normal for Max subscription).
+            logger.info(
+              { itemId: item.id, sessionId, apiKeySource: evt.apiKeySource },
+              "Session using OAuth authentication (Max subscription)",
+            );
           }
           break;
 
