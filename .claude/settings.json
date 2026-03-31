@@ -9,5 +9,31 @@
     "ralph-loop@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo $TOOL_INPUT | grep -q '.ts'; then npx tsc --noEmit --pretty 2>&1 | head -20; fi",
+            "timeout": 30,
+            "statusMessage": "Type-checking TypeScript..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/martin/tracker && git diff --name-only HEAD 2>/dev/null | grep '.ts$' | xargs grep -n 'console.log' 2>/dev/null | grep -v 'logger.' | grep -v '.test.' && echo 'Warning: console.log found in modified files' || true",
+            "statusMessage": "Checking for console.log..."
+          }
+        ]
+      }
+    ]
   }
 }
