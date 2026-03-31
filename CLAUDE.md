@@ -30,6 +30,9 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/runner-types.ts` | Shared types for runner events and config |
 | `scripts/safe-restart.sh` | Safe restart script — checks for active sessions before restarting |
 | `scripts/safe-upgrade-opencode.sh` | Safely upgrade OpenCode without interrupting active sessions |
+| `.claude/commands/` | Slash commands for Claude Code sessions: `/verify`, `/code-review`, `/build-fix` |
+| `.claude/skills/` | Domain-specific skills (8 total) — auto-recommended by `buildPrompt()` based on item keywords |
+| `.claude/settings.json` | Project-level hooks: TypeScript type-check after `.ts` edits, console.log detection on stop |
 
 ## Space Plugin Files
 
@@ -81,6 +84,7 @@ npm run test:coverage # Run tests with coverage report
 **Current test coverage:**
 - `src/db.test.ts` — actor classification, state transitions (incl. security rules), project/item CRUD, locks, dependencies, comments, approval provenance, move between projects, activity log (logActivity/listActivity, filtering, integration with mutations)
 - `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers (base64url encoding, session/directory/API URL builders), error classification (413 errors, image-too-large, post-completion errors), scheduled task time gating (isScheduleTimeDue frequency/timezone/last_run logic)
+- `src/session-runner.test.ts` — SDK message mapping, stdio protocol integration tests (event flow, steering)
 - `src/spaces/travel.test.ts` — type-aware segment deduplication key logic (flight/lodging/transport disambiguation)
 
 **To activate the pre-push hook** (run once per clone):
@@ -273,6 +277,7 @@ The orchestrator's `buildPrompt()` injects security rules into every coder bot p
 - Coder bots must not create new tracker items or approve items
 - Coder bots must not modify tracker infrastructure
 - Comments added after approval are segregated and labeled as "post-approval" in the prompt
+- `buildPrompt()` scans item title/description for keywords and recommends relevant `.claude/skills/` (security, orchestrator, space plugin, MCP tool development)
 
 #### Blocked file patterns
 
