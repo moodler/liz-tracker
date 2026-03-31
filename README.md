@@ -122,7 +122,7 @@ Copy `.env.example` to `.env` and edit as needed. Key settings:
 | `TRACKER_PUBLIC_URL` | `http://localhost:{PORT}` | Tracker dashboard URL (for links and fallback base) |
 | `TRACKER_SHORT_URL` | (same as `TRACKER_PUBLIC_URL`) | Short base URL for item deep links (e.g. `http://t` → `http://t/TRACK-187`) |
 | `ANTHROPIC_API_KEY` | (none) | Enables AI categorization in the dashboard |
-| `AI_CATEGORIZE_MODEL` | `claude-sonnet-4-20250514` | Model for AI categorization |
+| `AI_CATEGORIZE_MODEL` | `claude-haiku-4-5-20251001` | Model for AI categorization |
 | `WEBHOOK_URL` | (none) | URL to POST comment webhook notifications to |
 | `WEBHOOK_SECRET` | (none) | Shared secret for authenticating webhook payloads |
 | `ASSISTANT_PROJECT_ROOT` | `~/assistant` | Root directory for container path translation (agent file uploads) |
@@ -391,6 +391,55 @@ Uses [OpenCode](https://opencode.ai) as the session manager.
 - **Scheduled task recycling** — recurring scheduled tasks are automatically recycled back to approved after completion, preserving approval provenance
 - **Scheduled task time gating** — tasks only dispatch when their configured schedule time arrives (timezone-aware)
 
+## Claude Code Skills, Commands, and Hooks
+
+The project includes custom Claude Code skills, commands, and hooks in `.claude/` that guide both interactive developer sessions and orchestrator-dispatched autonomous sessions.
+
+### Commands
+
+Slash commands available during Claude Code sessions:
+
+| Command | Description |
+| --- | --- |
+| `/verify` | Comprehensive pre-commit gate — runs `npm run build`, `npm test`, checks for stray `console.log`, and shows `git status` |
+| `/code-review` | Security + quality review of uncommitted changes — checks actor classification, `esc()` usage, blocked file paths, and common issues |
+| `/build-fix` | Incremental TypeScript error fixer — runs `tsc`, identifies errors, and fixes them with minimal diffs while respecting security-critical file guardrails |
+
+### Skills
+
+Skills in `.claude/skills/` provide domain-specific guidance. They activate automatically based on the work being done, and the orchestrator recommends relevant skills in dispatch prompts based on item content keywords.
+
+| Skill | Origin | Description |
+| --- | --- | --- |
+| **tdd-workflow** | Adapted from ECC | Test-driven development discipline for Vitest + in-memory SQLite |
+| **security-review** | Adapted from ECC | General security checklist — secrets, SQL injection, XSS, auth patterns |
+| **search-first** | Adapted from ECC | Research-before-coding workflow, referencing shared helpers and constants |
+| **node-sqlite-patterns** | Adapted from ECC | better-sqlite3 patterns — query optimization, schema design, WAL mode |
+| **tracker-security-review** | Custom | Project-specific security — actor classification, approval provenance, description integrity, blocked paths, MCP tool authorization |
+| **space-plugin-dev** | Custom | Step-by-step guide for building new space plugins (all 5 parts: backend, frontend, registry, MCP tools, tests) |
+| **mcp-tool-dev** | Custom | MCP tool development guide — Zod validation, actor handling, naming conventions, error responses |
+| **orchestrator-safe-dev** | Custom | Safety guidelines for orchestrator code — state machine, dispatch, SSE, circuit breaker, safe restart |
+
+### Hooks
+
+Project-level hooks in `.claude/settings.json`:
+
+| Hook | Trigger | Description |
+| --- | --- | --- |
+| **TypeScript type-check** | `PostToolUse:Edit` | Runs `tsc --noEmit` after `.ts` file edits to catch type errors immediately |
+| **Console.log detection** | `Stop` | Warns about `console.log` found in modified `.ts` files (should use logger instead) |
+
+### Dispatch Integration
+
+When the orchestrator dispatches an item to a coding session, `buildPrompt()` scans the item's title and description for keywords and injects a "Recommended skills" section into the prompt. This directs the agent to read the relevant `.claude/skills/` files before making changes. Keyword categories:
+
+- **tracker-security-review** — security, auth, actor, approval, provenance, token, credential, etc.
+- **orchestrator-safe-dev** — orchestrator, dispatch, session runner, state transition, circuit breaker, SSE, etc.
+- **space-plugin-dev** — space plugin, new space, space type, registerSpace, etc.
+- **mcp-tool-dev** — MCP tool, MCP server, new tool, add tool, etc.
+
+Multiple skills can be recommended simultaneously when an item matches multiple categories.
+
 ## Testing
 
 ```bash
@@ -401,7 +450,7 @@ npm run test:coverage # Coverage report
 
 Tests use [Vitest](https://vitest.dev/) with an in-memory SQLite database. Test suites cover:
 
-- `src/db.test.ts` — actor classification, state transitions, security rules, project/item CRUD, locks, dependencies, comments, approval provenance, cross-project moves
+- `src/db.test.ts` — actor classification, state transitions, security rules, project/item CRUD, locks, dependencies, comments, approval provenance, cross-project moves, activity log
 - `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers, error classification, scheduled task time gating, prompt splitting
 - `src/session-runner.test.ts` — SDK message mapping, stdio protocol integration tests (event flow, steering)
 - `src/spaces/travel.test.ts` — type-aware segment deduplication keys
