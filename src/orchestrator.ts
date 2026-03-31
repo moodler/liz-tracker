@@ -2444,6 +2444,65 @@ function buildPrompt(
     "",
   );
 
+  // TRACK-265: Skill-awareness for dispatched sessions.
+  // Skills in .claude/skills/ are auto-discovered by Claude Code (since runner sets cwd),
+  // but explicitly referencing them ensures the agent activates the right guidance.
+  // Safety: additive only — appends optional guidance section, no existing behavior changed.
+  if (item.requires_code) {
+    const textToScan = `${item.title} ${item.description || ""}`.toLowerCase();
+    const recommendedSkills: string[] = [];
+
+    // Detect security-sensitive work
+    const securityKeywords = [
+      "security", "auth", "actor", "approval", "provenance", "blocked path",
+      "classifyactor", "classify_actor", "mcp tool", "mcp-tool",
+      "permission", "token", "credential",
+    ];
+    if (securityKeywords.some((kw) => textToScan.includes(kw))) {
+      recommendedSkills.push("tracker-security-review");
+    }
+
+    // Detect orchestrator work
+    const orchestratorKeywords = [
+      "orchestrator", "dispatch", "session runner", "state transition",
+      "circuit breaker", "sse", "buildprompt", "build_prompt",
+      "getdispatchableitems", "safe restart", "session lifecycle",
+    ];
+    if (orchestratorKeywords.some((kw) => textToScan.includes(kw))) {
+      recommendedSkills.push("orchestrator-safe-dev");
+    }
+
+    // Detect space plugin work
+    const spaceKeywords = [
+      "space plugin", "spaceplugin", "new space", "space type",
+      "registerspace", "register_space",
+    ];
+    if (spaceKeywords.some((kw) => textToScan.includes(kw))) {
+      recommendedSkills.push("space-plugin-dev");
+    }
+
+    // Detect MCP tool work
+    const mcpKeywords = [
+      "mcp tool", "mcp-tool", "mcp server", "mcp-server",
+      "new tool", "add tool",
+    ];
+    if (mcpKeywords.some((kw) => textToScan.includes(kw))) {
+      recommendedSkills.push("mcp-tool-dev");
+    }
+
+    if (recommendedSkills.length > 0) {
+      lines.push(
+        "**Recommended skills:** This item appears to involve specialized work. " +
+        "Read and follow these project skills (in `.claude/skills/`) before making changes:",
+        "",
+      );
+      for (const skill of recommendedSkills) {
+        lines.push(`- \`${skill}\``);
+      }
+      lines.push("");
+    }
+  }
+
   // TRACK-237: For scheduled tasks, add explicit instruction not to modify the description.
   // The description is the persistent task definition that runs on each schedule.
   // Status updates and findings should be added as comments, not description changes.
