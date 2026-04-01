@@ -92,6 +92,17 @@ npm run test:coverage # Run tests with coverage report
 git config core.hooksPath .githooks
 ```
 
+### Sub-agent usage (prompt caching optimization)
+
+Claude Code's Agent tool spawns sub-agents that share the parent's cached system prompt prefix. Anthropic's prompt caching makes cached input tokens ~90% cheaper, so sub-agents are very cost-efficient. Claude Code handles sub-agent decisions automatically — no special configuration is needed. However, for best results on this codebase, prefer sub-agents (the Agent tool) for:
+
+- **Parallel exploration:** When you need to search multiple directories or file patterns simultaneously (e.g., checking both `src/spaces/` and `src/ui/spaces/` for a feature)
+- **Research-heavy tasks:** When understanding a feature requires reading many files — delegate to an Explore sub-agent rather than reading everything in the main context
+- **Independent verifications:** Running build/test checks while continuing other work
+- **Multi-file impact analysis:** When a change touches shared types or interfaces, use sub-agents to check all consumers in parallel
+
+Sub-agents are automatically available in both interactive and dispatched (orchestrator) sessions via the `claude_code` system prompt preset.
+
 ## Service Management
 
 ```bash

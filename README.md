@@ -440,6 +440,10 @@ When the orchestrator dispatches an item to a coding session, `buildPrompt()` sc
 
 Multiple skills can be recommended simultaneously when an item matches multiple categories.
 
+### Sub-agent Optimization
+
+Claude Code's Agent tool spawns sub-agents that benefit from Anthropic's prompt caching — the shared system prompt prefix is cached, making sub-agent input tokens ~90% cheaper. This is handled automatically by the `claude_code` system prompt preset used in both interactive and dispatched sessions. CLAUDE.md includes guidance on when sub-agents are most beneficial for this codebase (parallel exploration, research tasks, independent verifications, multi-file impact analysis).
+
 ## Testing
 
 ```bash
