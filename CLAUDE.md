@@ -83,7 +83,7 @@ npm run test:coverage # Run tests with coverage report
 
 **Current test coverage:**
 - `src/db.test.ts` — actor classification, state transitions (incl. security rules), project/item CRUD, locks, dependencies, comments, approval provenance, move between projects, activity log (logActivity/listActivity, filtering, integration with mutations)
-- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers (base64url encoding, session/directory/API URL builders), error classification (413 errors, image-too-large, post-completion errors), scheduled task time gating (isScheduleTimeDue frequency/timezone/last_run logic)
+- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers (base64url encoding, session/directory/API URL builders), error classification (413 errors, image-too-large, post-completion errors), scheduled task time gating (isScheduleTimeDue frequency/timezone/last_run logic), per-task model resolution (resolveModelForItem strength tiers)
 - `src/session-runner.test.ts` — SDK message mapping, stdio protocol integration tests (event flow, steering)
 - `src/spaces/travel.test.ts` — type-aware segment deduplication key logic (flight/lodging/transport disambiguation)
 
@@ -143,6 +143,9 @@ All configuration is via `.env` file or environment variables. See `.env.example
 | `SESSION_TIMEOUT` | `2700000` | Session timeout in ms (default 45 minutes). Stale sessions are auto-detected and aborted. |
 | `CODER_MODEL_PROVIDER` | `anthropic` | Model provider for coder bot sessions (e.g. `anthropic`) |
 | `CODER_MODEL_ID` | `claude-opus-4-6` | Model ID for coder bot sessions (format: `providerID/modelID` when combined with provider) |
+| `MODEL_STRENGTH_HIGH` | `claude-opus-4-6` | Model for "high" strength tier (scheduled tasks) |
+| `MODEL_STRENGTH_MEDIUM` | `claude-sonnet-4-6` | Model for "medium" strength tier (scheduled tasks) |
+| `MODEL_STRENGTH_LOW` | `claude-haiku-4-5-20251001` | Model for "low" strength tier (scheduled tasks) |
 | `TRACKER_API_TOKEN` | (auto-generated) | Bearer token for write API endpoints |
 | `CIRCUIT_BREAKER_THRESHOLD` | `2` | Consecutive failures before auto-pause |
 | `CIRCUIT_BREAKER_WINDOW` | `3600000` | Window (ms) for counting failures (1 hour) |

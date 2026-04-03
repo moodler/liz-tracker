@@ -59,6 +59,8 @@ import {
   STORE_DIR,
   CODER_MODEL_PROVIDER,
   CODER_MODEL_ID,
+  MODEL_STRENGTH_MAP,
+  type ModelStrength,
   buildOpencodeSessionUrl,
   buildOpencodeDirectoryUrl,
   HUMAN_ACTORS,
@@ -1582,6 +1584,27 @@ function tryDispatchFromReview(): void {
 
 // ── Dispatch ──
 
+/**
+ * Resolve the model to use for a work item.
+ * Scheduled tasks with model_strength set use the corresponding tier;
+ * all others fall back to the global CODER_MODEL_* defaults.
+ * TRACK-266: Per-task model selection for scheduled tasks.
+ */
+export function resolveModelForItem(item: WorkItem): { provider: string; modelId: string } {
+  if (item.space_type === "scheduled" && item.space_data) {
+    try {
+      const parsed = JSON.parse(item.space_data);
+      const strength = parsed.model_strength as ModelStrength | null | undefined;
+      if (strength && MODEL_STRENGTH_MAP[strength]) {
+        return MODEL_STRENGTH_MAP[strength];
+      }
+    } catch {
+      // Malformed space_data — fall through to default
+    }
+  }
+  return { provider: CODER_MODEL_PROVIDER, modelId: CODER_MODEL_ID };
+}
+
 async function dispatch(item: WorkItem): Promise<string | null> {
   const project = getProject(item.project_id);
   if (!project) {
@@ -1623,6 +1646,9 @@ async function dispatch(item: WorkItem): Promise<string | null> {
 
   const itemKey = getWorkItemKey(item);
   const sessionTitle = `${itemKey}: ${item.title}`;
+
+  // TRACK-266: Resolve per-task model (scheduled tasks may override the global default)
+  const itemModel = resolveModelForItem(item);
 
   // Mark as pending before making the API call
   setSessionInfo(item.id, "", "pending");
@@ -1723,7 +1749,7 @@ async function dispatch(item: WorkItem): Promise<string | null> {
       path: { id: sessionId },
       body: {
         agent: "tracker-worker",
-        model: { providerID: CODER_MODEL_PROVIDER, modelID: CODER_MODEL_ID },
+        model: { providerID: itemModel.provider, modelID: itemModel.modelId },
         parts: parts as never,
       },
     });
@@ -1731,7 +1757,7 @@ async function dispatch(item: WorkItem): Promise<string | null> {
     updateSessionStatus(item.id, "running");
 
     logger.info(
-      { itemId: item.id, sessionId },
+      { itemId: item.id, sessionId, model: itemModel.modelId },
       "Sent prompt to OpenCode session",
     );
 
@@ -1790,6 +1816,9 @@ async function dispatchForClarification(item: WorkItem): Promise<string | null> 
 
   const itemKey = getWorkItemKey(item);
   const sessionTitle = `[Research] ${itemKey}: ${item.title}`;
+
+  // TRACK-266: Resolve per-task model (scheduled tasks may override the global default)
+  const itemModel = resolveModelForItem(item);
 
   // Mark as pending before making the API call
   setSessionInfo(item.id, "", "pending");
@@ -1882,7 +1911,7 @@ async function dispatchForClarification(item: WorkItem): Promise<string | null> 
       path: { id: sessionId },
       body: {
         agent: "tracker-worker",
-        model: { providerID: CODER_MODEL_PROVIDER, modelID: CODER_MODEL_ID },
+        model: { providerID: itemModel.provider, modelID: itemModel.modelId },
         parts: parts as never,
       },
     });
@@ -1890,7 +1919,7 @@ async function dispatchForClarification(item: WorkItem): Promise<string | null> 
     updateSessionStatus(item.id, "running");
 
     logger.info(
-      { itemId: item.id, sessionId },
+      { itemId: item.id, sessionId, model: itemModel.modelId },
       "Sent research prompt to OpenCode session",
     );
 
@@ -1968,6 +1997,9 @@ async function _dispatchViaRunnerImpl(
     ? `[Research] ${itemKey}: ${item.title}`
     : `${itemKey}: ${item.title}`;
 
+  // TRACK-266: Resolve per-task model (scheduled tasks may override the global default)
+  const itemModel = resolveModelForItem(item);
+
   // Generate a local session ID for the runner
   const sessionId = `runner_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -2043,7 +2075,7 @@ async function _dispatchViaRunnerImpl(
     });
 
     logger.info(
-      { itemId: item.id, itemKey, sessionId, title: sessionTitle, pid: child.pid, promptType },
+      { itemId: item.id, itemKey, sessionId, title: sessionTitle, pid: child.pid, promptType, model: itemModel.modelId },
       "Spawned session runner",
     );
 
@@ -2054,7 +2086,7 @@ async function _dispatchViaRunnerImpl(
       prompt: userPrompt,
       systemPromptAppend: systemAppend,
       cwd: project.working_directory,
-      model: CODER_MODEL_ID,
+      model: itemModel.modelId,
       maxTurns: 200,
       promptType,
       attachments: attachmentList,
@@ -2550,11 +2582,13 @@ function buildPrompt(
   );
 
   if (sessionId) {
+    // TRACK-266: Show the actual model for this task (may differ from global default for scheduled tasks)
+    const promptModel = resolveModelForItem(item);
     lines.push(
       "",
       `**Session ID:** \`${sessionId}\``,
       "",
-      `You are powered by the model named claude-opus-4-6. The exact model ID is anthropic/claude-opus-4-6`,
+      `You are powered by the model named ${promptModel.modelId}. The exact model ID is ${promptModel.provider}/${promptModel.modelId}`,
     );
   }
 
@@ -2755,11 +2789,13 @@ function buildResearchPrompt(
   }
 
   if (sessionId) {
+    // TRACK-266: Show the actual model for this task (may differ from global default for scheduled tasks)
+    const promptModel = resolveModelForItem(item);
     lines.push(
       "",
       `**Session ID:** \`${sessionId}\``,
       "",
-      `You are powered by the model named claude-opus-4-6. The exact model ID is anthropic/claude-opus-4-6`,
+      `You are powered by the model named ${promptModel.modelId}. The exact model ID is ${promptModel.provider}/${promptModel.modelId}`,
     );
   }
 

@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { isProcessAlive, resolveOpencodePid, sendSignal, killProcessGracefully, validateAgentConfig, is413Error, isImageTooLargeError, isPostCompletionError, isScheduleTimeDue, buildPromptParts, buildResearchPromptParts } from "./orchestrator.js";
+import { isProcessAlive, resolveOpencodePid, sendSignal, killProcessGracefully, validateAgentConfig, is413Error, isImageTooLargeError, isPostCompletionError, isScheduleTimeDue, buildPromptParts, buildResearchPromptParts, resolveModelForItem } from "./orchestrator.js";
 import { base64UrlEncode, buildOpencodeSessionUrl, buildOpencodeDirectoryUrl, buildOpencodeApiSessionUrl, DISPATCH_MODE } from "./config.js";
 import fs from "fs";
 import path from "path";
@@ -927,5 +927,118 @@ describe("buildResearchPromptParts", () => {
     expect(systemAppend).toBe("");
     expect(userPrompt).toContain("Investigate how to optimize queries");
     expect(userPrompt).toContain("Research Task");
+  });
+});
+
+// ── resolveModelForItem (TRACK-266) ──────────────────────────────────────────
+
+describe("resolveModelForItem", () => {
+  const baseItem = {
+    id: "test-model-item",
+    project_id: "test-project",
+    title: "Test Task",
+    description: "A test task",
+    state: "approved",
+    priority: "medium",
+    assignee: null,
+    labels: "[]",
+    position: 0,
+    created_by: "test",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    locked_by: null,
+    locked_at: null,
+    requires_code: 1,
+    seq_number: 1,
+    platform: "any",
+    session_id: null,
+    session_status: null,
+    created_by_class: "human",
+    approved_by: null,
+    approved_by_class: null,
+    approved_at: null,
+    approved_description_hash: null,
+    opencode_pid: null,
+    bot_dispatch: 0,
+    date_due: null,
+    link: null,
+    space_type: "standard" as const,
+    space_data: null,
+  };
+
+  it("returns global default for standard (non-scheduled) items", () => {
+    const result = resolveModelForItem(baseItem as any);
+    expect(result.provider).toBe("anthropic");
+    expect(result.modelId).toBe("claude-opus-4-6");
+  });
+
+  it("returns global default for scheduled items without model_strength", () => {
+    const item = {
+      ...baseItem,
+      space_type: "scheduled",
+      space_data: JSON.stringify({ schedule: { frequency: "daily" }, status: {}, todo: [], ignore: [] }),
+    };
+    const result = resolveModelForItem(item as any);
+    expect(result.modelId).toBe("claude-opus-4-6");
+  });
+
+  it("returns high-tier model for model_strength=high", () => {
+    const item = {
+      ...baseItem,
+      space_type: "scheduled",
+      space_data: JSON.stringify({ schedule: { frequency: "daily" }, status: {}, todo: [], ignore: [], model_strength: "high" }),
+    };
+    const result = resolveModelForItem(item as any);
+    expect(result.modelId).toContain("opus");
+  });
+
+  it("returns medium-tier model for model_strength=medium", () => {
+    const item = {
+      ...baseItem,
+      space_type: "scheduled",
+      space_data: JSON.stringify({ schedule: { frequency: "daily" }, status: {}, todo: [], ignore: [], model_strength: "medium" }),
+    };
+    const result = resolveModelForItem(item as any);
+    expect(result.modelId).toContain("sonnet");
+  });
+
+  it("returns low-tier model for model_strength=low", () => {
+    const item = {
+      ...baseItem,
+      space_type: "scheduled",
+      space_data: JSON.stringify({ schedule: { frequency: "daily" }, status: {}, todo: [], ignore: [], model_strength: "low" }),
+    };
+    const result = resolveModelForItem(item as any);
+    expect(result.modelId).toContain("haiku");
+  });
+
+  it("returns global default for invalid model_strength value", () => {
+    const item = {
+      ...baseItem,
+      space_type: "scheduled",
+      space_data: JSON.stringify({ schedule: { frequency: "daily" }, status: {}, todo: [], ignore: [], model_strength: "invalid" }),
+    };
+    const result = resolveModelForItem(item as any);
+    expect(result.modelId).toBe("claude-opus-4-6");
+  });
+
+  it("returns global default for malformed space_data", () => {
+    const item = {
+      ...baseItem,
+      space_type: "scheduled",
+      space_data: "not valid json",
+    };
+    const result = resolveModelForItem(item as any);
+    expect(result.modelId).toBe("claude-opus-4-6");
+  });
+
+  it("returns global default for null space_data on scheduled item", () => {
+    const item = {
+      ...baseItem,
+      space_type: "scheduled",
+      space_data: null,
+    };
+    const result = resolveModelForItem(item as any);
+    expect(result.modelId).toBe("claude-opus-4-6");
   });
 });

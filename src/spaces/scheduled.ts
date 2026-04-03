@@ -24,6 +24,7 @@ interface ScheduledSpaceData {
   status: Record<string, unknown>;
   todo: string[];
   ignore: string[];
+  model_strength?: "high" | "medium" | "low" | null;
 }
 
 const DEFAULTS: ScheduledSpaceData = {
@@ -31,6 +32,7 @@ const DEFAULTS: ScheduledSpaceData = {
   status: { next_run: null, last_run: null, last_status: null, last_duration_ms: null, run_count: 0 },
   todo: [],
   ignore: [],
+  model_strength: null,
 };
 
 // ── Next Run Computation ──
@@ -196,17 +198,20 @@ export function computeNextRun(
  * Returns the parsed object with all fields normalised.
  */
 function parseScheduledSpaceData(raw: string | null): ScheduledSpaceData {
-  if (!raw) return { ...DEFAULTS, schedule: { ...DEFAULTS.schedule }, status: { ...DEFAULTS.status }, todo: [], ignore: [] };
+  if (!raw) return { ...DEFAULTS, schedule: { ...DEFAULTS.schedule }, status: { ...DEFAULTS.status }, todo: [], ignore: [], model_strength: null };
   try {
     const parsed = JSON.parse(raw);
+    const validStrengths = ["high", "medium", "low"];
+    const strength = validStrengths.includes(parsed.model_strength) ? parsed.model_strength : null;
     return {
       schedule: parsed.schedule || { ...DEFAULTS.schedule },
       status: parsed.status || { ...DEFAULTS.status },
       todo: Array.isArray(parsed.todo) ? parsed.todo.map(String) : [],
       ignore: Array.isArray(parsed.ignore) ? parsed.ignore.map(String) : [],
+      model_strength: strength,
     };
   } catch {
-    return { ...DEFAULTS, schedule: { ...DEFAULTS.schedule }, status: { ...DEFAULTS.status }, todo: [], ignore: [] };
+    return { ...DEFAULTS, schedule: { ...DEFAULTS.schedule }, status: { ...DEFAULTS.status }, todo: [], ignore: [], model_strength: null };
   }
 }
 
@@ -236,6 +241,14 @@ export function sanitizeScheduledSpaceData(spaceDataStr: string, spaceType?: str
 
     if (Array.isArray(parsed.todo)) parsed.todo = coerceToStrings(parsed.todo);
     if (Array.isArray(parsed.ignore)) parsed.ignore = coerceToStrings(parsed.ignore);
+
+    // Validate model_strength if present (TRACK-266)
+    if (parsed.model_strength !== undefined) {
+      const validStrengths = ["high", "medium", "low"];
+      if (!validStrengths.includes(parsed.model_strength)) {
+        parsed.model_strength = null;
+      }
+    }
 
     // Recompute next_run when schedule config is present (TRACK-264)
     if (parsed.schedule && typeof parsed.schedule === "object") {
@@ -519,6 +532,7 @@ Manages recurring automated tasks. Schedule config, status, and structured task 
     "last_duration_ms": 1234,
     "run_count": 42
   },
+  "model_strength": "medium",
   "todo": [
     "Check the inbox for new messages",
     "Update the daily log with findings"
@@ -531,6 +545,7 @@ Manages recurring automated tasks. Schedule config, status, and structured task 
 \`\`\`
 
 - **Task instructions** → item description field (main prompt/instructions for the task)
+- **Model strength** → optional \`space_data.model_strength\` — "high" (opus), "medium" (sonnet), or "low" (haiku). Defaults to the global model if unset.
 - **TODO** → array of **plain strings** in \`space_data.todo\` — specific sub-tasks to perform during each run
 - **IGNORE** → array of **plain strings** in \`space_data.ignore\` — types of information to skip/ignore
 - **Run history** → displayed in the sidebar from status data

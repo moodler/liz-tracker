@@ -213,6 +213,20 @@ export const CODER_MODEL_ID =
   process.env.CODER_MODEL_ID || "claude-opus-4-6";
 
 /**
+ * Model strength tiers for scheduled tasks.
+ * Maps "high" / "medium" / "low" to provider + model ID pairs.
+ * When a scheduled task has model_strength set, the orchestrator uses the
+ * corresponding model instead of the global CODER_MODEL_* defaults.
+ */
+export type ModelStrength = "high" | "medium" | "low";
+
+export const MODEL_STRENGTH_MAP: Record<ModelStrength, { provider: string; modelId: string }> = {
+  high:   { provider: "anthropic", modelId: process.env.MODEL_STRENGTH_HIGH   || "claude-opus-4-6" },
+  medium: { provider: "anthropic", modelId: process.env.MODEL_STRENGTH_MEDIUM || "claude-sonnet-4-6" },
+  low:    { provider: "anthropic", modelId: process.env.MODEL_STRENGTH_LOW    || "claude-haiku-4-5-20251001" },
+};
+
+/**
  * Dispatch mode: "opencode" uses the OpenCode SDK, "runner" uses the direct
  * Claude Code Agent SDK session runner.
  */

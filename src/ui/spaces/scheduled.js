@@ -20,6 +20,7 @@ function parseScheduledData(item) {
     },
     todo: [],
     ignore: [],
+    model_strength: null,
   };
   // Coerce array items to plain strings — prevents [object Object] when agents
   // accidentally pass objects instead of strings in todo/ignore arrays
@@ -48,6 +49,7 @@ function parseScheduledData(item) {
         },
         todo: Array.isArray(parsed.todo) ? coerceStrings(parsed.todo) : [],
         ignore: Array.isArray(parsed.ignore) ? coerceStrings(parsed.ignore) : [],
+        model_strength: ["high", "medium", "low"].includes(parsed.model_strength) ? parsed.model_strength : null,
       };
     }
     return {
@@ -55,8 +57,29 @@ function parseScheduledData(item) {
       status: { ...defaults.status, ...(parsed.status || {}) },
       todo: Array.isArray(parsed.todo) ? coerceStrings(parsed.todo) : [],
       ignore: Array.isArray(parsed.ignore) ? coerceStrings(parsed.ignore) : [],
+      model_strength: ["high", "medium", "low"].includes(parsed.model_strength) ? parsed.model_strength : null,
     };
   } catch { return defaults; }
+}
+
+/** Model strength labels for UI display. */
+const MODEL_STRENGTH_LABELS = {
+  high: "High (Opus)",
+  medium: "Medium (Sonnet)",
+  low: "Low (Haiku)",
+};
+
+/** Render the model strength selector HTML. */
+function renderModelStrengthSelector(currentStrength) {
+  const options = [
+    { value: "", label: "Default" },
+    { value: "high", label: "High (Opus)" },
+    { value: "medium", label: "Medium (Sonnet)" },
+    { value: "low", label: "Low (Haiku)" },
+  ];
+  return `<select id="scheduledModelStrength" class="scheduled-model-select">${options.map(o =>
+    `<option value="${o.value}" ${(currentStrength || "") === o.value ? "selected" : ""}>${esc(o.label)}</option>`
+  ).join("")}</select>`;
 }
 
 /** Convert schedule config to a human-readable summary. */
@@ -302,6 +325,9 @@ function renderSpaceScheduled(item) {
                   ${item.date_due && item.date_due < new Date().toISOString().slice(0, 10) ? '<span class="scheduled-due-date-expired">Expired</span>' : ""}
                 </div>
               </span>
+
+              <span class="status-label">Model</span>
+              <span class="status-value">${renderModelStrengthSelector(sd.model_strength)}</span>
             </div>
           </div>
         </div>
@@ -390,6 +416,9 @@ function renderSpaceScheduled(item) {
       openScheduledEdit(sd);
     });
   }
+
+  // Model strength selector (TRACK-266)
+  bindModelStrengthSelector();
 
   // Comment submit
   $("#scheduledCommentSubmit").addEventListener("click", () => submitScheduledComment());
@@ -530,6 +559,18 @@ async function saveScheduledSpaceData(newData) {
   }
 }
 
+/** Bind model strength selector change event — saves to space_data. */
+function bindModelStrengthSelector() {
+  const sel = $("#scheduledModelStrength");
+  if (!sel) return;
+  sel.addEventListener("change", async () => {
+    const val = sel.value || null;
+    const currentData = parseScheduledData(spaceItemData);
+    const newData = { ...currentData, model_strength: val };
+    await saveScheduledSpaceData(newData);
+  });
+}
+
 /** Open inline edit form for schedule configuration. */
 function openScheduledEdit(sd) {
   const body = $("#scheduledScheduleBody");
@@ -648,6 +689,7 @@ function openScheduledEdit(sd) {
         status: currentData.status,
         todo: currentData.todo,
         ignore: currentData.ignore,
+        model_strength: currentData.model_strength,
       };
     } else {
       const frequency = freqSelect.value;
@@ -662,6 +704,7 @@ function openScheduledEdit(sd) {
         status: currentData.status,
         todo: currentData.todo,
         ignore: currentData.ignore,
+        model_strength: currentData.model_strength,
       };
     }
     saveScheduledSpaceData(newData);
@@ -750,6 +793,9 @@ function refreshScheduledDashboard(item) {
               ${item.date_due && item.date_due < new Date().toISOString().slice(0, 10) ? '<span class="scheduled-due-date-expired">Expired</span>' : ""}
             </div>
           </span>
+
+          <span class="status-label">Model</span>
+          <span class="status-value">${renderModelStrengthSelector(sd.model_strength)}</span>
         </div>
       </div>
     </div>
@@ -783,6 +829,9 @@ function refreshScheduledDashboard(item) {
   if (editScheduleBtn) {
     editScheduleBtn.addEventListener("click", (e) => { e.stopPropagation(); openScheduledEdit(parseScheduledData(spaceItemData)); });
   }
+
+  // Re-bind model strength selector (TRACK-266)
+  bindModelStrengthSelector();
 
   // Re-bind description auto-save
   const descTextarea = $("#scheduledDescTextarea");
