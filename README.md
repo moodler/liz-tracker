@@ -66,6 +66,7 @@ The orchestrator:
 - **Comment-based auto-completion** — when the owner comments "looks good", "done", "LGTM" etc. on items in testing or in_review, the orchestrator auto-advances them to done
 - **Review feedback redispatch** — when the owner leaves non-acknowledgment feedback on items in testing, the orchestrator automatically moves them back to in_review and dispatches a new coder session to address the feedback
 - **Scheduled task time gating** — scheduled tasks wait for their configured time/day before dispatching, with timezone-aware checks for daily, weekly, hourly, and monthly frequencies
+- **Per-task model selection** — scheduled tasks can specify a model strength tier (high/medium/low) to control which Claude model is used for execution, instead of always using the global default
 - **Recurring scheduled task recycling** — when a recurring scheduled task completes, the orchestrator automatically recycles it back to `approved` for the next execution cycle, preserving original human approval provenance
 - **Expired scheduled task auto-close** — scheduled tasks with a past due date are automatically moved to done
 - **Dashboard session viewer** — watch agent activity in real-time (tool calls, reasoning, errors), send steering messages to redirect the agent, and review session transcripts after completion
@@ -455,7 +456,7 @@ npm run test:coverage # Coverage report
 Tests use [Vitest](https://vitest.dev/) with an in-memory SQLite database. Test suites cover:
 
 - `src/db.test.ts` — actor classification, state transitions, security rules, project/item CRUD, locks, dependencies, comments, approval provenance, cross-project moves, activity log
-- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers, error classification, scheduled task time gating, prompt splitting
+- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers, error classification, scheduled task time gating, per-task model resolution, prompt splitting
 - `src/session-runner.test.ts` — SDK message mapping, stdio protocol integration tests (event flow, steering)
 - `src/spaces/travel.test.ts` — type-aware segment deduplication keys
 
