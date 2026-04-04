@@ -53,7 +53,7 @@
         --transition: 150ms ease;
       }
       html {
-        font-size: 14px;
+        font-size: 15px;
       }
       body {
         font-family:
@@ -142,10 +142,10 @@
         z-index: 10;
       }
       .topbar .logo {
-        font-weight: 700;
-        font-size: 2.64rem;
+        font-weight: 800;
+        font-size: 2rem;
         color: var(--highlight);
-        letter-spacing: 0.5px;
+        letter-spacing: -0.01em;
         white-space: nowrap;
       }
       .mobile-project-name {
@@ -155,6 +155,7 @@
         width: 1px;
         height: 24px;
         background: var(--border);
+        opacity: 0.5;
         flex-shrink: 0;
       }
       /* ── Project Tabs ── */
@@ -562,21 +563,29 @@
         align-items: center;
         gap: 10px;
         padding: 14px 14px 12px;
-        border-bottom: 2px solid var(--highlight);
+        border-bottom: 2px solid var(--column-accent, var(--highlight));
         flex-shrink: 0;
         background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
         box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.03);
       }
+      .column[data-state="brainstorming"] { --column-accent: var(--text-dim); }
+      .column[data-state="clarification"] { --column-accent: var(--col-clarification); }
+      .column[data-state="approved"] { --column-accent: var(--highlight); }
+      .column[data-state="in_development"] { --column-accent: var(--col-in_development); }
+      .column[data-state="in_review"] { --column-accent: #a29bfe; }
+      .column[data-state="needs_input"] { --column-accent: var(--col-needs_input); }
+      .column[data-state="testing"] { --column-accent: #00b894; }
+      .column[data-state="done"] { --column-accent: var(--col-done); }
       .column-color {
         display: none;
       }
       .column-title {
-        font-weight: 600;
-        font-size: 1.53rem;
+        font-weight: 700;
+        font-size: 1.4rem;
         flex: 1;
         min-width: 0;
         text-transform: capitalize;
-        letter-spacing: 0.02em;
+        letter-spacing: -0.01em;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -624,11 +633,11 @@
 
       /* ── Cards ── */
       .card {
-        background: var(--bg-card);
+        background: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%), var(--bg-card);
         border: 1px solid rgba(35, 53, 84, 0.6);
-        border-left: 3px solid var(--border);
+        border-top: 2px solid var(--border);
         border-radius: var(--radius);
-        padding: 14px 16px;
+        padding: 16px 20px;
         cursor: grab;
         transition: all 150ms var(--ease-out);
         user-select: none;
@@ -648,31 +657,31 @@
         cursor: grabbing;
         transform: scale(0.95);
       }
-      /* Attention states — bright left accent + subtle glow */
+      /* Attention states — bright top accent + subtle glow */
       .card[data-attention="high"] {
-        border-left-color: var(--col-needs_input);
+        border-top-color: var(--col-needs_input);
         background: linear-gradient(
-          90deg,
+          180deg,
           rgba(214, 48, 49, 0.08) 0%,
           var(--bg-card) 30%
         );
         box-shadow: var(--shadow-sm), inset 0 0 20px rgba(214, 48, 49, 0.05);
       }
       .card[data-attention="medium"] {
-        border-left-color: var(--col-clarification);
+        border-top-color: var(--col-clarification);
         background: linear-gradient(
-          90deg,
+          180deg,
           rgba(253, 203, 110, 0.06) 0%,
           var(--bg-card) 30%
         );
         box-shadow: var(--shadow-sm), inset 0 0 20px rgba(253, 203, 110, 0.04);
       }
       .card[data-attention="low"] {
-        border-left-color: var(--col-done);
+        border-top-color: var(--col-done);
         opacity: 0.55;
       }
       .card[data-attention="normal"] {
-        border-left-color: var(--col-in_development);
+        border-top-color: var(--col-in_development);
       }
       .column.drag-over .column-cards {
         background: rgba(233, 69, 96, 0.06);
@@ -717,6 +726,7 @@
         font-weight: 500;
         margin-bottom: 8px;
         line-height: 1.3;
+        letter-spacing: -0.01em;
       }
       .card-description {
         font-size: 0.78rem;
@@ -2187,13 +2197,15 @@
         justify-content: center;
         height: 100%;
         color: var(--text-dim);
-        gap: 12px;
+        gap: 16px;
         text-align: center;
         padding: 40px;
+        font-size: 0.95rem;
+        line-height: 1.5;
       }
       .empty-state .icon {
-        font-size: 3rem;
-        opacity: 0.5;
+        font-size: 3.5rem;
+        opacity: 0.35;
       }
       .loading {
         display: flex;
