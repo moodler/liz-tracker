@@ -6,6 +6,8 @@ store/*.db-shm
 store/*.db-wal
 store/auth_token
 store/attachments/
+store/deck-thumbs/
+store/last_dashboard_url
 logs/
 *.log
 .DS_Store
@@ -13,3 +15,5 @@ logs/
 src/ui/index.html
 CLAUDE-LOCAL.md
 *.swp
+/skills/
+/skills-lock.json
