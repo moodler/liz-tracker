@@ -33,10 +33,15 @@
         --text-dim: #5a6380;
         --border: #233554;
         --border-light: #2d4059;
+        --col-brainstorming: #6c5ce7;
         --col-clarification: #fdcb6e;
+        --col-approved: #00b894;
         --col-in_development: #0984e3;
+        --col-in_review: #e17055;
         --col-needs_input: #d63031;
+        --col-testing: #a29bfe;
         --col-done: #2d3436;
+        --col-cancelled: #636e72;
         --pri-none: #636e72;
         --pri-low: #74b9ff;
         --pri-medium: #ffa502;
@@ -649,7 +654,17 @@
         cursor: grabbing;
         transform: scale(0.95);
       }
-      /* Attention states — bright left accent + subtle glow */
+      /* State-colored left accent — matches state button colors */
+      .card[data-state="brainstorming"] { border-left-color: var(--col-brainstorming); }
+      .card[data-state="clarification"] { border-left-color: var(--col-clarification); }
+      .card[data-state="approved"] { border-left-color: var(--col-approved); }
+      .card[data-state="in_development"] { border-left-color: var(--col-in_development); }
+      .card[data-state="in_review"] { border-left-color: var(--col-in_review); }
+      .card[data-state="needs_input"] { border-left-color: var(--col-needs_input); }
+      .card[data-state="testing"] { border-left-color: var(--col-testing); }
+      .card[data-state="done"] { border-left-color: var(--col-done); }
+      .card[data-state="cancelled"] { border-left-color: var(--col-cancelled); }
+      /* Attention states — bright left accent + subtle glow (overrides state colors) */
       .card[data-attention="high"] {
         border-left-color: var(--col-needs_input);
         background: linear-gradient(
@@ -12901,7 +12916,7 @@
       </div>` : ""}
     </div>`;
           const spaceIcon = item.space_type && item.space_type !== "standard" && SPACE_TYPES[item.space_type] ? `<span class="card-space-icon" title="${esc(SPACE_TYPES[item.space_type].label)} space">${SPACE_TYPES[item.space_type].icon}</span>` : "";
-          return `<div class="card" data-id="${esc(item.id)}" data-attention="${cardAttention(item)}" draggable="true">
+          return `<div class="card" data-id="${esc(item.id)}" data-state="${esc(item.state)}" data-attention="${cardAttention(item)}" draggable="true">
     ${agentStatusEmoji}
     ${badgeHtml}
     ${keyHtml || spaceIcon ? `<div class="card-key-row">${keyHtml}${spaceIcon}</div>` : ""}
