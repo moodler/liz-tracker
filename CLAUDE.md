@@ -758,7 +758,7 @@ When adding new features, always add a section header. Use grep for `// ──` 
 
 ### Shared Helpers & Constants
 
-Reusable utilities are in the **"Shared Helpers"** section (line ~11110). Check here before writing new utility code:
+Reusable utilities are in the **"Shared Helpers"** section (line ~11150). Check here before writing new utility code:
 
 | Helper | Purpose |
 | --- | --- |
@@ -773,7 +773,7 @@ Reusable utilities are in the **"Shared Helpers"** section (line ~11110). Check 
 | `buildOpencodeUrl(sessionId, dir)` | Build OpenCode deep link URL |
 | `base64UrlEncode(str)` | Encode string to base64url (for OpenCode directory paths) |
 
-Shared constants (defined near the top of the JS, line ~10514):
+Shared constants (defined near the top of the JS, line ~10554):
 
 | Constant | Purpose |
 | --- | --- |
