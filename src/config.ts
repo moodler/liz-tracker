@@ -390,7 +390,7 @@ export const ITEM_DISPATCH_FAILURE_LIMIT = parseInt(
  * Set via DECKWRIGHT_URL env var or .env file.
  */
 export const DECKWRIGHT_URL = (
-  process.env.DECKWRIGHT_URL || "http://192.168.50.141:2222"
+  process.env.DECKWRIGHT_URL || "http://192.168.50.19:2222"
 ).replace(/\/+$/, ""); // Strip trailing slash
 
 // ── AI Categorization ──
