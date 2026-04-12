@@ -248,7 +248,7 @@ Tab-based workspace for developing presentations with DeckWright integration:
 \`\`\`
 
 - \`deck_slug\` — DeckWright deck directory name (under ~/deckwright/src/content/decks/)
-- DeckWright URL is configured via \`DECKWRIGHT_URL\` environment variable (default: http://192.168.50.19:2222)
+- DeckWright URL is configured via \`DECKWRIGHT_URL\` environment variable (default: http://192.168.50.141:2222)
 
 Use \`tracker_update_item\` to update description. Use the PATCH API route or \`tracker_update_item\` with \`space_data\` to update deck config.
 

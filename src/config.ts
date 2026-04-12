@@ -149,7 +149,7 @@ export function getLastDashboardBaseUrl(): string | null {
  *
  * The server handles /{KEY} paths by redirecting to /#/item/{KEY}, so the
  * short URL works as a redirect that resolves to the full dashboard URL.
- * Example: http://192.168.50.19:1000/TRACK-187 → redirects to /#/item/TRACK-187
+ * Example: http://192.168.50.141:1000/TRACK-187 → redirects to /#/item/TRACK-187
  */
 export function buildItemUrl(key: string): string {
   const base = _lastDashboardBaseUrl || TRACKER_SHORT_URL;
@@ -390,7 +390,7 @@ export const ITEM_DISPATCH_FAILURE_LIMIT = parseInt(
  * Set via DECKWRIGHT_URL env var or .env file.
  */
 export const DECKWRIGHT_URL = (
-  process.env.DECKWRIGHT_URL || "http://192.168.50.19:2222"
+  process.env.DECKWRIGHT_URL || "http://192.168.50.141:2222"
 ).replace(/\/+$/, ""); // Strip trailing slash
 
 // ── AI Categorization ──

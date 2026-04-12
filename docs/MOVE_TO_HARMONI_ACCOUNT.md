@@ -59,7 +59,7 @@ Edit `/Users/harmoni/tracker/.env`:
 | `OWNER_NAME` | `Martin` | `Harmoni` (or the actual owner name) |
 | `HUMAN_ACTORS` | `dashboard,me,martin` | `dashboard,me,harmoni` |
 | `ASSISTANT_PROJECT_ROOT` | `~/liz` | `~/liz` (resolves to `/Users/harmoni/liz` automatically) |
-| `OPENCODE_SERVER_URL` | `http://192.168.50.19:3000` | Same, or update if OpenCode moves too |
+| `OPENCODE_SERVER_URL` | `http://192.168.50.141:3000` | Same, or update if OpenCode moves too |
 | `OPENCODE_PUBLIC_URL` | `http://10.0.0.1:3000` | Same, or update |
 | `WEBHOOK_URL` | `http://127.0.0.1:9851/webhook` | Same, or update |
 | `WEBHOOK_SECRET` | (existing hash) | Regenerate or keep |
