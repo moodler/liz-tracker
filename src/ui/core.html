@@ -11225,14 +11225,20 @@
         // ── Emoji Reactions ──
 
         const REACTION_EMOJIS = ["\ud83d\udc4d", "\ud83d\udc4e", "\u2764\ufe0f", "\ud83d\ude02", "\ud83d\ude2e", "\ud83d\ude4f"];
-        const DEFAULT_AUTHOR = "me";
+
+        /** Get the current user's author name for reactions (matches comment author). */
+        function getReactionAuthor() {
+          try { return localStorage.getItem(STORAGE_AUTHOR_KEY) || DEFAULT_AUTHOR; }
+          catch { return DEFAULT_AUTHOR; }
+        }
 
         /** Build reaction chip HTML for a comment's reactions array. */
         function renderReactionChips(commentId, reactions, containerClass) {
           if (!reactions || reactions.length === 0) return "";
           const cls = containerClass || "comment-reactions";
+          const currentAuthor = getReactionAuthor();
           return `<div class="${cls}">${reactions.map(r => {
-            const isActive = r.authors.includes(DEFAULT_AUTHOR) ? " active" : "";
+            const isActive = r.authors.includes(currentAuthor) ? " active" : "";
             const tooltip = r.authors.join(", ");
             return `<button class="reaction-chip${isActive}" data-emoji="${r.emoji}" data-comment-id="${commentId}"><span class="reaction-tooltip">${esc(tooltip)}</span><span class="reaction-emoji">${r.emoji}</span><span class="reaction-count">${r.count}</span></button>`;
           }).join("")}</div>`;
@@ -11241,7 +11247,7 @@
         /** Toggle a reaction via API and update the chips in-place. */
         async function toggleReactionApi(commentId, emoji, chipContainer) {
           try {
-            const res = await apiPost(`/comments/${commentId}/reactions`, { emoji, author: DEFAULT_AUTHOR });
+            const res = await apiPost(`/comments/${commentId}/reactions`, { emoji, author: getReactionAuthor() });
             // Re-render the chips in-place
             if (chipContainer) {
               const cls = chipContainer.className;
