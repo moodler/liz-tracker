@@ -11248,14 +11248,29 @@
         async function toggleReactionApi(commentId, emoji, chipContainer) {
           try {
             const res = await apiPost(`/comments/${commentId}/reactions`, { emoji, author: getReactionAuthor() });
-            // Re-render the chips in-place
-            if (chipContainer) {
-              const cls = chipContainer.className;
-              chipContainer.outerHTML = renderReactionChips(commentId, res.reactions, cls);
-            }
-            // Also refresh reactions on any other visible instance of this comment
-            document.querySelectorAll(`[data-comment-id="${commentId}"]`).forEach(chip => {
-              // handled via parent refresh
+            // Update all visible instances of this comment's reactions
+            const commentEls = document.querySelectorAll(
+              `.comment-item[data-comment-id="${commentId}"], .cs-comment[data-comment-id="${commentId}"], .text-comment[data-comment-id="${commentId}"]`
+            );
+            commentEls.forEach(commentEl => {
+              const existing = commentEl.querySelector(".comment-reactions, .cs-comment-reactions");
+              const cls = existing ? existing.className
+                : commentEl.classList.contains("cs-comment") ? "cs-comment-reactions" : "comment-reactions";
+              const newHtml = renderReactionChips(commentId, res.reactions, cls);
+              if (existing) {
+                if (newHtml) {
+                  existing.outerHTML = newHtml;
+                } else {
+                  existing.remove();
+                }
+              } else if (newHtml) {
+                // First reaction — insert container after comment body
+                const body = commentEl.querySelector(".comment-body, .cs-comment-body, .text-comment-body");
+                if (body) body.insertAdjacentHTML("afterend", newHtml);
+                else commentEl.insertAdjacentHTML("beforeend", newHtml);
+              }
+              // Re-bind click handlers on new chips
+              bindReactionChips(commentEl);
             });
           } catch (e) {
             console.error("Reaction toggle failed:", e);
