@@ -1888,6 +1888,81 @@
         color: var(--highlight);
         text-decoration: underline;
       }
+      /* ── Reaction Picker & Chips ── */
+      .reaction-picker {
+        position: fixed;
+        display: flex;
+        gap: 4px;
+        padding: 6px 10px;
+        background: rgba(22, 33, 62, 0.70);
+        backdrop-filter: blur(24px) saturate(160%);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 24px;
+        box-shadow: var(--shadow-xl);
+        z-index: 10000;
+      }
+      .reaction-pick {
+        font-size: 1.3rem;
+        padding: 4px 6px;
+        border: none;
+        background: transparent;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: transform 0.15s, background 0.15s;
+        line-height: 1;
+      }
+      .reaction-pick:hover {
+        background: rgba(255, 255, 255, 0.1);
+        transform: scale(1.2);
+      }
+      .comment-reactions,
+      .cs-comment-reactions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 6px;
+      }
+      .reaction-chip {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 2px 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 0.78rem;
+        transition: background 0.15s, border-color 0.15s;
+      }
+      .reaction-chip:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .reaction-chip.active {
+        background: rgba(99, 126, 234, 0.15);
+        border-color: rgba(99, 126, 234, 0.3);
+      }
+      .reaction-chip .reaction-emoji { font-size: 0.9rem; }
+      .reaction-chip .reaction-count { color: var(--text-dim); font-size: 0.72rem; }
+      .reaction-chip .reaction-tooltip {
+        position: absolute;
+        bottom: calc(100% + 4px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--bg-accent);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 0.7rem;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.15s;
+        color: var(--text);
+      }
+      .reaction-chip:hover .reaction-tooltip {
+        opacity: 1;
+      }
       .comment-form {
         display: flex;
         flex-direction: column;
@@ -11147,6 +11222,129 @@
           }
         }
 
+        // ── Emoji Reactions ──
+
+        const REACTION_EMOJIS = ["\ud83d\udc4d", "\ud83d\udc4e", "\u2764\ufe0f", "\ud83d\ude02", "\ud83d\ude2e", "\ud83d\ude4f"];
+        const DEFAULT_AUTHOR = "me";
+
+        /** Build reaction chip HTML for a comment's reactions array. */
+        function renderReactionChips(commentId, reactions, containerClass) {
+          if (!reactions || reactions.length === 0) return "";
+          const cls = containerClass || "comment-reactions";
+          return `<div class="${cls}">${reactions.map(r => {
+            const isActive = r.authors.includes(DEFAULT_AUTHOR) ? " active" : "";
+            const tooltip = r.authors.join(", ");
+            return `<button class="reaction-chip${isActive}" data-emoji="${r.emoji}" data-comment-id="${commentId}"><span class="reaction-tooltip">${esc(tooltip)}</span><span class="reaction-emoji">${r.emoji}</span><span class="reaction-count">${r.count}</span></button>`;
+          }).join("")}</div>`;
+        }
+
+        /** Toggle a reaction via API and update the chips in-place. */
+        async function toggleReactionApi(commentId, emoji, chipContainer) {
+          try {
+            const res = await apiPost(`/comments/${commentId}/reactions`, { emoji, author: DEFAULT_AUTHOR });
+            // Re-render the chips in-place
+            if (chipContainer) {
+              const cls = chipContainer.className;
+              chipContainer.outerHTML = renderReactionChips(commentId, res.reactions, cls);
+            }
+            // Also refresh reactions on any other visible instance of this comment
+            document.querySelectorAll(`[data-comment-id="${commentId}"]`).forEach(chip => {
+              // handled via parent refresh
+            });
+          } catch (e) {
+            console.error("Reaction toggle failed:", e);
+          }
+        }
+
+        /** Attach click handlers to reaction chips inside a container. */
+        function bindReactionChips(container) {
+          if (!container) return;
+          container.querySelectorAll(".reaction-chip").forEach(chip => {
+            chip.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const commentId = chip.dataset.commentId;
+              const emoji = chip.dataset.emoji;
+              const parent = chip.closest(".comment-reactions, .cs-comment-reactions");
+              toggleReactionApi(commentId, emoji, parent);
+            });
+          });
+        }
+
+        let _reactionPicker = null;
+
+        function showReactionPicker(commentId, x, y) {
+          closeReactionPicker();
+          const picker = document.createElement("div");
+          picker.className = "reaction-picker";
+          picker.style.left = Math.min(x, window.innerWidth - 260) + "px";
+          picker.style.top = Math.min(y, window.innerHeight - 50) + "px";
+          picker.innerHTML = REACTION_EMOJIS.map(e => `<button class="reaction-pick" data-emoji="${e}">${e}</button>`).join("");
+          document.body.appendChild(picker);
+          _reactionPicker = picker;
+
+          picker.querySelectorAll(".reaction-pick").forEach(btn => {
+            btn.addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              const emoji = btn.dataset.emoji;
+              closeReactionPicker();
+              // Find the reaction container for this comment
+              const commentEl = document.querySelector(`.comment-item[data-comment-id="${commentId}"], .cs-comment[data-comment-id="${commentId}"], .text-comment[data-comment-id="${commentId}"]`);
+              const chipContainer = commentEl ? commentEl.querySelector(".comment-reactions, .cs-comment-reactions") : null;
+              toggleReactionApi(commentId, emoji, chipContainer);
+            });
+          });
+
+          // Close on outside click
+          setTimeout(() => {
+            document.addEventListener("click", _closeReactionPickerOnClick);
+          }, 0);
+        }
+
+        function _closeReactionPickerOnClick(e) {
+          if (_reactionPicker && !_reactionPicker.contains(e.target)) {
+            closeReactionPicker();
+          }
+        }
+
+        function closeReactionPicker() {
+          if (_reactionPicker) {
+            _reactionPicker.remove();
+            _reactionPicker = null;
+          }
+          document.removeEventListener("click", _closeReactionPickerOnClick);
+        }
+
+        /** Attach right-click (desktop) and long-press (mobile) reaction picker to comment elements. */
+        function bindReactionTriggers(container) {
+          if (!container) return;
+          container.querySelectorAll(".comment-item[data-comment-id], .cs-comment[data-comment-id], .text-comment[data-comment-id]").forEach(el => {
+            const commentId = el.dataset.commentId;
+
+            // Desktop: right-click
+            el.addEventListener("contextmenu", (e) => {
+              e.preventDefault();
+              showReactionPicker(commentId, e.clientX, e.clientY);
+            });
+
+            // Mobile: long-press
+            let touchTimer = null;
+            let touchMoved = false;
+            el.addEventListener("touchstart", (e) => {
+              touchMoved = false;
+              touchTimer = setTimeout(() => {
+                if (!touchMoved) {
+                  e.preventDefault();
+                  const touch = e.touches[0];
+                  showReactionPicker(commentId, touch.clientX, touch.clientY);
+                }
+              }, 500);
+            }, { passive: false });
+            el.addEventListener("touchmove", () => { touchMoved = true; });
+            el.addEventListener("touchend", () => { clearTimeout(touchTimer); });
+            el.addEventListener("touchcancel", () => { clearTimeout(touchTimer); });
+          });
+        }
+
         // ── Shared Helpers ──
         function esc(s) {
           if (!s) return "";
@@ -15278,6 +15476,7 @@
             sortedComments.forEach((c) => {
               const div = document.createElement("div");
               div.className = "comment-item";
+              div.dataset.commentId = c.id;
               div.innerHTML = `
             <div class="comment-header">
               <span class="comment-author">${esc(c.author)}</span>
@@ -15287,7 +15486,8 @@
                 <button class="comment-action-btn delete" data-action="delete" data-id="${c.id}" title="Delete">del</button>
               </div>
             </div>
-            <div class="comment-body" data-id="${c.id}">${renderMarkdown(c.body)}</div>`;
+            <div class="comment-body" data-id="${c.id}">${renderMarkdown(c.body)}</div>
+            ${renderReactionChips(c.id, c.reactions, "comment-reactions")}`;
               commentsEl.appendChild(div);
             });
             $$(".comment-action-btn", commentsEl).forEach((btn) => {
@@ -15300,6 +15500,8 @@
                   editComment(cid, btn.closest(".comment-item"));
               });
             });
+            bindReactionChips(commentsEl);
+            bindReactionTriggers(commentsEl);
           }
 
           // Blockers
@@ -16259,14 +16461,17 @@
           commentSheetThread.innerHTML = commentSheetComments.map((c) => {
             const isAgent = isAgentAuthor(c.author);
             const cls = isAgent ? "agent" : "human";
-            return `<div class="cs-comment ${cls}">
+            return `<div class="cs-comment ${cls}" data-comment-id="${c.id}">
               <div class="cs-comment-meta">
                 <span class="cs-comment-author">${esc(c.author)}</span>
                 <span class="cs-comment-time">${timeAgo(c.created_at)}</span>
               </div>
               <div class="cs-comment-body">${renderMarkdown(c.body)}</div>
+              ${renderReactionChips(c.id, c.reactions, "cs-comment-reactions")}
             </div>`;
           }).join("");
+          bindReactionChips(commentSheetThread);
+          bindReactionTriggers(commentSheetThread);
           // Auto-scroll to bottom
           requestAnimationFrame(() => {
             commentSheetThread.scrollTop = commentSheetThread.scrollHeight;

@@ -493,15 +493,19 @@ function renderScheduledDiscussion(comments) {
     const div = document.createElement("div");
     div.className = "text-comment";
     div.dataset.author = c.author || "System";
+    div.dataset.commentId = c.id;
     div.innerHTML = `
       <div class="text-comment-header">
         <span class="text-comment-author">${esc(c.author || "System")}</span>
         <span class="text-comment-time">${formatTime(c.created_at)}</span>
       </div>
       <div class="text-comment-body">${renderMarkdown(c.body || "")}</div>
+      ${renderReactionChips(c.id, c.reactions, "comment-reactions")}
     `;
     thread.appendChild(div);
   });
+  bindReactionChips(thread);
+  bindReactionTriggers(thread);
   thread.scrollTop = thread.scrollHeight;
 }
 

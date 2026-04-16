@@ -82,7 +82,7 @@ npm run test:coverage # Run tests with coverage report
 - The `_initTestTrackerDatabase()` function in `db.ts` creates a fresh in-memory DB for each test suite
 
 **Current test coverage:**
-- `src/db.test.ts` — actor classification, state transitions (incl. security rules), project/item CRUD, locks, dependencies, comments, approval provenance, move between projects, activity log (logActivity/listActivity, filtering, integration with mutations)
+- `src/db.test.ts` — actor classification, state transitions (incl. security rules), project/item CRUD, locks, dependencies, comments, comment reactions (toggle, uniqueness, aggregation, batch, cascade delete, activity logging), approval provenance, move between projects, activity log (logActivity/listActivity, filtering, integration with mutations)
 - `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers (base64url encoding, session/directory/API URL builders), error classification (413 errors, image-too-large, post-completion errors), scheduled task time gating (isScheduleTimeDue frequency/timezone/last_run logic), per-task model resolution (resolveModelForItem strength tiers)
 - `src/session-runner.test.ts` — SDK message mapping, stdio protocol integration tests (event flow, steering)
 - `src/spaces/travel.test.ts` — type-aware segment deduplication key logic (flight/lodging/transport disambiguation)
@@ -375,6 +375,8 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `GET` | `/api/v1/items/:id/activity` | List activity for a specific item |
 | `GET` | `/api/v1/items/:id/session/events` | SSE stream of runner session events (runner mode) |
 | `POST` | `/api/v1/items/:id/session/steer` | Send steering message to running agent (runner mode) |
+| `POST` | `/api/v1/comments/:id/reactions` | Toggle an emoji reaction on a comment (add/remove) |
+| `GET` | `/api/v1/comments/:id/reactions` | Get aggregated reactions for a comment |
 
 ### MCP Tools
 
@@ -392,6 +394,7 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `tracker_move_item` | Move a work item to a different project |
 | `tracker_change_state` | Change item state (records transition in audit trail) |
 | `tracker_add_comment` | Add a comment to a work item |
+| `tracker_react_to_comment` | Toggle an emoji reaction on a comment |
 | `tracker_watch_item` | Watch a work item for changes |
 | `tracker_view` | Get a kanban-style tracker view of a project |
 | `tracker_lock_item` | Lock a work item (auto-expire after 2 hours) |
@@ -698,6 +701,8 @@ tracker_add_travel_segment({
 - `GET /items/:id/presentation/deck-mdx` — read deck.mdx content from DeckWright content directory
 - `GET /items/:id/presentation/deck-thumbnails` — fetch thumbnail list from DeckWright, cache locally, return tracker-proxied URLs (pass `?refresh=1` to bust cache)
 - `GET /items/:id/presentation/deck-thumb?file=...` — serve a cached deck thumbnail image (no auth required)
+- `POST /comments/:id/reactions` — toggle an emoji reaction on a comment (`{ emoji, author? }`)
+- `GET /comments/:id/reactions` — get aggregated reactions for a comment
 
 ### UI Sections
 
@@ -737,7 +742,7 @@ Zero changes needed to `api.ts`, `mcp-server.ts`, `db.ts`, or the overlay shell 
 
 ## Conventions
 
-- Database tables are prefixed with `tracker_` (projects, work_items, comments, transitions, watchers, dependencies, attachments, description_versions, activity_log, execution_audits)
+- Database tables are prefixed with `tracker_` (projects, work_items, comments, transitions, watchers, dependencies, attachments, description_versions, activity_log, execution_audits, comment_reactions)
 - All IDs are random hex strings (24 chars)
 - Timestamps are ISO 8601 strings
 - Work items have sequential keys per project (e.g. PROJ-1, PROJ-2)

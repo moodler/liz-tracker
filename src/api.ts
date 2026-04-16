@@ -13,7 +13,7 @@
  *   Lock:      POST /items/:id/lock, POST /items/:id/unlock
  *   Deps:      GET/POST /items/:id/dependencies, DELETE /items/:id/dependencies/:dep_id
  *   Stale:     POST /items/clear-stale-locks
- *   Comments:  GET/POST /items/:id/comments, PATCH/DELETE /comments/:id
+ *   Comments:  GET/POST /items/:id/comments, PATCH/DELETE /comments/:id, GET/POST /comments/:id/reactions
  *   Transitions: GET /items/:id/transitions
  *   Versions:  GET/POST /items/:id/versions
  *   Watchers:  GET/POST /items/:id/watchers, DELETE /items/:id/watchers/:entity
@@ -66,6 +66,9 @@ import {
   getCommentCounts,
   updateComment,
   deleteComment,
+  toggleReaction,
+  getReactions,
+  getReactionsBatch,
   listTransitions,
   addWatcher,
   listWatchers,
@@ -1103,7 +1106,15 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
       // GET/POST /items/:id/comments
       if (parts.length === 3 && parts[2] === "comments") {
         if (method === "GET") {
-          return json(res, listComments(itemId));
+          const comments = listComments(itemId);
+          const reactionMap = getReactionsBatch(comments.map((c) => c.id));
+          return json(
+            res,
+            comments.map((c) => ({
+              ...c,
+              reactions: reactionMap[c.id] || [],
+            })),
+          );
         }
         if (method === "POST") {
           const item = getWorkItem(itemId);
@@ -1476,7 +1487,12 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
           if (!item) return error(res, "Work item not found", 404);
           // Enrich with key, comments, transitions, watchers, dependencies, attachments
           const key = getWorkItemKey(item);
-          const comments = listComments(itemId);
+          const rawComments = listComments(itemId);
+          const reactionMap = getReactionsBatch(rawComments.map((c) => c.id));
+          const comments = rawComments.map((c) => ({
+            ...c,
+            reactions: reactionMap[c.id] || [],
+          }));
           const transitions = listTransitions(itemId);
           const watchers = listWatchers(itemId);
           const dependencies = getDependencies(itemId).map((d) => ({ ...d, key: getWorkItemKey(d) }));
@@ -1654,6 +1670,31 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
         const comment = deleteComment(commentId, actor);
         if (!comment) return error(res, "Comment not found", 404);
         return json(res, { deleted: true });
+      }
+
+      // POST/GET /comments/:id/reactions
+      if (parts.length === 3 && parts[2] === "reactions") {
+        if (method === "GET") {
+          return json(res, getReactions(commentId));
+        }
+        if (method === "POST") {
+          const body = await parseBody(req);
+          if (!body.emoji) return error(res, "emoji is required");
+          const author = body.author ? String(body.author) : "me";
+          try {
+            const result = toggleReaction(
+              commentId,
+              String(body.emoji),
+              author,
+            );
+            return json(res, result);
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (msg.includes("Comment not found"))
+              return error(res, msg, 404);
+            throw e;
+          }
+        }
       }
     }
 

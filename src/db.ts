@@ -192,6 +192,20 @@ export interface DescriptionVersion {
   created_at: string;
 }
 
+export interface CommentReaction {
+  id: string;
+  comment_id: string;
+  emoji: string;
+  author: string;
+  created_at: string;
+}
+
+export interface AggregatedReaction {
+  emoji: string;
+  count: number;
+  authors: string[];
+}
+
 export interface ActivityLogEntry {
   id: string;
   project_id: string | null;
@@ -308,6 +322,17 @@ function createSchema(database: Database.Database): void {
       FOREIGN KEY (work_item_id) REFERENCES tracker_work_items(id)
     );
     CREATE INDEX IF NOT EXISTS idx_tracker_desc_versions_wi ON tracker_description_versions(work_item_id);
+
+    CREATE TABLE IF NOT EXISTS tracker_comment_reactions (
+      id TEXT PRIMARY KEY,
+      comment_id TEXT NOT NULL,
+      emoji TEXT NOT NULL,
+      author TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (comment_id) REFERENCES tracker_comments(id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_reaction_unique ON tracker_comment_reactions(comment_id, emoji, author);
+    CREATE INDEX IF NOT EXISTS idx_reaction_comment ON tracker_comment_reactions(comment_id);
 
     CREATE TABLE IF NOT EXISTS tracker_activity_log (
       id TEXT PRIMARY KEY,
@@ -626,6 +651,20 @@ export function initTrackerDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_tracker_audits_session ON tracker_execution_audits(session_id);
   `);
 
+  // Comment reactions table (TRACK-270)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracker_comment_reactions (
+      id TEXT PRIMARY KEY,
+      comment_id TEXT NOT NULL,
+      emoji TEXT NOT NULL,
+      author TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (comment_id) REFERENCES tracker_comments(id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_reaction_unique ON tracker_comment_reactions(comment_id, emoji, author);
+    CREATE INDEX IF NOT EXISTS idx_reaction_comment ON tracker_comment_reactions(comment_id);
+  `);
+
   // Backfill: assign tab_order to projects that have 0 (default) — preserve existing order by updated_at
   const projectsNeedingTabOrder = db
     .prepare("SELECT id FROM tracker_projects WHERE tab_order = 0 ORDER BY updated_at DESC")
@@ -894,6 +933,20 @@ export function _initTestTrackerDatabase(): void {
     );
   `);
 
+  // Create comment reactions table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracker_comment_reactions (
+      id TEXT PRIMARY KEY,
+      comment_id TEXT NOT NULL,
+      emoji TEXT NOT NULL,
+      author TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (comment_id) REFERENCES tracker_comments(id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_reaction_unique ON tracker_comment_reactions(comment_id, emoji, author);
+    CREATE INDEX IF NOT EXISTS idx_reaction_comment ON tracker_comment_reactions(comment_id);
+  `);
+
   // Create activity log table
   db.exec(`
     CREATE TABLE IF NOT EXISTS tracker_activity_log (
@@ -1014,7 +1067,8 @@ export type TrackerEventType =
   | "comment.updated"
   | "comment.deleted"
   | "attachment.created"
-  | "attachment.deleted";
+  | "attachment.deleted"
+  | "reaction.toggled";
 
 export interface TrackerEvent {
   type: TrackerEventType;
@@ -2321,6 +2375,122 @@ export function deleteComment(
   }
 
   return comment;
+}
+
+// ── Comment Reactions ──
+
+export function toggleReaction(
+  commentId: string,
+  emoji: string,
+  author: string,
+): { added: boolean; reactions: AggregatedReaction[] } {
+  const comment = db
+    .prepare("SELECT * FROM tracker_comments WHERE id = ?")
+    .get(commentId) as Comment | undefined;
+  if (!comment) throw new Error("Comment not found");
+
+  const existing = db
+    .prepare(
+      "SELECT id FROM tracker_comment_reactions WHERE comment_id = ? AND emoji = ? AND author = ?",
+    )
+    .get(commentId, emoji, author) as { id: string } | undefined;
+
+  const ts = now();
+  let added: boolean;
+
+  if (existing) {
+    db.prepare("DELETE FROM tracker_comment_reactions WHERE id = ?").run(
+      existing.id,
+    );
+    added = false;
+  } else {
+    const id = genId();
+    db.prepare(
+      "INSERT INTO tracker_comment_reactions (id, comment_id, emoji, author, created_at) VALUES (?, ?, ?, ?, ?)",
+    ).run(id, commentId, emoji, author, ts);
+    added = true;
+  }
+
+  const item = getWorkItem(comment.work_item_id);
+  if (item) {
+    logActivity({
+      project_id: item.project_id,
+      item_id: comment.work_item_id,
+      action: added ? "reaction.added" : "reaction.removed",
+      actor: author,
+      summary: `${added ? "Added" : "Removed"} ${emoji} reaction on comment by ${comment.author}`,
+      details: { comment_id: commentId, emoji, author },
+    });
+
+    emit({
+      type: "reaction.toggled",
+      work_item_id: comment.work_item_id,
+      project_id: item.project_id,
+      actor: author,
+      data: {
+        comment_id: commentId,
+        emoji,
+        author,
+        added,
+        reactions: getReactions(commentId),
+      },
+      timestamp: ts,
+    });
+  }
+
+  return { added, reactions: getReactions(commentId) };
+}
+
+export function getReactions(commentId: string): AggregatedReaction[] {
+  const rows = db
+    .prepare(
+      `SELECT emoji, COUNT(*) as count, GROUP_CONCAT(author) as authors
+       FROM tracker_comment_reactions
+       WHERE comment_id = ?
+       GROUP BY emoji
+       ORDER BY MIN(created_at)`,
+    )
+    .all(commentId) as Array<{
+    emoji: string;
+    count: number;
+    authors: string;
+  }>;
+  return rows.map((r) => ({
+    emoji: r.emoji,
+    count: r.count,
+    authors: r.authors.split(","),
+  }));
+}
+
+export function getReactionsBatch(
+  commentIds: string[],
+): Record<string, AggregatedReaction[]> {
+  if (commentIds.length === 0) return {};
+  const placeholders = commentIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT comment_id, emoji, COUNT(*) as count, GROUP_CONCAT(author) as authors
+       FROM tracker_comment_reactions
+       WHERE comment_id IN (${placeholders})
+       GROUP BY comment_id, emoji
+       ORDER BY comment_id, MIN(created_at)`,
+    )
+    .all(...commentIds) as Array<{
+    comment_id: string;
+    emoji: string;
+    count: number;
+    authors: string;
+  }>;
+  const result: Record<string, AggregatedReaction[]> = {};
+  for (const row of rows) {
+    if (!result[row.comment_id]) result[row.comment_id] = [];
+    result[row.comment_id].push({
+      emoji: row.emoji,
+      count: row.count,
+      authors: row.authors.split(","),
+    });
+  }
+  return result;
 }
 
 // ── Transitions ──

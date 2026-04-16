@@ -34,6 +34,7 @@ import {
   isBlocked,
   createComment,
   listComments,
+  toggleReaction,
   listTransitions,
   addWatcher,
   getProjectStats,
@@ -527,6 +528,24 @@ function createMcpServer(): McpServer {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.includes("Comment blocked")) return { content: [{ type: "text", text: `Error: ${msg}` }] };
         throw e;
+      }
+    },
+  );
+
+  server.tool(
+    "tracker_react_to_comment",
+    "Toggle an emoji reaction on a comment. Adds the reaction if not present, removes if already reacted.",
+    {
+      comment_id: z.string().describe("Comment ID"),
+      emoji: z.string().describe("Emoji character (e.g. '\ud83d\udc4d')"),
+    },
+    async (args) => {
+      try {
+        const result = toggleReaction(args.comment_id, args.emoji, normalizeRunnerActor("Harmoni"));
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return { content: [{ type: "text", text: `Error: ${msg}` }] };
       }
     },
   );

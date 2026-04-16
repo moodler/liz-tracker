@@ -755,7 +755,9 @@ function renderTravelDiscussion(comments) {
     thread.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:40px 20px;font-size:0.85rem;">No comments yet.</div>';
     return;
   }
-  thread.innerHTML = comments.map(c => `<div class="text-comment" data-author="${esc(c.author)}"><div class="text-comment-header"><span class="text-comment-author">${esc(c.author)}</span><span class="text-comment-time">${formatTime(c.created_at)}</span></div><div class="text-comment-body">${renderMarkdown(c.body)}</div></div>`).join("");
+  thread.innerHTML = comments.map(c => `<div class="text-comment" data-author="${esc(c.author)}" data-comment-id="${c.id}"><div class="text-comment-header"><span class="text-comment-author">${esc(c.author)}</span><span class="text-comment-time">${formatTime(c.created_at)}</span></div><div class="text-comment-body">${renderMarkdown(c.body)}</div>${renderReactionChips(c.id, c.reactions, "comment-reactions")}</div>`).join("");
+  bindReactionChips(thread);
+  bindReactionTriggers(thread);
   thread.scrollTop = thread.scrollHeight;
 }
 

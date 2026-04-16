@@ -47,6 +47,9 @@ import {
   createAttachment,
   deleteAttachment,
   deleteWorkItem,
+  toggleReaction,
+  getReactions,
+  getReactionsBatch,
   VALID_STATES,
   VALID_PRIORITIES,
 } from './db.js';
@@ -2173,5 +2176,110 @@ describe('Activity Log', () => {
       const afterDelete = listActivity({ item_id: item.id });
       expect(afterDelete).toHaveLength(0);
     });
+  });
+});
+
+// ── Comment Reactions ──────────────────────────────────────────────────────────
+
+describe('Comment Reactions', () => {
+  beforeEach(() => {
+    _initTestTrackerDatabase();
+  });
+
+  function setup() {
+    const project = createProject({ name: 'Test' });
+    const item = createWorkItem({ project_id: project.id, title: 'Test item', created_by: 'dashboard' });
+    const comment = createComment({ work_item_id: item.id, author: 'me', body: 'Hello' });
+    return { project, item, comment };
+  }
+
+  it('adds a reaction (toggle on)', () => {
+    const { comment } = setup();
+    const result = toggleReaction(comment.id, '\ud83d\udc4d', 'me');
+    expect(result.added).toBe(true);
+    expect(result.reactions).toHaveLength(1);
+    expect(result.reactions[0]).toEqual({ emoji: '\ud83d\udc4d', count: 1, authors: ['me'] });
+  });
+
+  it('removes a reaction (toggle off)', () => {
+    const { comment } = setup();
+    toggleReaction(comment.id, '\ud83d\udc4d', 'me');
+    const result = toggleReaction(comment.id, '\ud83d\udc4d', 'me');
+    expect(result.added).toBe(false);
+    expect(result.reactions).toHaveLength(0);
+  });
+
+  it('enforces uniqueness — same author + emoji is a toggle', () => {
+    const { comment } = setup();
+    toggleReaction(comment.id, '\ud83d\udc4d', 'me');
+    toggleReaction(comment.id, '\ud83d\udc4d', 'me'); // toggle off
+    const result = toggleReaction(comment.id, '\ud83d\udc4d', 'me'); // toggle on again
+    expect(result.added).toBe(true);
+    expect(result.reactions[0].count).toBe(1);
+  });
+
+  it('allows multiple emojis from same author', () => {
+    const { comment } = setup();
+    toggleReaction(comment.id, '\ud83d\udc4d', 'me');
+    toggleReaction(comment.id, '\u2764\ufe0f', 'me');
+    const reactions = getReactions(comment.id);
+    expect(reactions).toHaveLength(2);
+    expect(reactions.map(r => r.emoji)).toContain('\ud83d\udc4d');
+    expect(reactions.map(r => r.emoji)).toContain('\u2764\ufe0f');
+  });
+
+  it('aggregates counts from multiple authors', () => {
+    const { comment } = setup();
+    toggleReaction(comment.id, '\ud83d\udc4d', 'me');
+    toggleReaction(comment.id, '\ud83d\udc4d', 'Coder');
+    toggleReaction(comment.id, '\ud83d\udc4d', 'dashboard');
+    const reactions = getReactions(comment.id);
+    expect(reactions).toHaveLength(1);
+    expect(reactions[0].count).toBe(3);
+    expect(reactions[0].authors).toEqual(expect.arrayContaining(['me', 'Coder', 'dashboard']));
+  });
+
+  it('batch loads reactions for multiple comments', () => {
+    const { item } = setup();
+    const c1 = createComment({ work_item_id: item.id, author: 'me', body: 'First' });
+    const c2 = createComment({ work_item_id: item.id, author: 'me', body: 'Second' });
+    toggleReaction(c1.id, '\ud83d\udc4d', 'me');
+    toggleReaction(c2.id, '\u2764\ufe0f', 'Coder');
+    const batch = getReactionsBatch([c1.id, c2.id]);
+    expect(batch[c1.id]).toHaveLength(1);
+    expect(batch[c1.id][0].emoji).toBe('\ud83d\udc4d');
+    expect(batch[c2.id]).toHaveLength(1);
+    expect(batch[c2.id][0].emoji).toBe('\u2764\ufe0f');
+  });
+
+  it('returns empty map for empty input', () => {
+    const batch = getReactionsBatch([]);
+    expect(batch).toEqual({});
+  });
+
+  it('cascade deletes reactions when comment is deleted', () => {
+    const { comment } = setup();
+    toggleReaction(comment.id, '\ud83d\udc4d', 'me');
+    toggleReaction(comment.id, '\u2764\ufe0f', 'Coder');
+    expect(getReactions(comment.id)).toHaveLength(2);
+    deleteComment(comment.id);
+    expect(getReactions(comment.id)).toHaveLength(0);
+  });
+
+  it('logs activity on toggle', () => {
+    const { comment, item } = setup();
+    toggleReaction(comment.id, '\ud83d\udc4d', 'me');
+    const added = listActivity({ item_id: item.id, action: 'reaction.added' });
+    expect(added.length).toBeGreaterThan(0);
+    expect(added[0].summary).toContain('\ud83d\udc4d');
+
+    toggleReaction(comment.id, '\ud83d\udc4d', 'me');
+    const removed = listActivity({ item_id: item.id, action: 'reaction.removed' });
+    expect(removed.length).toBeGreaterThan(0);
+  });
+
+  it('throws when comment does not exist', () => {
+    _initTestTrackerDatabase();
+    expect(() => toggleReaction('nonexistent', '\ud83d\udc4d', 'me')).toThrow('Comment not found');
   });
 });
