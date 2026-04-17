@@ -9571,7 +9571,6 @@
         <button
           class="topbar-settings-btn"
           id="globalSettingsBtn"
-          onclick="openGlobalSettings()"
           title="Tracker Settings"
         >&#9881;</button>
         <span class="offline-indicator" id="offlineIndicator" title="You are offline">
@@ -12287,6 +12286,8 @@
         // ── Global Settings Modal (TRACK-271) ──
 
         const globalSettingsModal = $("#globalSettingsModal");
+
+        $("#globalSettingsBtn").addEventListener("click", openGlobalSettings);
 
         async function openGlobalSettings() {
           try {
