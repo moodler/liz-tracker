@@ -60,6 +60,7 @@ import {
   STORE_DIR,
   CODER_MODEL_PROVIDER,
   CODER_MODEL_ID,
+  CODER_EFFORT,
   MODEL_STRENGTH_MAP,
   type ModelStrength,
   buildOpencodeSessionUrl,
@@ -1591,7 +1592,11 @@ function tryDispatchFromReview(): void {
  * all others fall back to the global CODER_MODEL_* defaults.
  * TRACK-266: Per-task model selection for scheduled tasks.
  */
-export function resolveModelForItem(item: WorkItem): { provider: string; modelId: string } {
+export function resolveModelForItem(item: WorkItem): { provider: string; modelId: string; effort: string } {
+  // TRACK-271: Resolve effort level from DB settings, falling back to env-var default
+  const dbEffort = getSetting<string>("coder_effort");
+  const effort = (dbEffort && dbEffort !== "null") ? dbEffort : CODER_EFFORT;
+
   // Per-task model override for scheduled tasks with model_strength
   if (item.space_type === "scheduled" && item.space_data) {
     try {
@@ -1602,9 +1607,9 @@ export function resolveModelForItem(item: WorkItem): { provider: string; modelId
         const tierKey = `model_strength_${strength}`;
         const dbTierModel = getSetting<string>(tierKey);
         if (dbTierModel && dbTierModel !== "null") {
-          return { provider: MODEL_STRENGTH_MAP[strength].provider, modelId: dbTierModel };
+          return { provider: MODEL_STRENGTH_MAP[strength].provider, modelId: dbTierModel, effort };
         }
-        return MODEL_STRENGTH_MAP[strength];
+        return { ...MODEL_STRENGTH_MAP[strength], effort };
       }
     } catch {
       // Malformed space_data — fall through to default
@@ -1617,6 +1622,7 @@ export function resolveModelForItem(item: WorkItem): { provider: string; modelId
   return {
     provider: (dbProvider && dbProvider !== "null") ? dbProvider : CODER_MODEL_PROVIDER,
     modelId: (dbModelId && dbModelId !== "null") ? dbModelId : CODER_MODEL_ID,
+    effort,
   };
 }
 
@@ -2090,7 +2096,7 @@ async function _dispatchViaRunnerImpl(
     });
 
     logger.info(
-      { itemId: item.id, itemKey, sessionId, title: sessionTitle, pid: child.pid, promptType, model: itemModel.modelId },
+      { itemId: item.id, itemKey, sessionId, title: sessionTitle, pid: child.pid, promptType, model: itemModel.modelId, effort: itemModel.effort },
       "Spawned session runner",
     );
 
@@ -2102,6 +2108,7 @@ async function _dispatchViaRunnerImpl(
       systemPromptAppend: systemAppend,
       cwd: project.working_directory,
       model: itemModel.modelId,
+      effort: itemModel.effort,
       maxTurns: 200,
       promptType,
       attachments: attachmentList,

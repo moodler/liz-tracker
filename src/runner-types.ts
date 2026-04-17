@@ -75,6 +75,7 @@ export interface RunnerConfig {
   systemPromptAppend: string;
   cwd: string;
   model: string;
+  effort?: string;
   maxTurns: number;
   promptType: "coder" | "research";
   attachments: Array<{ path: string; mime: string; filename: string }>;

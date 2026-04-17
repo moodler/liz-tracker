@@ -970,6 +970,7 @@ describe("resolveModelForItem", () => {
     const result = resolveModelForItem(baseItem as any);
     expect(result.provider).toBe("anthropic");
     expect(result.modelId).toBe("claude-opus-4-6");
+    expect(result.effort).toBe("high");
   });
 
   it("returns global default for scheduled items without model_strength", () => {
@@ -1074,6 +1075,31 @@ describe("resolveModelForItem", () => {
       setSetting("coder_model_id", null);
       const result = resolveModelForItem(baseItem as any);
       expect(result.modelId).toBe("claude-opus-4-6");
+    });
+
+    it("uses DB coder_effort setting when set", () => {
+      setSetting("coder_effort", "max");
+      const result = resolveModelForItem(baseItem as any);
+      expect(result.effort).toBe("max");
+    });
+
+    it("returns default effort when DB setting is null", () => {
+      setSetting("coder_effort", null);
+      const result = resolveModelForItem(baseItem as any);
+      expect(result.effort).toBe("high");
+    });
+
+    it("includes effort on scheduled task tier overrides", () => {
+      setSetting("coder_effort", "low");
+      setSetting("model_strength_high", "claude-sonnet-4-6");
+      const item = {
+        ...baseItem,
+        space_type: "scheduled",
+        space_data: JSON.stringify({ schedule: { frequency: "daily" }, status: {}, todo: [], ignore: [], model_strength: "high" }),
+      };
+      const result = resolveModelForItem(item as any);
+      expect(result.modelId).toBe("claude-sonnet-4-6");
+      expect(result.effort).toBe("low");
     });
   });
 });

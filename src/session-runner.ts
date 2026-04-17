@@ -287,6 +287,7 @@ export async function main(): Promise<void> {
       options: {
         cwd: config.cwd,
         model: config.model,
+        ...(config.effort ? { effort: config.effort as "low" | "medium" | "high" | "max" } : {}),
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
         includePartialMessages: false,

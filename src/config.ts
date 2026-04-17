@@ -213,6 +213,13 @@ export const CODER_MODEL_ID =
   process.env.CODER_MODEL_ID || "claude-opus-4-6";
 
 /**
+ * Default effort level for coder bot sessions.
+ * Controls Claude's reasoning depth via the Agent SDK's effort option.
+ * Values: "low" | "medium" | "high" | "max"
+ */
+export const CODER_EFFORT = process.env.CODER_EFFORT || "high";
+
+/**
  * Model strength tiers for scheduled tasks.
  * Maps "high" / "medium" / "low" to provider + model ID pairs.
  * When a scheduled task has model_strength set, the orchestrator uses the

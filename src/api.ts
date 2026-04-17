@@ -116,7 +116,7 @@ import {
   steerSession,
   getActiveSession,
 } from "./orchestrator.js";
-import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL, PORT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL, DISPATCH_MODE, setLastDashboardBaseUrl, CODER_MODEL_ID, CODER_MODEL_PROVIDER, MODEL_STRENGTH_MAP } from "./config.js";
+import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL, PORT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL, DISPATCH_MODE, setLastDashboardBaseUrl, CODER_MODEL_ID, CODER_MODEL_PROVIDER, CODER_EFFORT, MODEL_STRENGTH_MAP } from "./config.js";
 import { getSpacePlugin, getCoverSpaceTypes } from "./spaces/index.js";
 import { sanitizeScheduledSpaceData } from "./spaces/scheduled.js";
 
@@ -1866,12 +1866,14 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
         return json(res, {
           coder_model_id: settings.coder_model_id ?? CODER_MODEL_ID,
           coder_model_provider: settings.coder_model_provider ?? CODER_MODEL_PROVIDER,
+          coder_effort: settings.coder_effort ?? CODER_EFFORT,
           model_strength_high: settings.model_strength_high ?? MODEL_STRENGTH_MAP.high.modelId,
           model_strength_medium: settings.model_strength_medium ?? MODEL_STRENGTH_MAP.medium.modelId,
           model_strength_low: settings.model_strength_low ?? MODEL_STRENGTH_MAP.low.modelId,
           _defaults: {
             coder_model_id: CODER_MODEL_ID,
             coder_model_provider: CODER_MODEL_PROVIDER,
+            coder_effort: CODER_EFFORT,
             model_strength_high: MODEL_STRENGTH_MAP.high.modelId,
             model_strength_medium: MODEL_STRENGTH_MAP.medium.modelId,
             model_strength_low: MODEL_STRENGTH_MAP.low.modelId,
@@ -1883,6 +1885,7 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
         const allowedKeys = [
           "coder_model_id",
           "coder_model_provider",
+          "coder_effort",
           "model_strength_high",
           "model_strength_medium",
           "model_strength_low",
@@ -1903,10 +1906,45 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
         return json(res, {
           coder_model_id: settings.coder_model_id ?? CODER_MODEL_ID,
           coder_model_provider: settings.coder_model_provider ?? CODER_MODEL_PROVIDER,
+          coder_effort: settings.coder_effort ?? CODER_EFFORT,
           model_strength_high: settings.model_strength_high ?? MODEL_STRENGTH_MAP.high.modelId,
           model_strength_medium: settings.model_strength_medium ?? MODEL_STRENGTH_MAP.medium.modelId,
           model_strength_low: settings.model_strength_low ?? MODEL_STRENGTH_MAP.low.modelId,
         });
+      }
+    }
+
+    // ── Anthropic Models (TRACK-271: dynamic model list for settings UI) ──
+    if (parts[0] === "models" && parts.length === 1 && method === "GET") {
+      if (!ANTHROPIC_API_KEY) {
+        return error(res, "Models list not available (ANTHROPIC_API_KEY not set)", 501);
+      }
+      try {
+        // Fetch available models from the Anthropic API
+        const modelsRes = await fetch("https://api.anthropic.com/v1/models?limit=100", {
+          headers: {
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+          },
+        });
+        if (!modelsRes.ok) {
+          const errText = await modelsRes.text();
+          return error(res, `Anthropic API error: ${modelsRes.status} ${errText}`, 502);
+        }
+        const modelsData = await modelsRes.json() as { data?: Array<{ id: string; display_name: string; created_at: string }> };
+        // Return just the model IDs and display names, sorted by display name
+        const models = (modelsData.data || [])
+          .map((m: { id: string; display_name: string; created_at: string }) => ({
+            id: m.id,
+            display_name: m.display_name,
+            created_at: m.created_at,
+          }))
+          .sort((a: { display_name: string }, b: { display_name: string }) => a.display_name.localeCompare(b.display_name));
+        // Cache for 10 minutes via Cache-Control
+        res.setHeader("Cache-Control", "public, max-age=600");
+        return json(res, { models });
+      } catch (err) {
+        return error(res, `Failed to fetch models: ${(err as Error).message}`, 502);
       }
     }
 
