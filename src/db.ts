@@ -665,6 +665,15 @@ export function initTrackerDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_reaction_comment ON tracker_comment_reactions(comment_id);
   `);
 
+  // Tracker-wide settings table (TRACK-271: key-value store for global settings like model selection)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracker_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
   // Backfill: assign tab_order to projects that have 0 (default) — preserve existing order by updated_at
   const projectsNeedingTabOrder = db
     .prepare("SELECT id FROM tracker_projects WHERE tab_order = 0 ORDER BY updated_at DESC")
@@ -964,6 +973,15 @@ export function _initTestTrackerDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_activity_log_item ON tracker_activity_log(item_id);
     CREATE INDEX IF NOT EXISTS idx_activity_log_action ON tracker_activity_log(action);
     CREATE INDEX IF NOT EXISTS idx_activity_log_created ON tracker_activity_log(created_at);
+  `);
+
+  // Create tracker-wide settings table (TRACK-271)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracker_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 }
 
@@ -3228,4 +3246,48 @@ export function deleteAttachment(
   }
 
   return attachment;
+}
+
+// ── Tracker-wide Settings ──
+
+/**
+ * Get a setting value by key.
+ * Returns the parsed JSON value, or the default if the key doesn't exist.
+ */
+export function getSetting<T = unknown>(key: string, defaultValue?: T): T | undefined {
+  const row = db.prepare("SELECT value FROM tracker_settings WHERE key = ?").get(key) as { value: string } | undefined;
+  if (!row) return defaultValue;
+  try {
+    return JSON.parse(row.value) as T;
+  } catch {
+    return row.value as unknown as T;
+  }
+}
+
+/**
+ * Set a setting value by key. Value is stored as JSON.
+ * Uses INSERT OR REPLACE for upsert behavior.
+ */
+export function setSetting(key: string, value: unknown): void {
+  const jsonValue = JSON.stringify(value);
+  const ts = now();
+  db.prepare(
+    "INSERT OR REPLACE INTO tracker_settings (key, value, updated_at) VALUES (?, ?, ?)",
+  ).run(key, jsonValue, ts);
+}
+
+/**
+ * Get all settings as a key-value object.
+ */
+export function getAllSettings(): Record<string, unknown> {
+  const rows = db.prepare("SELECT key, value FROM tracker_settings").all() as Array<{ key: string; value: string }>;
+  const result: Record<string, unknown> = {};
+  for (const row of rows) {
+    try {
+      result[row.key] = JSON.parse(row.value);
+    } catch {
+      result[row.key] = row.value;
+    }
+  }
+  return result;
 }

@@ -38,6 +38,7 @@ import {
   type Attachment,
   type SessionStatus,
   type Transition,
+  getSetting,
 } from "./db.js";
 import fs from "fs";
 import path from "path";
@@ -1591,18 +1592,32 @@ function tryDispatchFromReview(): void {
  * TRACK-266: Per-task model selection for scheduled tasks.
  */
 export function resolveModelForItem(item: WorkItem): { provider: string; modelId: string } {
+  // Per-task model override for scheduled tasks with model_strength
   if (item.space_type === "scheduled" && item.space_data) {
     try {
       const parsed = JSON.parse(item.space_data);
       const strength = parsed.model_strength as ModelStrength | null | undefined;
       if (strength && MODEL_STRENGTH_MAP[strength]) {
+        // TRACK-271: Check DB settings for strength-tier model overrides
+        const tierKey = `model_strength_${strength}`;
+        const dbTierModel = getSetting<string>(tierKey);
+        if (dbTierModel && dbTierModel !== "null") {
+          return { provider: MODEL_STRENGTH_MAP[strength].provider, modelId: dbTierModel };
+        }
         return MODEL_STRENGTH_MAP[strength];
       }
     } catch {
       // Malformed space_data — fall through to default
     }
   }
-  return { provider: CODER_MODEL_PROVIDER, modelId: CODER_MODEL_ID };
+  // TRACK-271: Check DB settings for global coder model override
+  // Falls back to env-var defaults from config.ts if no DB setting exists
+  const dbModelId = getSetting<string>("coder_model_id");
+  const dbProvider = getSetting<string>("coder_model_provider");
+  return {
+    provider: (dbProvider && dbProvider !== "null") ? dbProvider : CODER_MODEL_PROVIDER,
+    modelId: (dbModelId && dbModelId !== "null") ? dbModelId : CODER_MODEL_ID,
+  };
 }
 
 async function dispatch(item: WorkItem): Promise<string | null> {

@@ -69,6 +69,9 @@ import {
   toggleReaction,
   getReactions,
   getReactionsBatch,
+  getSetting,
+  setSetting,
+  getAllSettings,
   listTransitions,
   addWatcher,
   listWatchers,
@@ -113,7 +116,7 @@ import {
   steerSession,
   getActiveSession,
 } from "./orchestrator.js";
-import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL, PORT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL, DISPATCH_MODE, setLastDashboardBaseUrl } from "./config.js";
+import { OPENCODE_PUBLIC_URL, buildOpencodeSessionUrl, TRACKER_API_TOKEN, STORE_DIR, buildItemUrl, TRACKER_PUBLIC_URL, PORT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL, DISPATCH_MODE, setLastDashboardBaseUrl, CODER_MODEL_ID, CODER_MODEL_PROVIDER, MODEL_STRENGTH_MAP } from "./config.js";
 import { getSpacePlugin, getCoverSpaceTypes } from "./spaces/index.js";
 import { sanitizeScheduledSpaceData } from "./spaces/scheduled.js";
 
@@ -1852,6 +1855,58 @@ Extract the structured fields from this description. Return ONLY valid JSON.`;
       // GET /orchestrator/safe-to-restart — quick check if restart is safe
       if (parts.length === 2 && parts[1] === "safe-to-restart" && method === "GET") {
         return json(res, isSafeToRestart());
+      }
+    }
+
+    // ── Tracker-wide Settings (TRACK-271) ──
+    if (parts[0] === "settings" && parts.length === 1) {
+      if (method === "GET") {
+        const settings = getAllSettings();
+        // Include env-var defaults so the UI knows what's configured
+        return json(res, {
+          coder_model_id: settings.coder_model_id ?? CODER_MODEL_ID,
+          coder_model_provider: settings.coder_model_provider ?? CODER_MODEL_PROVIDER,
+          model_strength_high: settings.model_strength_high ?? MODEL_STRENGTH_MAP.high.modelId,
+          model_strength_medium: settings.model_strength_medium ?? MODEL_STRENGTH_MAP.medium.modelId,
+          model_strength_low: settings.model_strength_low ?? MODEL_STRENGTH_MAP.low.modelId,
+          _defaults: {
+            coder_model_id: CODER_MODEL_ID,
+            coder_model_provider: CODER_MODEL_PROVIDER,
+            model_strength_high: MODEL_STRENGTH_MAP.high.modelId,
+            model_strength_medium: MODEL_STRENGTH_MAP.medium.modelId,
+            model_strength_low: MODEL_STRENGTH_MAP.low.modelId,
+          },
+        });
+      }
+      if (method === "PATCH") {
+        const body = await parseBody(req);
+        const allowedKeys = [
+          "coder_model_id",
+          "coder_model_provider",
+          "model_strength_high",
+          "model_strength_medium",
+          "model_strength_low",
+        ];
+        for (const key of allowedKeys) {
+          if (body[key] !== undefined) {
+            const val = String(body[key]).trim();
+            if (val === "") {
+              // Empty string = reset to env-var default (delete the override)
+              setSetting(key, null);
+            } else {
+              setSetting(key, val);
+            }
+          }
+        }
+        // Return current effective settings
+        const settings = getAllSettings();
+        return json(res, {
+          coder_model_id: settings.coder_model_id ?? CODER_MODEL_ID,
+          coder_model_provider: settings.coder_model_provider ?? CODER_MODEL_PROVIDER,
+          model_strength_high: settings.model_strength_high ?? MODEL_STRENGTH_MAP.high.modelId,
+          model_strength_medium: settings.model_strength_medium ?? MODEL_STRENGTH_MAP.medium.modelId,
+          model_strength_low: settings.model_strength_low ?? MODEL_STRENGTH_MAP.low.modelId,
+        });
       }
     }
 

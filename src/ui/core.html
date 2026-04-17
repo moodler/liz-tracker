@@ -2309,6 +2309,50 @@
         border-top: 1px solid var(--border);
       }
 
+      /* ── Global Settings Button ── */
+      .topbar-settings-btn {
+        background: none;
+        border: none;
+        color: var(--text-dim);
+        font-size: 1.1rem;
+        cursor: pointer;
+        padding: 4px 6px;
+        border-radius: 4px;
+        transition: color 150ms ease, background 150ms ease;
+        line-height: 1;
+      }
+      .topbar-settings-btn:hover {
+        color: var(--text-primary);
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      /* ── Global Settings Modal ── */
+      .settings-model-row {
+        display: grid;
+        grid-template-columns: 110px 1fr;
+        align-items: center;
+        gap: 8px;
+      }
+      .settings-model-row label {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+      }
+      .settings-model-row select,
+      .settings-model-row input {
+        font-size: 0.85rem;
+        font-family: monospace;
+      }
+      .settings-section-title {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-dim);
+        margin-top: 8px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--border);
+      }
+
       /* ── Empty / Loading ── */
       .empty-state {
         display: flex;
@@ -9524,6 +9568,12 @@
         <div style="flex: 1"></div>
         <!-- Cancelled checkbox (hidden, used programmatically) -->
         <input type="checkbox" id="showCancelled" style="display:none" />
+        <button
+          class="topbar-settings-btn"
+          id="globalSettingsBtn"
+          onclick="openGlobalSettings()"
+          title="Tracker Settings"
+        >&#9881;</button>
         <span class="offline-indicator" id="offlineIndicator" title="You are offline">
           <span class="offline-dot"></span>
           Offline
@@ -10443,6 +10493,59 @@
         <div class="modal-footer">
           <button class="btn btn-ghost btn-sm" id="contextEditCancel">Cancel</button>
           <button class="btn btn-primary btn-sm" id="contextEditSave">Save Context</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Global Settings Modal (TRACK-271) -->
+    <div class="modal-overlay" id="globalSettingsModal">
+      <div class="modal" style="width: 480px">
+        <div class="modal-header">
+          <h2>Tracker Settings</h2>
+          <button class="btn-icon detail-close" id="globalSettingsClose">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-section-title">Default Coding Agent Model</div>
+          <div class="settings-model-row">
+            <label for="settingsCoderModel">Model</label>
+            <select id="settingsCoderModel">
+              <option value="claude-opus-4-6">claude-opus-4-6</option>
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+            </select>
+          </div>
+          <div class="settings-section-title">Scheduled Task Model Tiers</div>
+          <div class="settings-model-row">
+            <label for="settingsModelHigh">High</label>
+            <select id="settingsModelHigh">
+              <option value="claude-opus-4-6">claude-opus-4-6</option>
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+            </select>
+          </div>
+          <div class="settings-model-row">
+            <label for="settingsModelMedium">Medium</label>
+            <select id="settingsModelMedium">
+              <option value="claude-opus-4-6">claude-opus-4-6</option>
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+            </select>
+          </div>
+          <div class="settings-model-row">
+            <label for="settingsModelLow">Low</label>
+            <select id="settingsModelLow">
+              <option value="claude-opus-4-6">claude-opus-4-6</option>
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+            </select>
+          </div>
+          <span style="font-size: 0.7rem; color: var(--text-dim); margin-top: 4px">
+            Scheduled tasks use model tiers (high/medium/low) set per-task. Standard coding agents use the default model above.
+          </span>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost btn-sm" id="globalSettingsCancel">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="globalSettingsSave">Save</button>
         </div>
       </div>
     </div>
@@ -12179,6 +12282,55 @@
         contextEditModal.addEventListener("click", (e) => {
           if (e.target === contextEditModal && contextMouseDownTarget === contextEditModal) contextEditModal.classList.remove("open");
           contextMouseDownTarget = null;
+        });
+
+        // ── Global Settings Modal (TRACK-271) ──
+
+        const globalSettingsModal = $("#globalSettingsModal");
+
+        async function openGlobalSettings() {
+          try {
+            const settings = await apiGet("/settings");
+            $("#settingsCoderModel").value = settings.coder_model_id || "claude-opus-4-6";
+            $("#settingsModelHigh").value = settings.model_strength_high || "claude-opus-4-6";
+            $("#settingsModelMedium").value = settings.model_strength_medium || "claude-sonnet-4-6";
+            $("#settingsModelLow").value = settings.model_strength_low || "claude-haiku-4-5-20251001";
+            globalSettingsModal.classList.add("open");
+          } catch (e) {
+            toast("Failed to load settings: " + e.message, "error");
+          }
+        }
+
+        $("#globalSettingsClose").addEventListener("click", () =>
+          globalSettingsModal.classList.remove("open"),
+        );
+        $("#globalSettingsCancel").addEventListener("click", () =>
+          globalSettingsModal.classList.remove("open"),
+        );
+
+        $("#globalSettingsSave").addEventListener("click", async () => {
+          try {
+            await apiPatch("/settings", {
+              coder_model_id: $("#settingsCoderModel").value,
+              model_strength_high: $("#settingsModelHigh").value,
+              model_strength_medium: $("#settingsModelMedium").value,
+              model_strength_low: $("#settingsModelLow").value,
+            });
+            globalSettingsModal.classList.remove("open");
+            toast("Settings saved");
+          } catch (e) {
+            toast("Failed to save settings: " + e.message, "error");
+          }
+        });
+
+        // Close on overlay click
+        let settingsMouseDownTarget = null;
+        globalSettingsModal.addEventListener("mousedown", (e) => {
+          settingsMouseDownTarget = e.target;
+        });
+        globalSettingsModal.addEventListener("click", (e) => {
+          if (e.target === globalSettingsModal && settingsMouseDownTarget === globalSettingsModal) globalSettingsModal.classList.remove("open");
+          settingsMouseDownTarget = null;
         });
 
         // ── Search ──

@@ -50,6 +50,9 @@ import {
   toggleReaction,
   getReactions,
   getReactionsBatch,
+  getSetting,
+  setSetting,
+  getAllSettings,
   VALID_STATES,
   VALID_PRIORITIES,
 } from './db.js';
@@ -2281,5 +2284,50 @@ describe('Comment Reactions', () => {
   it('throws when comment does not exist', () => {
     _initTestTrackerDatabase();
     expect(() => toggleReaction('nonexistent', '\ud83d\udc4d', 'me')).toThrow('Comment not found');
+  });
+});
+
+// ── Tracker-wide Settings (TRACK-271) ──
+
+describe('tracker-wide settings', () => {
+  beforeEach(() => _initTestTrackerDatabase());
+
+  it('returns default when key does not exist', () => {
+    expect(getSetting('nonexistent')).toBeUndefined();
+    expect(getSetting('nonexistent', 'fallback')).toBe('fallback');
+  });
+
+  it('stores and retrieves a string setting', () => {
+    setSetting('coder_model_id', 'claude-sonnet-4-6');
+    expect(getSetting('coder_model_id')).toBe('claude-sonnet-4-6');
+  });
+
+  it('stores and retrieves a numeric setting', () => {
+    setSetting('max_concurrent', 5);
+    expect(getSetting('max_concurrent')).toBe(5);
+  });
+
+  it('overwrites existing setting (upsert)', () => {
+    setSetting('coder_model_id', 'claude-opus-4-6');
+    expect(getSetting('coder_model_id')).toBe('claude-opus-4-6');
+
+    setSetting('coder_model_id', 'claude-sonnet-4-6');
+    expect(getSetting('coder_model_id')).toBe('claude-sonnet-4-6');
+  });
+
+  it('getAllSettings returns all stored settings', () => {
+    setSetting('coder_model_id', 'claude-opus-4-6');
+    setSetting('model_strength_high', 'claude-opus-4-6');
+    setSetting('model_strength_low', 'claude-haiku-4-5-20251001');
+
+    const all = getAllSettings();
+    expect(all.coder_model_id).toBe('claude-opus-4-6');
+    expect(all.model_strength_high).toBe('claude-opus-4-6');
+    expect(all.model_strength_low).toBe('claude-haiku-4-5-20251001');
+  });
+
+  it('getAllSettings returns empty object when no settings exist', () => {
+    const all = getAllSettings();
+    expect(Object.keys(all).length).toBe(0);
   });
 });
