@@ -50,12 +50,12 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/spaces/presentation.ts` | Parser, sanitizer, 4 API routes (deck PATCH, deck-mdx GET, deck-thumbnails GET proxy, deck-thumb GET cached image), DeckWright integration |
 | `src/ui/core.html` | Dashboard shell + space plugin registry + overlay shell |
 | `src/ui/spaces/standard.js` | Registry entry only (~15 lines) |
-| `src/ui/spaces/song.js` | Song UI renderer (~731 lines) |
-| `src/ui/spaces/text.js` | Text UI renderer + inline comments (~368 lines) |
-| `src/ui/spaces/engagement.js` | Engagement UI renderer (~680 lines) |
-| `src/ui/spaces/scheduled.js` | Scheduled UI renderer (~900 lines) |
-| `src/ui/spaces/travel.js` | Travel UI renderer — day-by-day timeline, gap detection, segment cards (~1079 lines) |
-| `src/ui/spaces/presentation.js` | Presentation UI renderer — 3 tabs (Description, Slides, Deck) + discussion sidebar + DeckWright thumbnails (~589 lines) |
+| `src/ui/spaces/song.js` | Song UI renderer (~735 lines) |
+| `src/ui/spaces/text.js` | Text UI renderer + inline comments (~372 lines) |
+| `src/ui/spaces/engagement.js` | Engagement UI renderer (~683 lines) |
+| `src/ui/spaces/scheduled.js` | Scheduled UI renderer (~908 lines) |
+| `src/ui/spaces/travel.js` | Travel UI renderer — day-by-day timeline, gap detection, segment cards (~1081 lines) |
+| `src/ui/spaces/presentation.js` | Presentation UI renderer — 3 tabs (Description, Slides, Deck) + discussion sidebar + DeckWright thumbnails (~593 lines) |
 | `scripts/build-ui.js` | UI pre-compilation script (~60 lines, zero dependencies) |
 
 ## Development
@@ -82,10 +82,11 @@ npm run test:coverage # Run tests with coverage report
 - The `_initTestTrackerDatabase()` function in `db.ts` creates a fresh in-memory DB for each test suite
 
 **Current test coverage:**
-- `src/db.test.ts` — actor classification, state transitions (incl. security rules), project/item CRUD, locks, dependencies, comments, comment reactions (toggle, uniqueness, aggregation, batch, cascade delete, activity logging), approval provenance, move between projects, activity log (logActivity/listActivity, filtering, integration with mutations)
-- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers (base64url encoding, session/directory/API URL builders), error classification (413 errors, image-too-large, post-completion errors), scheduled task time gating (isScheduleTimeDue frequency/timezone/last_run logic), per-task model resolution (resolveModelForItem strength tiers)
+- `src/db.test.ts` — actor classification, state transitions (incl. security rules), project/item CRUD, locks, dependencies, comments, comment reactions (toggle, uniqueness, aggregation, batch, cascade delete, activity logging), approval provenance, move between projects, activity log (logActivity/listActivity, filtering, integration with mutations), settings CRUD (getSetting/setSetting/getAllSettings)
+- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers (base64url encoding, session/directory/API URL builders), error classification (413 errors, image-too-large, post-completion errors), scheduled task time gating (isScheduleTimeDue frequency/timezone/last_run logic), per-task model resolution (resolveModelForItem strength tiers, DB-backed setting overrides)
 - `src/session-runner.test.ts` — SDK message mapping, stdio protocol integration tests (event flow, steering)
 - `src/spaces/travel.test.ts` — type-aware segment deduplication key logic (flight/lodging/transport disambiguation)
+- `src/spaces/scheduled.test.ts` — scheduled space data sanitization (malformed `days_of_week` normalization, numeric-to-name coercion, invalid entry dropping)
 
 **To activate the pre-push hook** (run once per clone):
 ```bash
@@ -143,6 +144,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 | `SESSION_TIMEOUT` | `2700000` | Session timeout in ms (default 45 minutes). Stale sessions are auto-detected and aborted. |
 | `CODER_MODEL_PROVIDER` | `anthropic` | Model provider for coder bot sessions (e.g. `anthropic`) |
 | `CODER_MODEL_ID` | `claude-opus-4-6` | Model ID for coder bot sessions (format: `providerID/modelID` when combined with provider) |
+| `CODER_EFFORT` | `high` | Default effort level for coder bot sessions (`low`/`medium`/`high`/`max`) — controls Claude's reasoning depth via the Agent SDK's `effort` option |
 | `MODEL_STRENGTH_HIGH` | `claude-opus-4-6` | Model for "high" strength tier (scheduled tasks) |
 | `MODEL_STRENGTH_MEDIUM` | `claude-sonnet-4-6` | Model for "medium" strength tier (scheduled tasks) |
 | `MODEL_STRENGTH_LOW` | `claude-haiku-4-5-20251001` | Model for "low" strength tier (scheduled tasks) |
@@ -377,6 +379,9 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `POST` | `/api/v1/items/:id/session/steer` | Send steering message to running agent (runner mode) |
 | `POST` | `/api/v1/comments/:id/reactions` | Toggle an emoji reaction on a comment (add/remove) |
 | `GET` | `/api/v1/comments/:id/reactions` | Get aggregated reactions for a comment |
+| `GET` | `/api/v1/settings` | Get tracker-wide settings (coder model/provider/effort + strength tier model IDs). Response includes `_defaults` showing env-var fallbacks |
+| `PATCH` | `/api/v1/settings` | Update tracker-wide settings (empty string = reset to env-var default) |
+| `GET` | `/api/v1/models` | List available Anthropic models (proxied from `https://api.anthropic.com/v1/models`, cached 10min). Requires `ANTHROPIC_API_KEY` |
 
 ### MCP Tools
 
@@ -742,7 +747,7 @@ Zero changes needed to `api.ts`, `mcp-server.ts`, `db.ts`, or the overlay shell 
 
 ## Conventions
 
-- Database tables are prefixed with `tracker_` (projects, work_items, comments, transitions, watchers, dependencies, attachments, description_versions, activity_log, execution_audits, comment_reactions)
+- Database tables are prefixed with `tracker_` (projects, work_items, comments, transitions, watchers, dependencies, attachments, description_versions, activity_log, execution_audits, comment_reactions, settings)
 - All IDs are random hex strings (24 chars)
 - Timestamps are ISO 8601 strings
 - Work items have sequential keys per project (e.g. PROJ-1, PROJ-2)
@@ -763,7 +768,7 @@ When adding new features, always add a section header. Use grep for `// ──` 
 
 ### Shared Helpers & Constants
 
-Reusable utilities are in the **"Shared Helpers"** section (line ~11150). Check here before writing new utility code:
+Reusable utilities are in the **"Shared Helpers"** section (line ~11464). Check here before writing new utility code:
 
 | Helper | Purpose |
 | --- | --- |
@@ -778,7 +783,7 @@ Reusable utilities are in the **"Shared Helpers"** section (line ~11150). Check 
 | `buildOpencodeUrl(sessionId, dir)` | Build OpenCode deep link URL |
 | `base64UrlEncode(str)` | Encode string to base64url (for OpenCode directory paths) |
 
-Shared constants (defined near the top of the JS, line ~10554):
+Shared constants (defined near the top of the JS, line ~10724):
 
 | Constant | Purpose |
 | --- | --- |

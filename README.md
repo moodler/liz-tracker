@@ -74,7 +74,7 @@ The orchestrator:
 
 ### Other Features
 
-- **Comments and discussion** — threaded comments on any item, with inline CriticMarkup in Song and Text spaces
+- **Comments and discussion** — threaded comments on any item, with emoji reactions and inline CriticMarkup in Song and Text spaces
 - **Attachments** — upload files and images to any item, including paste-from-clipboard support
 - **Dependencies** — link items that block each other
 - **Cover images** — visual cover art for Song and Travel items
@@ -85,6 +85,7 @@ The orchestrator:
 - **Today dashboard** — cross-project attention view showing items needing action, with priority sorting and due date display
 - **Project reordering** — drag-and-drop project tab ordering
 - **Webhook notifications** — optional comment webhook for external integrations
+- **Settings dialog** — configure the default coder model, effort level, and scheduled-task strength tiers from the dashboard topbar (dynamic model list fetched from Anthropic API)
 - **LAN access** — accessible from any device on your network, installable as a PWA
 
 ---
@@ -216,6 +217,8 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | `POST` | `/api/v1/items/:id/comments` | Add a comment |
 | `PATCH` | `/api/v1/comments/:id` | Update a comment |
 | `DELETE` | `/api/v1/comments/:id` | Delete a comment |
+| `POST` | `/api/v1/comments/:id/reactions` | Toggle an emoji reaction on a comment |
+| `GET` | `/api/v1/comments/:id/reactions` | Get aggregated reactions for a comment |
 | `GET` | `/api/v1/items/:id/dependencies` | List dependencies |
 | `POST` | `/api/v1/items/:id/dependencies` | Add a dependency |
 | `DELETE` | `/api/v1/items/:id/dependencies/:depId` | Remove a dependency |
@@ -298,6 +301,9 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | --- | --- | --- |
 | `GET` | `/api/v1/states` | List valid states and priorities |
 | `GET` | `/api/v1/config` | Public dashboard configuration |
+| `GET` | `/api/v1/settings` | Tracker-wide settings (coder model, effort, strength-tier models) |
+| `PATCH` | `/api/v1/settings` | Update tracker-wide settings |
+| `GET` | `/api/v1/models` | List available Anthropic models (requires `ANTHROPIC_API_KEY`) |
 | `POST` | `/api/v1/auth/verify` | Verify API token |
 | `GET` | `/api/v1/auth/status` | Check authentication status |
 
@@ -305,7 +311,7 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 
 The MCP endpoint at `/mcp` (Streamable HTTP, stateless) exposes 50+ tools for AI agents. Connect any MCP-compatible client to `http://localhost:1000/mcp`.
 
-Tools cover: project and item CRUD, state transitions, comments, watchers, dependencies, attachments, orchestrator control (dispatch, abort, emergency stop, safe restart), cover images, agent config validation, agent reference documentation, and all space-specific operations (scheduled TODOs/IGNORE rules, engagement milestones/contacts/quotes/comms/settings, travel segments/trips).
+Tools cover: project and item CRUD, state transitions, comments, comment reactions, watchers, dependencies, attachments, orchestrator control (dispatch, abort, emergency stop, safe restart), cover images, agent config validation, agent reference documentation, and all space-specific operations (scheduled TODOs/IGNORE rules, engagement milestones/contacts/quotes/comms/settings, travel segments/trips).
 
 ## AI Orchestrator Setup
 
@@ -372,9 +378,12 @@ Uses [OpenCode](https://opencode.ai) as the session manager.
 | `SESSION_TIMEOUT` | `2700000` | Session timeout (ms, default 45 minutes) |
 | `CODER_MODEL_PROVIDER` | `anthropic` | Model provider for coder sessions |
 | `CODER_MODEL_ID` | `claude-opus-4-6` | Model ID for coder sessions |
+| `CODER_EFFORT` | `high` | Default reasoning effort (`low`/`medium`/`high`/`max`) |
 | `CIRCUIT_BREAKER_THRESHOLD` | `2` | Consecutive failures before auto-pause |
 | `CIRCUIT_BREAKER_WINDOW` | `3600000` | Failure counting window (ms, default 1 hour) |
 | `ITEM_DISPATCH_FAILURE_LIMIT` | `3` | Per-item failures before auto-shelving |
+
+All model/effort defaults above can be overridden at runtime via the dashboard's **Settings** dialog (topbar gear icon). Stored overrides live in the `tracker_settings` DB table and take precedence over env-var defaults.
 
 ### Safety Features
 
@@ -455,7 +464,7 @@ npm run test:coverage # Coverage report
 
 Tests use [Vitest](https://vitest.dev/) with an in-memory SQLite database. Test suites cover:
 
-- `src/db.test.ts` — actor classification, state transitions, security rules, project/item CRUD, locks, dependencies, comments, approval provenance, cross-project moves, activity log
+- `src/db.test.ts` — actor classification, state transitions, security rules, project/item CRUD, locks, dependencies, comments, comment reactions, approval provenance, cross-project moves, activity log
 - `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers, error classification, scheduled task time gating, per-task model resolution, prompt splitting
 - `src/session-runner.test.ts` — SDK message mapping, stdio protocol integration tests (event flow, steering)
 - `src/spaces/travel.test.ts` — type-aware segment deduplication keys
