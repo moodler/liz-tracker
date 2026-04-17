@@ -15021,7 +15021,18 @@
               openDetail(itemId);
               return;
             }
-            spacePlugin.render(item);
+            // TRACK-272: If a space renderer throws (e.g. malformed space_data),
+            // fall back to the standard detail panel so the item can always be
+            // opened, viewed, and reset even in a broken state.
+            try {
+              spacePlugin.render(item);
+            } catch (renderErr) {
+              console.error("Space renderer failed, falling back to standard detail:", renderErr);
+              toast(`${spaceType} view failed to render — showing standard view. (${renderErr.message})`, "error");
+              closeSpaceOverlay();
+              openDetail(itemId);
+              return;
+            }
             // Apply project theme to the modal container
             const spaceModal = $("#spaceModal");
             const proj = projectsCache.find(p => p.id === item.project_id);

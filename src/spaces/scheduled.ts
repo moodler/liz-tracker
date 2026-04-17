@@ -222,6 +222,41 @@ function parseScheduledSpaceData(raw: string | null): ScheduledSpaceData {
  * This is the single authoritative implementation — previously duplicated
  * in both api.ts and mcp-server.ts.
  */
+/**
+ * Normalize a `days_of_week` value to an array of lowercase day-name strings.
+ * Accepts strings (e.g. "Tuesday", "tuesday", "tue") and numeric indices using
+ * the JS Date / cron convention (0=sunday, 1=monday, ..., 6=saturday).
+ * Drops anything unrecognisable.
+ *
+ * TRACK-272: Agents occasionally wrote `days_of_week` as numeric arrays like
+ * `[2]` via raw `space_data` PATCHes, which then crashed the scheduled-space
+ * UI (it calls `.charAt(0)` on each entry). Normalising here prevents bad data
+ * from being persisted, and keeps the cron generator / UI defenders on the
+ * same string-name contract.
+ */
+function normalizeDaysOfWeek(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const WEEK_DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const SHORT_MAP: Record<string, string> = {
+    sun: "sunday", mon: "monday", tue: "tuesday", tues: "tuesday",
+    wed: "wednesday", thu: "thursday", thur: "thursday", thurs: "thursday",
+    fri: "friday", sat: "saturday",
+  };
+  const normalized: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === "number" && Number.isInteger(entry) && entry >= 0 && entry <= 6) {
+      normalized.push(WEEK_DAYS[entry]);
+    } else if (typeof entry === "string") {
+      const lower = entry.trim().toLowerCase();
+      if (WEEK_DAYS.includes(lower)) normalized.push(lower);
+      else if (SHORT_MAP[lower]) normalized.push(SHORT_MAP[lower]);
+      else if (/^[0-6]$/.test(lower)) normalized.push(WEEK_DAYS[parseInt(lower, 10)]);
+    }
+  }
+  // Deduplicate while preserving order
+  return Array.from(new Set(normalized));
+}
+
 export function sanitizeScheduledSpaceData(spaceDataStr: string, spaceType?: string | null): string {
   try {
     const parsed = JSON.parse(spaceDataStr);
@@ -241,6 +276,11 @@ export function sanitizeScheduledSpaceData(spaceDataStr: string, spaceType?: str
 
     if (Array.isArray(parsed.todo)) parsed.todo = coerceToStrings(parsed.todo);
     if (Array.isArray(parsed.ignore)) parsed.ignore = coerceToStrings(parsed.ignore);
+
+    // Normalize schedule.days_of_week — see normalizeDaysOfWeek for rationale (TRACK-272).
+    if (parsed.schedule && typeof parsed.schedule === "object" && parsed.schedule.days_of_week !== undefined && parsed.schedule.days_of_week !== null) {
+      parsed.schedule.days_of_week = normalizeDaysOfWeek(parsed.schedule.days_of_week);
+    }
 
     // Validate model_strength if present (TRACK-266)
     if (parsed.model_strength !== undefined) {

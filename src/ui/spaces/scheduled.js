@@ -95,8 +95,10 @@ function describeSchedule(sched) {
   if (freq === "hourly") return { title: "Hourly", detail: `${tzShort}` };
   if (freq === "daily") return { title: "Daily", detail: `at ${time} ${tzShort}` };
   if (freq === "weekly") {
-    const days = sched.days_of_week;
-    const dayNames = days && days.length ? days.map(d => d.charAt(0).toUpperCase() + d.slice(1, 3)).join(", ") : "—";
+    // TRACK-272: Defend against malformed days_of_week (e.g. numeric entries)
+    // so a broken item can still be opened in the scheduled space view.
+    const days = Array.isArray(sched.days_of_week) ? sched.days_of_week.filter(d => typeof d === "string" && d.length > 0) : [];
+    const dayNames = days.length ? days.map(d => d.charAt(0).toUpperCase() + d.slice(1, 3)).join(", ") : "—";
     return { title: "Weekly", detail: `${dayNames} at ${time} ${tzShort}` };
   }
   if (freq === "monthly") return { title: "Monthly", detail: `at ${time} ${tzShort}` };
@@ -135,9 +137,11 @@ function getEffectiveCron(sched) {
   const freq = sched.frequency;
   if (freq === "hourly") return `0 * * * *`;
   if (freq === "daily") return `${minute} ${hour} * * *`;
-  if (freq === "weekly" && sched.days_of_week && sched.days_of_week.length) {
+  if (freq === "weekly" && Array.isArray(sched.days_of_week) && sched.days_of_week.length) {
+    // TRACK-272: Skip non-string entries defensively; sanitizer normalises
+    // the data on save, but an already-broken item must still render.
     const dayMap = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
-    const dayNums = sched.days_of_week.map(d => dayMap[d.toLowerCase()]).filter(n => n !== undefined);
+    const dayNums = sched.days_of_week.map(d => typeof d === "string" ? dayMap[d.toLowerCase()] : undefined).filter(n => n !== undefined);
     return `${minute} ${hour} * * ${dayNums.join(",")}`;
   }
   if (freq === "monthly") return `${minute} ${hour} 1 * *`;

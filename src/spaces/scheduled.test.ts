@@ -156,3 +156,61 @@ describe("sanitizeScheduledSpaceData computes next_run", () => {
     expect(result.status).toBeUndefined();
   });
 });
+
+// ── sanitizeScheduledSpaceData normalizes days_of_week (TRACK-272) ──
+
+describe("sanitizeScheduledSpaceData normalizes days_of_week", () => {
+  it("converts numeric indices to lowercase day names", () => {
+    const input = JSON.stringify({
+      schedule: { frequency: "weekly", time: "21:00", days_of_week: [2], timezone: "Australia/Perth" },
+      status: {}, todo: [], ignore: [],
+    });
+    const result = JSON.parse(sanitizeScheduledSpaceData(input, "scheduled"));
+    expect(result.schedule.days_of_week).toEqual(["tuesday"]);
+  });
+
+  it("converts a full numeric array", () => {
+    const input = JSON.stringify({
+      schedule: { frequency: "weekly", time: "07:00", days_of_week: [1, 3, 5], timezone: "UTC" },
+      status: {}, todo: [], ignore: [],
+    });
+    const result = JSON.parse(sanitizeScheduledSpaceData(input, "scheduled"));
+    expect(result.schedule.days_of_week).toEqual(["monday", "wednesday", "friday"]);
+  });
+
+  it("lowercases and accepts short day names", () => {
+    const input = JSON.stringify({
+      schedule: { frequency: "weekly", time: "07:00", days_of_week: ["Monday", "WED", "fri"], timezone: "UTC" },
+      status: {}, todo: [], ignore: [],
+    });
+    const result = JSON.parse(sanitizeScheduledSpaceData(input, "scheduled"));
+    expect(result.schedule.days_of_week).toEqual(["monday", "wednesday", "friday"]);
+  });
+
+  it("drops unrecognisable entries", () => {
+    const input = JSON.stringify({
+      schedule: { frequency: "weekly", time: "07:00", days_of_week: ["monday", "blursday", 99, null, { x: 1 }], timezone: "UTC" },
+      status: {}, todo: [], ignore: [],
+    });
+    const result = JSON.parse(sanitizeScheduledSpaceData(input, "scheduled"));
+    expect(result.schedule.days_of_week).toEqual(["monday"]);
+  });
+
+  it("deduplicates repeated days", () => {
+    const input = JSON.stringify({
+      schedule: { frequency: "weekly", time: "07:00", days_of_week: ["monday", 1, "MON"], timezone: "UTC" },
+      status: {}, todo: [], ignore: [],
+    });
+    const result = JSON.parse(sanitizeScheduledSpaceData(input, "scheduled"));
+    expect(result.schedule.days_of_week).toEqual(["monday"]);
+  });
+
+  it("leaves null days_of_week untouched", () => {
+    const input = JSON.stringify({
+      schedule: { frequency: "daily", time: "07:00", days_of_week: null, timezone: "UTC" },
+      status: {}, todo: [], ignore: [],
+    });
+    const result = JSON.parse(sanitizeScheduledSpaceData(input, "scheduled"));
+    expect(result.schedule.days_of_week).toBe(null);
+  });
+});
