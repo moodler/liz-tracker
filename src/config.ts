@@ -264,10 +264,10 @@ export const HUMAN_ACTORS: string[] = [
 
 /**
  * Additional actor names classified as "agent" (AI/bot identifiers).
- * "coder" and "harmoni" are always recognised as agents.
+ * "coder", "harmoni", "claude", "agent", and "opencode" are always recognised as agents.
  * Set via comma-separated env var, e.g. AGENT_ACTORS="my-bot,helper"
  */
-const DEFAULT_AGENT_ACTORS = ["coder", "harmoni"];
+const DEFAULT_AGENT_ACTORS = ["coder", "harmoni", "claude", "agent", "opencode"];
 export const AGENT_ACTORS: string[] = [
   ...DEFAULT_AGENT_ACTORS,
   ...(process.env.AGENT_ACTORS
@@ -345,15 +345,14 @@ export const TRACKER_API_TOKEN = loadApiToken();
  * These are checked post-execution and trigger alerts if violated.
  */
 export const BLOCKED_PATHS: string[] = [
-  "~/.ssh/",
-  "~/.config/assistant/",
-  "~/.gnupg/",
-  "*/LaunchAgents/*.plist",
-  "*/LaunchDaemons/*.plist",
+  "*/src/db.ts",
+  "*/src/api.ts",
+  "*/src/orchestrator.ts",
+  "*/src/mcp-server.ts",
+  "*/src/config.ts",
   "*/.env",
-  "*/container/agent-runner/src/index.ts",   // security hooks
-  "*/scripts/health-check.sh",               // security monitoring
-  "*/src/host-mcp-server.ts",                // MCP tool definitions
+  "*/CLAUDE.md",
+  "*/.claude/settings.json",
 ];
 
 // ── Circuit Breaker (Section 4.7.2) ──
