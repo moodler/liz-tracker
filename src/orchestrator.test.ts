@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { isProcessAlive, resolveOpencodePid, sendSignal, killProcessGracefully, validateAgentConfig, is413Error, isImageTooLargeError, isPostCompletionError, isScheduleTimeDue, buildPromptParts, buildResearchPromptParts, resolveModelForItem, isNoProgressState, evaluateNoProgress } from "./orchestrator.js";
-import { base64UrlEncode, buildOpencodeSessionUrl, buildOpencodeDirectoryUrl, buildOpencodeApiSessionUrl, DISPATCH_MODE } from "./config.js";
+import { base64UrlEncode, buildOpencodeSessionUrl, buildOpencodeDirectoryUrl, buildOpencodeApiSessionUrl, DISPATCH_MODE, CODER_MODEL_ID, MODEL_STRENGTH_MAP } from "./config.js";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -969,7 +969,7 @@ describe("resolveModelForItem", () => {
   it("returns global default for standard (non-scheduled) items", () => {
     const result = resolveModelForItem(baseItem as any);
     expect(result.provider).toBe("anthropic");
-    expect(result.modelId).toBe("claude-opus-4-7");
+    expect(result.modelId).toBe(CODER_MODEL_ID);
     expect(result.effort).toBe("high");
   });
 
@@ -980,7 +980,7 @@ describe("resolveModelForItem", () => {
       space_data: JSON.stringify({ schedule: { frequency: "daily" }, status: {}, todo: [], ignore: [] }),
     };
     const result = resolveModelForItem(item as any);
-    expect(result.modelId).toBe("claude-opus-4-7");
+    expect(result.modelId).toBe(CODER_MODEL_ID);
   });
 
   it("returns high-tier model for model_strength=high", () => {
@@ -990,7 +990,7 @@ describe("resolveModelForItem", () => {
       space_data: JSON.stringify({ schedule: { frequency: "daily" }, status: {}, todo: [], ignore: [], model_strength: "high" }),
     };
     const result = resolveModelForItem(item as any);
-    expect(result.modelId).toContain("opus");
+    expect(result.modelId).toBe(MODEL_STRENGTH_MAP.high.modelId);
   });
 
   it("returns medium-tier model for model_strength=medium", () => {
@@ -1000,7 +1000,7 @@ describe("resolveModelForItem", () => {
       space_data: JSON.stringify({ schedule: { frequency: "daily" }, status: {}, todo: [], ignore: [], model_strength: "medium" }),
     };
     const result = resolveModelForItem(item as any);
-    expect(result.modelId).toContain("sonnet");
+    expect(result.modelId).toBe(MODEL_STRENGTH_MAP.medium.modelId);
   });
 
   it("returns low-tier model for model_strength=low", () => {
@@ -1010,7 +1010,7 @@ describe("resolveModelForItem", () => {
       space_data: JSON.stringify({ schedule: { frequency: "daily" }, status: {}, todo: [], ignore: [], model_strength: "low" }),
     };
     const result = resolveModelForItem(item as any);
-    expect(result.modelId).toContain("haiku");
+    expect(result.modelId).toBe(MODEL_STRENGTH_MAP.low.modelId);
   });
 
   it("returns global default for invalid model_strength value", () => {
@@ -1020,7 +1020,7 @@ describe("resolveModelForItem", () => {
       space_data: JSON.stringify({ schedule: { frequency: "daily" }, status: {}, todo: [], ignore: [], model_strength: "invalid" }),
     };
     const result = resolveModelForItem(item as any);
-    expect(result.modelId).toBe("claude-opus-4-7");
+    expect(result.modelId).toBe(CODER_MODEL_ID);
   });
 
   it("returns global default for malformed space_data", () => {
@@ -1030,7 +1030,7 @@ describe("resolveModelForItem", () => {
       space_data: "not valid json",
     };
     const result = resolveModelForItem(item as any);
-    expect(result.modelId).toBe("claude-opus-4-7");
+    expect(result.modelId).toBe(CODER_MODEL_ID);
   });
 
   it("returns global default for null space_data on scheduled item", () => {
@@ -1040,7 +1040,7 @@ describe("resolveModelForItem", () => {
       space_data: null,
     };
     const result = resolveModelForItem(item as any);
-    expect(result.modelId).toBe("claude-opus-4-7");
+    expect(result.modelId).toBe(CODER_MODEL_ID);
   });
 
   // TRACK-271: DB settings override tests
@@ -1074,7 +1074,7 @@ describe("resolveModelForItem", () => {
     it("ignores null DB setting and uses env default", () => {
       setSetting("coder_model_id", null);
       const result = resolveModelForItem(baseItem as any);
-      expect(result.modelId).toBe("claude-opus-4-7");
+      expect(result.modelId).toBe(CODER_MODEL_ID);
     });
 
     it("uses DB coder_effort setting when set", () => {

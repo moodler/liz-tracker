@@ -308,7 +308,7 @@ Configuration is loaded from environment variables, with a simple `.env` file lo
 | `OPENCODE_MAX_PER_PROJECT` | `1` | Max concurrent sessions per project |
 | `SESSION_TIMEOUT` | `2700000` (45 min) | Session timeout in ms |
 | `CODER_MODEL_PROVIDER` | `anthropic` | AI model provider |
-| `CODER_MODEL_ID` | `claude-opus-4-7` | AI model ID |
+| `CODER_MODEL_ID` | `claude-opus-5` | AI model ID |
 | `CIRCUIT_BREAKER_THRESHOLD` | `2` | Consecutive failures before auto-pause |
 | `CIRCUIT_BREAKER_WINDOW` | `3600000` (1 hour) | Failure counting window in ms |
 | `ITEM_DISPATCH_FAILURE_LIMIT` | `3` | Per-item failures before auto-shelving |

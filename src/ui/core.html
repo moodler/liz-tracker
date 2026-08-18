@@ -13527,10 +13527,10 @@
             const models = (modelsData && modelsData.models) || [];
 
             // Populate all model dropdowns with dynamic model list
-            populateModelSelect($("#settingsCoderModel"), models, settings.coder_model_id || "claude-opus-4-7");
-            populateModelSelect($("#settingsModelHigh"), models, settings.model_strength_high || "claude-opus-4-7");
-            populateModelSelect($("#settingsModelMedium"), models, settings.model_strength_medium || "claude-sonnet-4-6");
-            populateModelSelect($("#settingsModelLow"), models, settings.model_strength_low || "claude-haiku-4-5-20251001");
+            populateModelSelect($("#settingsCoderModel"), models, settings.coder_model_id || "claude-opus-5");
+            populateModelSelect($("#settingsModelHigh"), models, settings.model_strength_high || "claude-opus-5");
+            populateModelSelect($("#settingsModelMedium"), models, settings.model_strength_medium || "claude-opus-4-8");
+            populateModelSelect($("#settingsModelLow"), models, settings.model_strength_low || "claude-sonnet-5");
 
             // Set effort dropdown
             $("#settingsCoderEffort").value = settings.coder_effort || "high";

@@ -148,11 +148,11 @@ All configuration is via `.env` file or environment variables. See `.env.example
 | `OPENCODE_MAX_PER_PROJECT` | `1` | Max concurrent sessions per project (prevents git conflicts within a single repo) |
 | `SESSION_TIMEOUT` | `2700000` | Session timeout in ms (default 45 minutes). Stale sessions are auto-detected and aborted. |
 | `CODER_MODEL_PROVIDER` | `anthropic` | Model provider for coder bot sessions (e.g. `anthropic`) |
-| `CODER_MODEL_ID` | `claude-opus-4-7` | Model ID for coder bot sessions (format: `providerID/modelID` when combined with provider) |
+| `CODER_MODEL_ID` | `claude-opus-5` | Model ID for coder bot sessions (format: `providerID/modelID` when combined with provider) |
 | `CODER_EFFORT` | `high` | Default effort level for coder bot sessions (`low`/`medium`/`high`/`max`) — controls Claude's reasoning depth via the Agent SDK's `effort` option |
-| `MODEL_STRENGTH_HIGH` | `claude-opus-4-7` | Model for "high" strength tier (scheduled tasks) |
-| `MODEL_STRENGTH_MEDIUM` | `claude-sonnet-4-6` | Model for "medium" strength tier (scheduled tasks) |
-| `MODEL_STRENGTH_LOW` | `claude-haiku-4-5-20251001` | Model for "low" strength tier (scheduled tasks) |
+| `MODEL_STRENGTH_HIGH` | `claude-opus-5` | Model for "high" strength tier (scheduled tasks) |
+| `MODEL_STRENGTH_MEDIUM` | `claude-opus-4-8` | Model for "medium" strength tier (scheduled tasks) |
+| `MODEL_STRENGTH_LOW` | `claude-sonnet-5` | Model for "low" strength tier (scheduled tasks) |
 | `TRACKER_API_TOKEN` | (auto-generated) | Bearer token for write API endpoints |
 | `CIRCUIT_BREAKER_THRESHOLD` | `2` | Consecutive failures before auto-pause |
 | `CIRCUIT_BREAKER_WINDOW` | `3600000` | Window (ms) for counting failures (1 hour) |
