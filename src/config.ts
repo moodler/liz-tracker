@@ -204,13 +204,13 @@ export const SESSION_TIMEOUT = parseInt(
 
 /**
  * Model to use for coder bot sessions dispatched by the orchestrator.
- * Format: "providerID/modelID" (e.g. "anthropic/claude-opus-4-6").
- * Defaults to the best available Claude model.
+ * Format: "providerID/modelID" (e.g. "anthropic/claude-opus-4-7").
+ * Defaults to the best available Claude model (Opus 4.7 — latest as of 2026-08).
  */
 export const CODER_MODEL_PROVIDER =
   process.env.CODER_MODEL_PROVIDER || "anthropic";
 export const CODER_MODEL_ID =
-  process.env.CODER_MODEL_ID || "claude-opus-4-6";
+  process.env.CODER_MODEL_ID || "claude-opus-4-7";
 
 /**
  * Default effort level for coder bot sessions.
@@ -228,7 +228,7 @@ export const CODER_EFFORT = process.env.CODER_EFFORT || "high";
 export type ModelStrength = "high" | "medium" | "low";
 
 export const MODEL_STRENGTH_MAP: Record<ModelStrength, { provider: string; modelId: string }> = {
-  high:   { provider: "anthropic", modelId: process.env.MODEL_STRENGTH_HIGH   || "claude-opus-4-6" },
+  high:   { provider: "anthropic", modelId: process.env.MODEL_STRENGTH_HIGH   || "claude-opus-4-7" },
   medium: { provider: "anthropic", modelId: process.env.MODEL_STRENGTH_MEDIUM || "claude-sonnet-4-6" },
   low:    { provider: "anthropic", modelId: process.env.MODEL_STRENGTH_LOW    || "claude-haiku-4-5-20251001" },
 };

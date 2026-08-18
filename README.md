@@ -431,7 +431,7 @@ Uses [OpenCode](https://opencode.ai) as the session manager.
 | `OPENCODE_MAX_PER_PROJECT` | `1` | Max concurrent sessions per project |
 | `SESSION_TIMEOUT` | `2700000` | Session timeout (ms, default 45 minutes) |
 | `CODER_MODEL_PROVIDER` | `anthropic` | Model provider for coder sessions |
-| `CODER_MODEL_ID` | `claude-opus-4-6` | Model ID for coder sessions |
+| `CODER_MODEL_ID` | `claude-opus-4-7` | Model ID for coder sessions |
 | `CODER_EFFORT` | `high` | Default reasoning effort (`low`/`medium`/`high`/`max`) |
 | `CIRCUIT_BREAKER_THRESHOLD` | `2` | Consecutive failures before auto-pause |
 | `CIRCUIT_BREAKER_WINDOW` | `3600000` | Failure counting window (ms, default 1 hour) |
