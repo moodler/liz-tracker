@@ -167,7 +167,7 @@ src/
 │   ├── engagement.ts # Engagement space backend (6 routes, 7 MCP tools)
 │   ├── scheduled.ts  # Scheduled space backend (4 routes, 4 MCP tools)
 │   ├── travel.ts     # Travel space backend (4 routes, 4 MCP tools)
-│   └── presentation.ts # Presentation space backend (4 routes, DeckWright integration + thumbnail proxy)
+│   └── presentation.ts # Presentation space backend (6 routes, DeckWright integration + thumbnail proxy)
 └── ui/
     ├── core.html     # Dashboard shell + plugin registry + overlay
     └── spaces/       # Per-space UI renderers (JS plugins)
