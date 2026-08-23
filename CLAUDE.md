@@ -451,6 +451,8 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `tracker_list_attachments` | List all attachments on a work item |
 | `tracker_delete_attachment` | Delete a file attachment |
 | `tracker_list_activity` | List recent activity log entries with optional filters (project, item, action, actor, since) |
+| `tracker_list_children` | List a group's child items (via `parent_of` links) plus its parent, ordered by link position |
+| `tracker_create_group` | Create a group: a new parent item linked to at least 2 existing items via `parent_of` links. Lands in `target_project_id` or the first child's project. Cycle-causing children are skipped. |
 | `tracker_merge_items` | Merge N source items into a target item (single transaction). Snapshots target description, optionally appends source bodies, transfers comments (prefixed `[from KEY]`)/attachments/outbound links, adds `superseded_by` link, cancels sources. Reversible via the target's version history + composite `items.merged` activity log entry. |
 | `tracker_split_item` | Split one source item into N new children. Creates each child as a new item with parent_of link from the source, optional regex pulls matching comments off the source onto the child, optional source cancellation (stub kept by default). Snapshots source description first; activity log entry `item.split`. |
 | `tracker_bulk_update` | Apply a patch to many items in one transaction. Supports labels add/remove (set semantics), priority, assignee, state, project move, and `add_links` (every item gets the link). Locked items are skipped. State changes still go through `changeWorkItemState` — agents cannot bulk-approve. Composite `items.bulk_updated` activity entry. |
