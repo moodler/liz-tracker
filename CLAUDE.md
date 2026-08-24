@@ -89,6 +89,9 @@ npm run test:coverage # Run tests with coverage report
 - `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers (base64url encoding, session/directory/API URL builders), error classification (413 errors, image-too-large, post-completion errors), scheduled task time gating (isScheduleTimeDue frequency/timezone/last_run logic), per-task model resolution (resolveModelForItem strength tiers, DB-backed setting overrides)
 - `src/session-runner.test.ts` — SDK message mapping, stdio protocol integration tests (event flow, steering, tool_use/tool_result/edit/partial_text events)
 - `src/runner-output.test.ts` — runner output helpers (truncateOutput, summarizeArgs, computeUnifiedDiff)
+- `src/embeddings.test.ts` — vector math (cosineSimilarity, encode/decode round-trip), textHash, local provider determinism, buildItemEmbeddingText, provider dispatch (local + mocked Voyage)
+- `src/embeddings-worker.test.ts` — text_hash skip-on-no-change, drift scoring, nightly neighbour job, debounced enqueue, embedding status aggregation
+- `src/mcp-server.test.ts` — MCP input coercion helpers (coerceBoolean, coerceStringArray) for lenient agent-supplied arguments
 - `src/spaces/travel.test.ts` — type-aware segment deduplication key logic (flight/lodging/transport disambiguation)
 - `src/spaces/scheduled.test.ts` — scheduled space data sanitization (malformed `days_of_week` normalization, numeric-to-name coercion, invalid entry dropping)
 - `src/spaces/presentation.test.ts` — DeckWright slide parser/serializer round-trip + middle/first/last slide deletion + CRLF handling
@@ -153,7 +156,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 | `MODEL_STRENGTH_HIGH` | `claude-opus-5` | Model for "high" strength tier (scheduled tasks) |
 | `MODEL_STRENGTH_MEDIUM` | `claude-opus-4-8` | Model for "medium" strength tier (scheduled tasks) |
 | `MODEL_STRENGTH_LOW` | `claude-sonnet-5` | Model for "low" strength tier (scheduled tasks) |
-| `TRACKER_API_TOKEN` | (auto-generated) | Bearer token for write API endpoints |
+| `TRACKER_API_TOKEN` | (auto-generated) | Bearer token for API endpoints (reads included — see API authentication) |
 | `CIRCUIT_BREAKER_THRESHOLD` | `2` | Consecutive failures before auto-pause |
 | `CIRCUIT_BREAKER_WINDOW` | `3600000` | Window (ms) for counting failures (1 hour) |
 | `ITEM_DISPATCH_FAILURE_LIMIT` | `3` | Per-item dispatch *errors* before auto-shelving to needs_input |
@@ -372,11 +375,22 @@ Table `tracker_execution_audits` records every dispatch:
 
 #### API authentication
 
-Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
-- Set via `TRACKER_API_TOKEN` env var or `.env` file
+**All** API endpoints — reads included — require a bearer token:
 - Header: `Authorization: Bearer <token>`
-- GET/read endpoints remain unauthenticated
-- If no token is configured, one is auto-generated on first run
+- Missing header → 401; wrong token → 403 (timing-safe comparison)
+- Token resolution order (`loadApiToken()` in `config.ts`): `TRACKER_API_TOKEN` env var → `TRACKER_API_TOKEN` in `~/.config/assistant/.env` → `store/auth_token` → freshly generated 32-byte hex, persisted to `store/auth_token` with mode `0600`
+- Because that chain always yields a token, **auth is effectively always enabled**. The `if (!TRACKER_API_TOKEN) return true` short-circuit in `checkAuth()` is a defensive fallback, not a supported "auth off" mode
+
+A small set of routes is deliberately exempt, because the browser cannot attach headers to them:
+
+| Route | Why exempt |
+| --- | --- |
+| `POST /api/v1/auth/verify`, `GET /api/v1/auth/status` | The login screen needs them before it holds a token |
+| `GET /api/v1/attachments/:id`, `GET /api/v1/attachments/:id/meta` | `<img>` / download links load the file directly |
+| `GET /api/v1/items/:id/session/events` | `EventSource` cannot send custom headers |
+| `GET /api/v1/items/:id/presentation/deck-thumb` | `<img>` tags load cached deck thumbnails directly |
+
+Static file serving (dashboard HTML/CSS/JS) is also unauthenticated so the login page can load.
 
 ### API Endpoints
 
@@ -395,6 +409,7 @@ Write endpoints (POST, PUT, PATCH, DELETE) require a bearer token:
 | `DELETE` | `/api/v1/orchestrator/restart` | Cancel a pending restart |
 | `GET` | `/api/v1/orchestrator/safe-to-restart` | Quick check if restart is safe |
 | `POST` | `/api/v1/items/ai-categorize` | AI-powered field extraction from description text (requires `ANTHROPIC_API_KEY`) |
+| `POST` | `/api/v1/items/ai-session-summary` | Summarize an agent session transcript into a ≤60-char title. Body `{audit_id?, transcript}`. If `audit_id` already has a cached `session_title`, returns it without calling the AI. Uses `AI_CATEGORIZE_MODEL`; 501 if `ANTHROPIC_API_KEY` is unset |
 | `GET` | `/api/v1/activity` | List recent activity (global). Query params: `limit`, `offset`, `project_id`, `item_id`, `action`, `actor`, `since`, `search` |
 | `GET` | `/api/v1/projects/:id/activity` | List activity for a specific project |
 | `GET` | `/api/v1/items/:id/activity` | List activity for a specific item |

@@ -186,7 +186,9 @@ No changes needed to `api.ts`, `mcp-server.ts`, `db.ts`, or the UI shell.
 
 ## REST API
 
-Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unauthenticated.
+Every endpoint requires `Authorization: Bearer <token>` — reads included. The only exceptions are the two `/auth/*` routes, attachment file downloads, the session event stream, and deck thumbnails, since the browser can't attach headers when loading those directly.
+
+Auth is always on: if you don't set `TRACKER_API_TOKEN`, the tracker generates a token on first run and saves it to `store/auth_token`.
 
 ### Projects
 
@@ -216,6 +218,7 @@ Write endpoints require `Authorization: Bearer <token>`. Read endpoints are unau
 | `POST` | `/api/v1/items/clear-stale-locks` | Clear locks older than 2 hours |
 | `GET` | `/api/v1/items/recent` | Recently updated items (filterable by project, with limit) |
 | `POST` | `/api/v1/items/ai-categorize` | AI-powered field extraction from description text |
+| `POST` | `/api/v1/items/ai-session-summary` | Summarize an agent session transcript into a short title (cached per audit) |
 
 ### Comments, Dependencies, Attachments
 
