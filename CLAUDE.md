@@ -517,7 +517,7 @@ Static file serving (dashboard HTML/CSS/JS) is also unauthenticated so the login
 | `tracker_set_cover_image` | Set/replace cover image on a song, engagement, or travel item (base64 data) |
 | `tracker_set_cover_image_from_path` | Set/replace cover image from a local file path |
 | `tracker_remove_cover_image` | Remove cover image from a song, engagement, or travel item |
-| `tracker_agent_reference` | Get comprehensive agent-facing reference for all space types (data formats, tools, examples). Reads from space plugin registry — always up to date. |
+| `tracker_agent_reference` | Get comprehensive agent-facing reference for all space types (data formats, tools, examples) plus the cross-cutting Proposals workflow. Reads from the space plugin registry — always up to date. Optional `space_type` filter (e.g. `"travel"`, or `"proposals"` for just the Proposals section). |
 
 ### Per-project setup
 
