@@ -25,7 +25,7 @@ Work items aren't just tickets. Each item can open into a full-screen workspace 
 | **Standard** | Classic tracker item — detail panel with description, comments, attachments |
 | **Song** | Songwriting workspace — split-pane lyrics editor with version history, conversation sidebar, metadata bar (genre, key, BPM), cover art, and inline CriticMarkup comments |
 | **Text** | Writing workspace — markdown editor with conversation sidebar and inline CriticMarkup comments for articles, blogs, or any long-form text |
-| **Engagement** | Coordination hub for contractors and services — contact card, quote/financials, milestone timeline, document attachments, communications log, and discussion sidebar |
+| **Engagement** | Coordination hub for contractors and services — contact card, quote/financials, milestone timeline, document attachments, communications log, cover image, and discussion sidebar |
 | **Scheduled** | Recurring task manager — schedule config (daily/weekly/custom cron), live status panel, task instructions, TODO and IGNORE lists, run history |
 | **Travel** | Trip planner — day-by-day itinerary with timezone-aware segments (flights, lodging, transport, activities, restaurants, meetings), automatic gap detection, and cover images |
 | **Presentation** | Presentation development workspace — 3-tab layout (Description, Slides, Deck) with discussion sidebar and DeckWright integration |
@@ -82,7 +82,7 @@ The orchestrator:
 - **Refactor primitives** — merge multiple items into one, split one item into many, or bulk-edit labels/priority/state across a selection in a single transaction (with version snapshots for reversibility)
 - **Semantic discovery** — embeddings power a Smart Related panel that surfaces similar items, plus optional Merge Candidates and Topics views; suggestions can be confirmed or dismissed (dismissals remembered so they don't return)
 - **Proposals** — agents stage batches of multi-action suggestions (merges, splits, bulk updates, etc.) for human review; nothing executes until a human applies them
-- **Cover images** — visual cover art for Song and Travel items
+- **Cover images** — visual cover art for Song, Engagement, and Travel items
 - **Deep links** — shareable URLs that open directly to any item, with Open Graph meta tags for rich link previews in iMessage, Slack, etc.
 - **Activity log** — unified timeline of all mutations (state changes, comments, description edits, attachments) with actor attribution and filtering
 - **AI categorization** — one-click AI-powered field extraction from description text

@@ -47,7 +47,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/spaces/standard.ts` | Identity only (no routes/tools) |
 | `src/spaces/song.ts` | Parser, cover image capability flag |
 | `src/spaces/text.ts` | Parser (minimal — no routes/tools) |
-| `src/spaces/engagement.ts` | Parser, 6 API routes, 7 MCP tools |
+| `src/spaces/engagement.ts` | Parser, 6 API routes, 7 MCP tools, cover image |
 | `src/spaces/scheduled.ts` | Parser, sanitizer, 4 API routes, 4 MCP tools |
 | `src/spaces/travel.ts` | Parser, sanitizer, deep merge, 4 API routes, 4 MCP tools, cover image |
 | `src/spaces/presentation.ts` | Parser, sanitizer, 6 API routes (deck PATCH, deck-mdx GET, deck-thumbnails GET proxy, deck-thumb GET cached image, deck-slide DELETE, deck-reorder POST), DeckWright integration |
@@ -514,9 +514,9 @@ Static file serving (dashboard HTML/CSS/JS) is also unauthenticated so the login
 
 | Tool | Description |
 | --- | --- |
-| `tracker_set_cover_image` | Set/replace cover image on a song or travel item (base64 data) |
+| `tracker_set_cover_image` | Set/replace cover image on a song, engagement, or travel item (base64 data) |
 | `tracker_set_cover_image_from_path` | Set/replace cover image from a local file path |
-| `tracker_remove_cover_image` | Remove cover image from a song or travel item |
+| `tracker_remove_cover_image` | Remove cover image from a song, engagement, or travel item |
 | `tracker_agent_reference` | Get comprehensive agent-facing reference for all space types (data formats, tools, examples). Reads from space plugin registry — always up to date. |
 
 ### Per-project setup
@@ -758,8 +758,8 @@ tracker_add_travel_segment({
 - `DELETE /items/:id/engagement/milestones` — remove engagement milestones (`{ indices: [0, 2] }`)
 - `POST /items/:id/engagement/comms` — add engagement comms log (`{ entries: [{ direction, date, subject, snippet? }] }`)
 - `PATCH /items/:id/engagement/settings` — update engagement settings (`{ gmail_query?, calendar_tag? }`)
-- `PUT /items/:id/cover` — set/replace cover image on song or engagement items (multipart/form-data or JSON with base64 `data`)
-- `DELETE /items/:id/cover` — remove cover image from song or engagement items
+- `PUT /items/:id/cover` — set/replace cover image on song, engagement, or travel items (multipart/form-data or JSON with base64 `data`)
+- `DELETE /items/:id/cover` — remove cover image from song, engagement, or travel items
 - `PATCH /items/:id/travel/trip` — update travel trip metadata (`{ destination?, purpose?, travelers?, default_timezone?, notes? }`)
 - `POST /items/:id/travel/segments` — add travel segments (`{ segments: [...] }`)
 - `PATCH /items/:id/travel/segments` — update a travel segment by ID (`{ id: "seg_abc", ...fields }`) — deep merge for nested objects

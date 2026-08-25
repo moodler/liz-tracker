@@ -1733,7 +1733,7 @@ function createMcpServer(): McpServer {
 
   server.tool(
     "tracker_set_cover_image",
-    "Set or replace the cover image on a song or engagement space item. Accepts base64-encoded image data. Automatically removes any existing cover image before uploading the new one.",
+    "Set or replace the cover image on a song, engagement, or travel space item. Accepts base64-encoded image data. Automatically removes any existing cover image before uploading the new one.",
     {
       item_id: z.string().describe("Work item ID or display key (e.g. \"MUSIC-3\")"),
       data: z.string().describe("Base64-encoded image file content"),
@@ -1788,7 +1788,7 @@ function createMcpServer(): McpServer {
 
   server.tool(
     "tracker_set_cover_image_from_path",
-    "Set or replace the cover image on a song or engagement space item from a local file path. Automatically removes any existing cover image before uploading the new one.",
+    "Set or replace the cover image on a song, engagement, or travel space item from a local file path. Automatically removes any existing cover image before uploading the new one.",
     {
       item_id: z.string().describe("Work item ID or display key (e.g. \"MUSIC-3\")"),
       file_path: z.string().describe("Absolute path to the image file on disk"),
@@ -1866,7 +1866,7 @@ function createMcpServer(): McpServer {
 
   server.tool(
     "tracker_remove_cover_image",
-    "Remove the cover image from a song or engagement space item.",
+    "Remove the cover image from a song, engagement, or travel space item.",
     {
       item_id: z.string().describe("Work item ID or display key (e.g. \"MUSIC-3\")"),
     },
