@@ -592,7 +592,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 | `engagement` | briefcase (SVG) | Coordination workspace for contractors, services, and external engagements — structured dashboard (contact, quote, milestones, documents, comms log) + discussion sidebar. Uses `space_data` JSON for all structured content. |
 | `scheduled` | clock (SVG) | Scheduled task workspace — schedule config (frequency, time, days), live status panel (next/last run, run count), task instructions editor, TODO list, IGNORE list + run history sidebar. Useful for recurring automated tasks. `space_data` stores a JSON string (see format below). |
 | `travel` | plane (SVG) | Trip planning workspace — day-by-day itinerary with timezone-aware segments (flights, lodging, transport, activities, restaurants, meetings, notes), gap detection, cover image support, and MCP tools for programmatic segment management. `space_data` stores trip metadata + segments array as JSON. |
-| `presentation` | monitor (SVG) | Presentation development workspace — 3-tab layout (Description, Slides, Deck) with discussion sidebar and DeckWright integration. `space_data` stores `deck_slug` and `deck_url`. |
+| `presentation` | monitor (SVG) | Presentation development workspace — 3-tab layout (Description, Slides, Deck) with discussion sidebar and DeckWright integration. `space_data` stores only `deck_slug`; the deck URL is server-side config (`DECKWRIGHT_URL`) returned alongside it in API responses. |
 
 #### Scheduled Task `space_data` Format
 
@@ -615,13 +615,15 @@ When updating a scheduled task's `space_data` via MCP tools or the API, the valu
     "run_count": 0
   },
   "todo": ["plain string task 1", "plain string task 2"],
-  "ignore": ["plain string rule 1", "plain string rule 2"]
+  "ignore": ["plain string rule 1", "plain string rule 2"],
+  "model_strength": null
 }
 ```
 
 **Critical rules:**
 - `todo` and `ignore` must be arrays of **plain strings** — never objects. Using objects like `{"text": "task"}` will cause `[object Object]` to display in the UI.
-- Always include **all four top-level keys** (`schedule`, `status`, `todo`, `ignore`). The entire `space_data` is replaced on update, not merged.
+- Always include **all five top-level keys** (`schedule`, `status`, `todo`, `ignore`, `model_strength`). The entire `space_data` is replaced on update, not merged — omitting `model_strength` silently resets the task to the global default model.
+- `model_strength` selects the per-task model tier: `"high"`, `"medium"`, `"low"`, or `null` (use the global `CODER_MODEL_ID` default). `resolveModelForItem()` in `config.ts` maps the tier through `MODEL_STRENGTH_MAP`; any other value is coerced to `null` by the sanitizer.
 - To update just the `todo` list: first GET the item to read the current `space_data`, parse it, modify the `todo` array, then PUT/PATCH back the full JSON string.
 - `frequency` options: `"once"`, `"hourly"`, `"daily"`, `"weekly"`, `"monthly"`, `"manual"`, `"custom"` (with `cron_override`).
 - `days_of_week` is only used when `frequency` is `"weekly"`: an array of lowercase day names like `["monday", "wednesday", "friday"]`.
@@ -764,7 +766,7 @@ tracker_add_travel_segment({
 - `POST /items/:id/travel/segments` — add travel segments (`{ segments: [...] }`)
 - `PATCH /items/:id/travel/segments` — update a travel segment by ID (`{ id: "seg_abc", ...fields }`) — deep merge for nested objects
 - `DELETE /items/:id/travel/segments` — remove travel segments (`{ ids: ["seg_abc", ...] }`)
-- `PATCH /items/:id/presentation/deck` — update deck config (`{ deck_slug?, deck_url? }`)
+- `PATCH /items/:id/presentation/deck` — update deck config (`{ deck_slug? }`). Responds with `{ deck_slug, deck_url }`, where `deck_url` is the server's `DECKWRIGHT_URL` and is not client-settable
 - `GET /items/:id/presentation/deck-mdx` — read deck.mdx content from DeckWright content directory
 - `GET /items/:id/presentation/deck-thumbnails` — fetch thumbnail list from DeckWright, cache locally, return tracker-proxied URLs (pass `?refresh=1` to bust cache)
 - `GET /items/:id/presentation/deck-thumb?file=...` — serve a cached deck thumbnail image (no auth required)
