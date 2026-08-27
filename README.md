@@ -123,8 +123,8 @@ Copy `.env.example` to `.env` and edit as needed. Key settings:
 | `PORT` | `1000` | Server port |
 | `STORE_DIR` | `./store` | Directory for SQLite database and attachments |
 | `OWNER_NAME` | `Owner` | Your display name (used as default assignee) |
-| `HUMAN_ACTORS` | `dashboard,me` | Comma-separated names classified as human (can approve items) |
-| `AGENT_ACTORS` | `coder` | Comma-separated names classified as AI agents |
+| `HUMAN_ACTORS` | `dashboard,me` | Built-in human actors (can approve items). The env var adds *extra* names, it does not replace the built-ins |
+| `AGENT_ACTORS` | `coder,harmoni` | Built-in AI agent actors. The env var adds *extra* names, it does not replace the built-ins |
 | `TRACKER_API_TOKEN` | (auto-generated) | Bearer token for API endpoints |
 | `TRACKER_PUBLIC_URL` | `http://localhost:{PORT}` | Tracker dashboard URL (for links and fallback base) |
 | `TRACKER_SHORT_URL` | (same as `TRACKER_PUBLIC_URL`) | Short base URL for item deep links (e.g. `http://t` → `http://t/TRACK-187`) |
@@ -436,6 +436,9 @@ Uses [OpenCode](https://opencode.ai) as the session manager.
 | `CODER_MODEL_PROVIDER` | `anthropic` | Model provider for coder sessions |
 | `CODER_MODEL_ID` | `claude-opus-5` | Model ID for coder sessions |
 | `CODER_EFFORT` | `high` | Default reasoning effort (`low`/`medium`/`high`/`max`) |
+| `MODEL_STRENGTH_HIGH` | `claude-opus-5` | Model for the `high` strength tier (per-task model selection) |
+| `MODEL_STRENGTH_MEDIUM` | `claude-opus-4-8` | Model for the `medium` strength tier |
+| `MODEL_STRENGTH_LOW` | `claude-sonnet-5` | Model for the `low` strength tier |
 | `CIRCUIT_BREAKER_THRESHOLD` | `2` | Consecutive failures before auto-pause |
 | `CIRCUIT_BREAKER_WINDOW` | `3600000` | Failure counting window (ms, default 1 hour) |
 | `ITEM_DISPATCH_FAILURE_LIMIT` | `3` | Per-item dispatch *errors* before auto-shelving to `needs_input` |
