@@ -941,7 +941,7 @@ The dashboard topbar has a **Proposals** button (with a pending count badge that
 
 ## Conventions
 
-- Database tables are prefixed with `tracker_` (projects, work_items, comments, transitions, watchers, dependencies, attachments, description_versions, activity_log, execution_audits, comment_reactions, settings, links, proposals, proposal_actions)
+- Database tables are prefixed with `tracker_` (projects, work_items, comments, transitions, watchers, dependencies, attachments, description_versions, activity_log, execution_audits, comment_reactions, settings, links, proposals, proposal_actions, embeddings, embedding_neighbours, embedding_tombstones, embedding_drift, embedding_clusters)
 - All IDs are random hex strings (24 chars)
 - Timestamps are ISO 8601 strings
 - Work items have sequential keys per project (e.g. PROJ-1, PROJ-2)
