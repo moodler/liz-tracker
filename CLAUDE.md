@@ -34,7 +34,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `scripts/safe-restart.sh` | Safe restart script — checks for active sessions before restarting |
 | `scripts/safe-upgrade-opencode.sh` | Safely upgrade OpenCode without interrupting active sessions |
 | `.claude/commands/` | Slash commands for Claude Code sessions: `/verify`, `/code-review`, `/build-fix` |
-| `.claude/skills/` | Domain-specific skills (8 total) — auto-recommended by `buildPrompt()` based on item keywords |
+| `.claude/skills/` | Domain-specific skills (9 project-local) — four of them (`tracker-security-review`, `orchestrator-safe-dev`, `space-plugin-dev`, `mcp-tool-dev`) are auto-recommended by `buildPrompt()` based on item keywords |
 | `.claude/settings.json` | Project-level hooks: TypeScript type-check after `.ts` edits, console.log detection on stop |
 
 ## Space Plugin Files

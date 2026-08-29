@@ -490,6 +490,7 @@ Skills in `.claude/skills/` provide domain-specific guidance. They activate auto
 | **space-plugin-dev** | Custom | Step-by-step guide for building new space plugins (all 5 parts: backend, frontend, registry, MCP tools, tests) |
 | **mcp-tool-dev** | Custom | MCP tool development guide — Zod validation, actor handling, naming conventions, error responses |
 | **orchestrator-safe-dev** | Custom | Safety guidelines for orchestrator code — state machine, dispatch, SSE, circuit breaker, safe restart |
+| **graphify** | Third-party | Knowledge-graph navigation — `graphify query` / `path` / `explain` for architectural and cross-file questions against `graphify-out/` |
 
 ### Hooks
 
