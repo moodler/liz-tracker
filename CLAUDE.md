@@ -929,7 +929,7 @@ Item IDs accept either raw IDs or display keys (e.g. `TRACK-5`) — they're reso
 
 ### Security
 
-- `tracker_propose_batch` forces `proposed_by_class='agent'` regardless of what the caller claims (via `classifyActor()`).
+- Staging is deliberately open — any actor may propose. `createProposal()` records `proposed_by_class` from `classifyActor(proposed_by)` (`proposed_by` defaults to `Harmoni`, which classifies as `agent`); it does **not** force the class. This is provenance labelling, not a gate — the security boundary is at apply time.
 - `applyProposal()` rejects non-human actors at the boundary. The error message says: *"Only human actors can apply proposals."*
 - Even within `applyProposal()`, each action routes through its existing mutator (`createWorkItem`, `changeWorkItemState`, `mergeItems`, …). Those mutators apply their own actor-class rules — e.g. agents still cannot approve `requires_code` items even if a human triggers the apply, because the dispatched mutator sees the human actor.
 - Applied `add_link` actions carry `source='proposal'` so the audit trail distinguishes them from manual/auto-mention/embedding links.
