@@ -190,7 +190,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 
 **Comment-based auto-completion:**
 1. The orchestrator watches for owner comments on items in `testing` or `in_review` state
-2. If the comment matches acknowledgment patterns (e.g. "looks good", "LGTM", "done", "approved", "ship it"), the item is auto-moved to `done`
+2. If the comment matches acknowledgment patterns (e.g. "looks good", "LGTM", "done", "approved", "ship it"), the item is auto-moved to `done`. A comment only counts as an acknowledgment when it is under 500 characters **and** contains no negative signal — `problem`, `but the`, `missing`, `still not`, `please`, any `?`, etc. Negative signals veto a positive match, so "looks good, but the spacing is wrong" falls through to step 3 instead
 3. If the comment is non-acknowledgment feedback on a `testing` item, it triggers the review feedback redispatch flow above
 4. Runs both reactively (via event watcher) and periodically (catch-all scan for missed comments)
 
@@ -286,7 +286,9 @@ Every state transition and item creation records an `actor_class`:
 | `orchestrator`, `system` | `system` | ❌ |
 | anything else | `api` | ❌ |
 
-Only `human`-class actors can move items to `approved` or `cancelled`. Attempts by other actor classes throw an error (403 from API, error from MCP).
+Only `human`-class actors can move items to `approved` or `cancelled`. Additionally, `api`-class actors cannot move items to `in_development` — that transition must come from the orchestrator or the dashboard. Attempts that violate these rules throw an error (403 from API, error from MCP).
+
+Beyond these three rules there is no transition graph — any state may move to any other state, so the pipeline diagram above describes the intended flow rather than an enforced one.
 
 **MCP enforcement:** All items created via MCP tools have `created_by` forced to the default agent name. This prevents agents from impersonating human actors (e.g. passing `created_by: "dashboard"`) to bypass actor classification. Similarly, state changes via MCP force `actor_class = "agent"`.
 
