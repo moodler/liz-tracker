@@ -37,11 +37,11 @@ Projects choose which space types are available, and you pick the type when crea
 Items flow through a clear lifecycle:
 
 ```
-brainstorming → clarification → approved → in_development → in_review → testing → done
+brainstorming → clarification → brainstorming → approved → in_development → in_review → testing → done
 ```
 
 - **Brainstorming** — capture ideas and define requirements
-- **Clarification** — optionally trigger a research agent to gather info and flesh out the spec
+- **Clarification** — optionally trigger a research agent to gather info and flesh out the spec; the agent moves the item back to brainstorming when it's done, so you review the improved spec before approving
 - **Approved** — human-approved and ready for work (or automatic dispatch to AI)
 - **In development → In review → Testing → Done** — standard workflow
 - **Needs input** — blocked, waiting for human input
@@ -133,8 +133,9 @@ Copy `.env.example` to `.env` and edit as needed. Key settings:
 | `WEBHOOK_URL` | (none) | URL to POST comment webhook notifications to |
 | `WEBHOOK_SECRET` | (none) | Shared secret for authenticating webhook payloads |
 | `ASSISTANT_PROJECT_ROOT` | `~/assistant` | Root directory for container path translation (agent file uploads) |
+| `EMBEDDING_PROVIDER` | `omlx` | Where semantic-discovery vectors are computed. The default posts to a local OpenAI-compatible server on your LAN, so item text never leaves your network. `voyage` (cloud), `local`/`mock` (offline, non-semantic) are also supported |
 
-On first run, an API token is auto-generated and saved to `store/auth_token`. See `.env.example` for all options including orchestrator settings.
+On first run, an API token is auto-generated and saved to `store/auth_token`. `.env.example` is a starter config covering the common settings; the orchestrator options are documented in full below.
 
 ## Architecture
 
@@ -154,7 +155,7 @@ src/
 ├── session-runner.ts # Session runner — direct Claude Code execution via Agent SDK
 ├── runner-types.ts   # Shared types for runner stdio JSON protocol
 ├── runner-output.ts  # Runner output helpers (truncation, arg summaries, unified diffs)
-├── embeddings.ts     # Embedding provider abstraction (Voyage, local/mock); vector math
+├── embeddings.ts     # Embedding provider abstraction (local oMLX server by default, Voyage, local/mock); vector math
 ├── embeddings-worker.ts # Debounced refresh queue, nightly neighbour/drift/clustering job
 ├── logger.ts         # Pino logger
 ├── spaces/           # Space plugin backends (types, registry, per-space logic)
@@ -480,6 +481,8 @@ Slash commands available during Claude Code sessions:
 
 Skills in `.claude/skills/` provide domain-specific guidance. They activate automatically based on the work being done, and the orchestrator recommends relevant skills in dispatch prompts based on item content keywords.
 
+#### Development skills
+
 | Skill | Origin | Description |
 | --- | --- | --- |
 | **tdd-workflow** | Adapted from ECC | Test-driven development discipline for Vitest + in-memory SQLite |
@@ -491,6 +494,17 @@ Skills in `.claude/skills/` provide domain-specific guidance. They activate auto
 | **mcp-tool-dev** | Custom | MCP tool development guide — Zod validation, actor handling, naming conventions, error responses |
 | **orchestrator-safe-dev** | Custom | Safety guidelines for orchestrator code — state machine, dispatch, SSE, circuit breaker, safe restart |
 | **graphify** | Third-party | Knowledge-graph navigation — `graphify query` / `path` / `explain` for architectural and cross-file questions against `graphify-out/` |
+
+#### Design skills
+
+A 23-skill frontend design pack is also installed — the Impeccable pack (21 skills) plus the Taste Skills `minimalist-ui` and `full-output-enforcement` modules. Both are framework-agnostic, so they work with the tracker's vanilla JS/CSS dashboard. They group roughly as:
+
+| Group | Skills |
+| --- | --- |
+| **Review and quality gates** | `audit`, `critique`, `polish`, `distill` |
+| **Visual craft** | `typeset`, `colorize`, `arrange`, `animate`, `bolder`, `quieter`, `delight`, `overdrive` |
+| **Robustness and reach** | `harden`, `adapt`, `normalize`, `optimize`, `clarify` |
+| **Workflow** | `frontend-design`, `minimalist-ui`, `onboard`, `extract`, `full-output-enforcement`, `teach-impeccable` |
 
 ### Hooks
 
