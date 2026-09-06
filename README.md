@@ -23,7 +23,7 @@ Work items aren't just tickets. Each item can open into a full-screen workspace 
 | Space | What it does |
 | --- | --- |
 | **Standard** | Classic tracker item — detail panel with description, comments, attachments |
-| **Song** | Songwriting workspace — split-pane lyrics editor with version history, conversation sidebar, metadata bar (genre, key, BPM), cover art, and inline CriticMarkup comments |
+| **Song** | Songwriting workspace — split-pane lyrics editor with version history, conversation sidebar, cover art, a style-description editor, a link field, and inline CriticMarkup comments |
 | **Text** | Writing workspace — markdown editor with conversation sidebar and inline CriticMarkup comments for articles, blogs, or any long-form text |
 | **Engagement** | Coordination hub for contractors and services — contact card, quote/financials, milestone timeline, document attachments, communications log, cover image, and discussion sidebar |
 | **Scheduled** | Recurring task manager — schedule config (daily/weekly/custom cron), live status panel, task instructions, TODO and IGNORE lists, run history |

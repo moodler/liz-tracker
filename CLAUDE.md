@@ -580,7 +580,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 ### Database Fields
 
 - `work_items.space_type` — Space type name (e.g. `standard`, `song`). Default: `standard`
-- `work_items.space_data` — JSON blob for space-specific custom fields (e.g. song metadata: genre, key, BPM)
+- `work_items.space_data` — JSON blob for space-specific custom fields (e.g. a scheduled task's schedule/status, a travel itinerary's segments). Spaces that need no extra fields leave it `null` — `standard`, `song`, and `text` all do
 - `projects.active_spaces` — JSON array of active space types for this project (e.g. `["standard","song"]`)
 - `tracker_description_versions` table — Version history of item descriptions (used by the Song space's version selector)
 
@@ -589,7 +589,7 @@ Spaces turn work items into purpose-built workspaces. Each item has a `space_typ
 | Type | Icon | Description |
 | --- | --- | --- |
 | `standard` | document (SVG) | Default tracker view — opens the normal detail panel |
-| `song` | music note (SVG) | Songwriting workspace — split-pane lyrics editor + conversation + metadata bar |
+| `song` | music note (SVG) | Songwriting workspace — split-pane lyrics editor + sidebar with conversation, version history, cover art, a `styles.md` style-description editor, and a link field |
 | `text` | text lines (SVG) | Writing workspace — markdown editor + conversation for articles, blogs, long-form text |
 | `engagement` | briefcase (SVG) | Coordination workspace for contractors, services, and external engagements — structured dashboard (contact, quote, milestones, documents, comms log) + discussion sidebar. Uses `space_data` JSON for all structured content. |
 | `scheduled` | clock (SVG) | Scheduled task workspace — schedule config (frequency, time, days), live status panel (next/last run, run count), task instructions editor, TODO list, IGNORE list + run history sidebar. Useful for recurring automated tasks. `space_data` stores a JSON string (see format below). |
@@ -785,12 +785,12 @@ tracker_add_travel_segment({
 - `// __SPACE_PLUGINS__` — Marker where build-ui.js injects the space plugin files
 
 **In `src/ui/spaces/*.js` (extracted plugin files):**
-- `song.js` — Song space renderer (lyrics pane, conversation, metadata bar)
+- `song.js` — Song space renderer (lyrics pane, conversation, version history, cover art, styles + link fields)
 - `text.js` — Text space renderer (markdown editor, conversation, inline comments)
 - `engagement.js` — Engagement space renderer (contact card, quote/financial, milestones, documents, comms log + discussion sidebar)
 - `scheduled.js` — Scheduled task space renderer (schedule config, status panel, task instructions + run history sidebar)
 - `travel.js` — Travel space renderer (day-by-day timeline, segment cards, gap detection, add/edit forms)
-- `presentation.js` — Presentation space renderer (3-tab layout: Description, Slides, Artifact + discussion sidebar)
+- `presentation.js` — Presentation space renderer (3-tab layout: Description, Slides, Deck + discussion sidebar)
 - `standard.js` — Registry entry only (standard items use the default detail panel)
 
 ### How It Works
