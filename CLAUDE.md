@@ -85,16 +85,16 @@ npm run test:coverage # Run tests with coverage report
 - The `_initTestTrackerDatabase()` function in `db.ts` creates a fresh in-memory DB for each test suite
 
 **Current test coverage:**
-- `src/db.test.ts` — actor classification, state transitions (incl. security rules), project/item CRUD, locks, dependencies, comments, comment reactions (toggle, uniqueness, aggregation, batch, cascade delete, activity logging), approval provenance, move between projects, activity log (logActivity/listActivity, filtering, integration with mutations), settings CRUD (getSetting/setSetting/getAllSettings)
-- `src/orchestrator.test.ts` — PID-based stale session detection, agent config validation, URL helpers (base64url encoding, session/directory/API URL builders), error classification (413 errors, image-too-large, post-completion errors), scheduled task time gating (isScheduleTimeDue frequency/timezone/last_run logic), per-task model resolution (resolveModelForItem strength tiers, DB-backed setting overrides)
-- `src/session-runner.test.ts` — SDK message mapping, stdio protocol integration tests (event flow, steering, tool_use/tool_result/edit/partial_text events)
-- `src/runner-output.test.ts` — runner output helpers (truncateOutput, summarizeArgs, computeUnifiedDiff)
-- `src/embeddings.test.ts` — vector math (cosineSimilarity, encode/decode round-trip), textHash, local provider determinism, buildItemEmbeddingText, provider dispatch (local + mocked Voyage)
-- `src/embeddings-worker.test.ts` — text_hash skip-on-no-change, drift scoring, nightly neighbour job, debounced enqueue, embedding status aggregation
-- `src/mcp-server.test.ts` — MCP input coercion helpers (coerceBoolean, coerceStringArray) for lenient agent-supplied arguments
-- `src/spaces/travel.test.ts` — type-aware segment deduplication key logic (flight/lodging/transport disambiguation)
-- `src/spaces/scheduled.test.ts` — scheduled space data sanitization (malformed `days_of_week` normalization, numeric-to-name coercion, invalid entry dropping)
-- `src/spaces/presentation.test.ts` — DeckWright slide parser/serializer round-trip + middle/first/last slide deletion + CRLF handling
+- `src/db.test.ts` (282 tests) — actor classification, project/item CRUD, `opencode_project_id`, state transitions (incl. security rules), locks, dependencies, comments + `sanitizeCommentBody`, comment reactions (toggle, uniqueness, aggregation, batch, cascade delete), approval provenance, bot dispatch, project orchestration/context, description versioning, `moveWorkItem`, scheduled-task `space_data`, activity log (logActivity/listActivity, filtering, integration with mutations), settings CRUD, links (add/remove/removeById/list, `getLinksAmongItems`, `extractMentionKeys`, mention auto-extraction on create + update, `VALID_LINK_RELATIONS`), groups via `parent_of` (`wouldCreateParentCycle`, position auto-assignment, `reorderChildren`, `getParentItem`, `getChildCountsBatch`, `createGroupFromItems`), `mergeItems`/`splitItem`/`bulkUpdate` (TRACK-282), proposals (TRACK-284), session counts
+- `src/orchestrator.test.ts` (109 tests) — PID-based stale session detection (`isProcessAlive`, `resolveOpencodePid`), process signalling (`sendSignal`, `killProcessGracefully`), agent config validation, error classification (413 errors, image-too-large, post-completion errors), URL helpers (base64url encoding, session/directory/API URL builders), scheduled task time gating (`isScheduleTimeDue` frequency/timezone/last_run logic), `DISPATCH_MODE` config, prompt builders (`buildPromptParts`, `buildResearchPromptParts`), per-task model resolution (`resolveModelForItem` strength tiers, DB-backed setting overrides), no-progress evaluation (`isNoProgressState`, `evaluateNoProgress`)
+- `src/session-runner.test.ts` (23 tests) — SDK message mapping (system init, result success/error, assistant text + tool_use blocks, tool_progress, tool_use_summary with call_id correlation, status, stream_event partial text), stdio protocol integration tests (event flow, steering, tool_use/tool_result/edit/partial_text events)
+- `src/runner-output.test.ts` (15 tests) — runner output helpers (truncateOutput, summarizeArgs, computeUnifiedDiff)
+- `src/embeddings.test.ts` (21 tests) — vector math (cosineSimilarity, encode/decode round-trip), textHash, local provider determinism, buildItemEmbeddingText, provider dispatch (local + mocked Voyage)
+- `src/embeddings-worker.test.ts` (10 tests) — text_hash skip-on-no-change, drift scoring, nightly neighbour job, debounced enqueue, embedding status aggregation
+- `src/mcp-server.test.ts` (13 tests) — MCP input coercion helpers (coerceBoolean, coerceStringArray) for lenient agent-supplied arguments
+- `src/spaces/travel.test.ts` (19 tests) — type-aware segment deduplication key logic (flight/lodging/transport disambiguation)
+- `src/spaces/scheduled.test.ts` (23 tests) — `computeNextRun` schedule arithmetic (per-frequency, timezone, days_of_week), plus `sanitizeScheduledSpaceData` recomputing `next_run` and normalizing malformed `days_of_week` (numeric-to-name coercion, invalid entry dropping)
+- `src/spaces/presentation.test.ts` (33 tests) — DeckWright slide parser/serializer round-trip (incl. content-exact first/middle/last deletion and CRLF handling), `extractSlideHeading`, slide reorder round-trip, and thumbnail cache maintenance (`shiftThumbnailsAfterSlideDelete`, `shiftThumbnailsAfterSlideReorder`, `invalidateLocalThumbCache`)
 
 **To activate the pre-push hook** (run once per clone):
 ```bash
@@ -629,6 +629,7 @@ When updating a scheduled task's `space_data` via MCP tools or the API, the valu
 - To update just the `todo` list: first GET the item to read the current `space_data`, parse it, modify the `todo` array, then PUT/PATCH back the full JSON string.
 - `frequency` options: `"once"`, `"hourly"`, `"daily"`, `"weekly"`, `"monthly"`, `"manual"`, `"custom"` (with `cron_override`).
 - `days_of_week` is only used when `frequency` is `"weekly"`: an array of lowercase day names like `["monday", "wednesday", "friday"]`.
+- `status.next_run` is **derived, not authored**. Whenever `schedule` is present the sanitizer recomputes it via `computeNextRun()` (TRACK-264), overwriting whatever the caller supplied — so there is no point setting it by hand.
 
 **Preferred: Use dedicated MCP tools instead of raw `space_data` updates.**
 
