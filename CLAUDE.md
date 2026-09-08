@@ -31,6 +31,7 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | `src/session-runner.ts` | Session runner — Agent SDK execution, stdio JSON protocol |
 | `src/runner-types.ts` | Shared types for runner events and config |
 | `src/runner-output.ts` | Pure helpers for runner output truncation, arg summarization, and unified-diff computation |
+| `scripts/with-node.sh` | PATH shim that every `npm run` script goes through — strips `/tmp/bun-*` entries that shadow the real `node` binary and prepends `/opt/homebrew/bin`, then `exec`s the command |
 | `scripts/safe-restart.sh` | Safe restart script — checks for active sessions before restarting |
 | `scripts/safe-upgrade-opencode.sh` | Safely upgrade OpenCode without interrupting active sessions |
 | `.claude/commands/` | Slash commands for Claude Code sessions: `/verify`, `/code-review`, `/build-fix` |
