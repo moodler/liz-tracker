@@ -208,8 +208,8 @@ Auth is always on: if you don't set `TRACKER_API_TOKEN`, the tracker generates a
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/api/v1/items` | List items (filterable by project, state, priority, assignee, search) |
-| `POST` | `/api/v1/items` | Create an item |
+| `GET` | `/api/v1/projects/:id/items` | List a project's items (filterable by state, priority, assignee, label, search) |
+| `POST` | `/api/v1/projects/:id/items` | Create an item in a project |
 | `GET` | `/api/v1/items/:id` | Get an item (with comments, transitions, dependencies, attachments) |
 | `PATCH` | `/api/v1/items/:id` | Update an item (supports `space_type`, `space_data`, `project_id` for cross-project moves) |
 | `DELETE` | `/api/v1/items/:id` | Delete an item |
