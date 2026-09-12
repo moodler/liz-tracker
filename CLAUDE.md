@@ -16,10 +16,10 @@ Standalone project management tracker with kanban UI, REST API, MCP tools, and O
 | File | Description |
 | --- | --- |
 | `src/index.ts` | Entry point — init DB, start server, optionally start orchestrator |
-| `src/config.ts` | Config from env vars / `.env` file: PORT, STORE_DIR, TRACKER_PUBLIC_URL, TRACKER_SHORT_URL, OPENCODE_SERVER_URL, OPENCODE_PUBLIC_URL, ORCHESTRATOR_ENABLED, ORCHESTRATOR_INTERVAL, OPENCODE_MAX_CONCURRENT, OPENCODE_MAX_PER_PROJECT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL, DECKWRIGHT_URL, EMBEDDING_PROVIDER, OMLX_EMBEDDINGS_URL, OMLX_API_KEY, OMLX_EMBEDDING_MODEL, OMLX_EMBEDDING_DIM, VOYAGE_API_KEY, VOYAGE_MODEL |
+| `src/config.ts` | Config from env vars / `.env` file: PORT, STORE_DIR, OWNER_NAME, ASSISTANT_PROJECT_ROOT, TRACKER_PUBLIC_URL, TRACKER_SHORT_URL, OPENCODE_SERVER_URL, OPENCODE_PUBLIC_URL, ORCHESTRATOR_ENABLED, ORCHESTRATOR_INTERVAL, OPENCODE_MAX_CONCURRENT, OPENCODE_MAX_PER_PROJECT, ANTHROPIC_API_KEY, AI_CATEGORIZE_MODEL, DECKWRIGHT_URL, EMBEDDING_PROVIDER, OMLX_EMBEDDINGS_URL, OMLX_API_KEY, OMLX_EMBEDDING_MODEL, OMLX_EMBEDDING_DIM, VOYAGE_API_KEY, VOYAGE_MODEL |
 | `src/embeddings.ts` | Embedding provider abstraction — Voyage, Anthropic (fallback), local/mock providers. Vector math: cosineSimilarity, encode/decodeVector, textHash, buildItemEmbeddingText |
 | `src/embeddings-worker.ts` | Worker: debounced refresh queue (30s), nightly neighbour computation (top-K), drift score, clustering (connected components) |
-| `src/logger.ts` | Pino logger with pino-pretty |
+| `src/logger.ts` | Pino logger with pino-pretty (level from `LOG_LEVEL`, default `info`) |
 | `src/db.ts` | SQLite database layer — schema, CRUD, events, migrations, activity logging |
 | `src/api.ts` | HTTP server — REST API + static file serving + MCP routing + generic space route dispatcher |
 | `src/mcp-server.ts` | MCP tool definitions using @modelcontextprotocol/sdk + dynamic space tool registration |
@@ -555,6 +555,16 @@ brainstorming → clarification → brainstorming → approved → in_developmen
 
 Also: `cancelled` (can be set from any state)
 
+### Automatic assignee management
+
+`changeWorkItemState()` rewrites `assignee` as a side effect of certain transitions — callers do not control this:
+
+- → `in_development`: assigned to the acting actor (e.g. `Coder`), or to `OWNER_NAME` when the actor is human-class
+- → `testing`, `needs_input`, `brainstorming`: assigned to `OWNER_NAME` (these are owner-review states)
+- all other target states leave `assignee` untouched
+
+`OWNER_NAME` is an env var defaulting to `Owner`.
+
 The orchestrator handles two special flows during testing:
 - **Owner acknowledgment** (e.g. "looks good", "LGTM") → auto-moves to `done`
 - **Owner feedback** (questions/change requests) → moves to `in_review` with marker → dispatches new coder session → coder addresses feedback → back to `in_review` → `testing`
@@ -852,7 +862,7 @@ Tracker maintains a small vector index of every work item so the dashboard can s
 | Variable | Default | Description |
 | --- | --- | --- |
 | `EMBEDDING_PROVIDER` | `omlx` | `omlx` \| `voyage` \| `anthropic` \| `local` \| `mock` |
-| `OMLX_EMBEDDINGS_URL` | `http://192.168.50.141:1234/v1/embeddings` | oMLX server URL (OpenAI-compatible) |
+| `OMLX_EMBEDDINGS_URL` | `http://192.168.50.141:1234/v1/embeddings` | oMLX server URL (OpenAI-compatible). `OMLX_URL` is accepted as an alias when this is unset |
 | `OMLX_API_KEY` | `1234567890` | Bearer token sent to oMLX |
 | `OMLX_EMBEDDING_MODEL` | `Embedding` | Model alias passed to oMLX |
 | `OMLX_EMBEDDING_DIM` | `1024` | Matryoshka-truncated output dimensions |
