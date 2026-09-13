@@ -1021,22 +1021,22 @@ When adding new features, always add a section header. Use grep for `// ──` 
 
 ### Shared Helpers & Constants
 
-Reusable utilities are in the **"Shared Helpers"** section (line ~12680). Check here before writing new utility code:
+Check these before writing new utility code. Most live in the **"Shared Helpers"** section (line ~12680), but four were defined in the feature section that first needed them — the "Defined in" column gives the section header to grep for:
 
-| Helper | Purpose |
-| --- | --- |
-| `esc(s)` | HTML-escape a string |
-| `agentStatusHtml(status)` | Render session status emoji badge for cards |
-| `renderMarkdown(md)` | Lightweight markdown → HTML renderer |
-| `descriptionPreview(s, full)` | Strip markdown, return plain-text preview (100 chars) |
-| `sortItems(items, mode)` | Sort items array by priority or date |
-| `refreshCurrentView()` | Reload the current view (tracker, attention, or today dashboard) |
-| `renderSearchResultItem(item)` | Render a search result list item HTML |
-| `executeSearch(query, container, onSelect)` | Run search and populate results container |
-| `buildOpencodeUrl(sessionId, dir)` | Build OpenCode deep link URL |
-| `base64UrlEncode(str)` | Encode string to base64url (for OpenCode directory paths) |
+| Helper | Purpose | Defined in |
+| --- | --- | --- |
+| `esc(s)` | HTML-escape a string | Shared Helpers |
+| `agentStatusHtml(status)` | Render session status emoji badge for cards | Shared Helpers |
+| `renderMarkdown(md)` | Lightweight markdown → HTML renderer | Shared Helpers |
+| `descriptionPreview(s, full)` | Strip markdown, return plain-text preview (100 chars) | Shared Helpers |
+| `buildOpencodeUrl(sessionId, dir)` | Build OpenCode deep link URL | Shared Helpers |
+| `base64UrlEncode(str)` | Encode string to base64url (for OpenCode directory paths) | Shared Helpers |
+| `renderSearchResultItem(item)` | Render a search result list item HTML | Search |
+| `executeSearch(query, container, onSelect)` | Run search and populate results container | Search |
+| `sortItems(items, mode)` | Sort items array by priority or date | Sort |
+| `refreshCurrentView()` | Reload the current view (tracker, attention, or today dashboard) | Card Density |
 
-Shared constants (defined near the top of the JS, line ~11401):
+Shared constants (in the `// ── Config ──` section near the top of the JS, line ~11401):
 
 | Constant | Purpose |
 | --- | --- |
