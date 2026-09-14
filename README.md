@@ -176,14 +176,15 @@ src/
 
 ### Adding a New Space
 
-The space system is fully pluggable — add a new space type with just 2 files + 1 registry line:
+The space system is pluggable — a new space type is 2 files, 1 registry line, and a block of CSS:
 
 1. Create `src/spaces/{name}.ts` — backend (parser, API routes, MCP tools)
 2. Create `src/ui/spaces/{name}.js` — frontend renderer
 3. Add `registerSpace({name}Plugin)` to `src/spaces/index.ts`
-4. Run `npm run build`
+4. Add a `{Name} Space` CSS block to `src/ui/core.html` — the renderer files carry no styles of their own
+5. Run `npm run build`
 
-No changes needed to `api.ts`, `mcp-server.ts`, `db.ts`, or the UI shell.
+No changes needed to `mcp-server.ts` or `db.ts`, and the UI shell routes everything through the registry. You only need to touch `api.ts` if your space serves a route the browser loads directly (like an `<img>` thumbnail), since those have to be handled before the auth check — and `config.ts` if it needs its own environment variable.
 
 ## REST API
 

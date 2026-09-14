@@ -815,15 +815,19 @@ tracker_add_travel_segment({
 
 ### How to Create a New Space
 
-Adding a new space type requires 2 files + 1 registry line + build:
+Adding a new space type requires 2 files + 1 registry line + a CSS block + build:
 
 1. **Create `src/spaces/{name}.ts`** — implement the `SpacePlugin` interface (parser, API routes, MCP tools)
 2. **Add one line to `src/spaces/index.ts`:** `registerSpace({name}Plugin);`
 3. **Create `src/ui/spaces/{name}.js`** — implement the UI renderer + call `registerSpacePlugin({...})`
-4. **Run `npm run build`** — pre-compilation injects the new plugin into `index.html`
-5. **Update CLAUDE.md** — add the new space to the tables above
+4. **Add a `/* ── {Name} Space ── */` CSS block to `src/ui/core.html`** — the plugin `.js` files carry no styles, so every space's CSS lives in the core stylesheet (see the existing Song / Presentation / Engagement / Scheduled / Travel blocks)
+5. **Run `npm run build`** — pre-compilation injects the new plugin into `index.html`
+6. **Update CLAUDE.md** — add the new space to the tables above
 
-Zero changes needed to `api.ts`, `mcp-server.ts`, `db.ts`, or the overlay shell in `core.html`.
+No changes are needed to `mcp-server.ts` or `db.ts`, and the overlay shell dispatches purely through the registry. Two things do fall outside the plugin boundary:
+
+- **Unauthenticated routes.** The generic route dispatcher (`api.ts:1659`) runs *after* `checkAuth()`, so a route the browser loads directly (`<img>`, `EventSource`) must additionally be hardcoded in `api.ts` ahead of the auth check. The presentation space's `deck-thumb` route is declared in `presentation.ts` *and* duplicated at `api.ts:521` for exactly this reason — the plugin copy is shadowed and never reached.
+- **Server config.** A space needing its own env var adds it to `config.ts` (e.g. `DECKWRIGHT_URL` for the presentation space).
 
 ## Embeddings (TRACK-283 / Phase 4 of TRACK-276)
 
