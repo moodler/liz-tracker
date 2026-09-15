@@ -1017,18 +1017,25 @@ The dashboard is a single vanilla JS file wrapped in an IIFE. No frameworks. The
 
 ### Navigation
 
-The code is organized into ~78 sections, each marked with a comment header:
+`core.html` is organized into ~78 sections, each marked with a comment header:
 ```js
 // ── Section Name ──
 ```
-When adding new features, always add a section header. Use grep for `// ──` to list all sections.
+The space plugin files carry their own headers too (~32 more). When adding new features, always add a section header. Use grep for `// ──` to list all sections — this works on the built `index.html` as well, where `build-ui.js` prefixes each injected plugin with a `// ── Space Plugin: {file}.js ──` banner. Header names are only unique within a file: `Discussion`, `Event bindings`, and `Sidebar tab switching` each appear in more than one plugin.
 
 ### Shared Helpers & Constants
 
-Check these before writing new utility code. Most live in the **"Shared Helpers"** section (line ~12680), but four were defined in the feature section that first needed them — the "Defined in" column gives the section header to grep for:
+Check these before writing new utility code. Six live in the **"Shared Helpers"** section (line ~12680); the rest sit in the feature section that first needed them — the "Defined in" column gives the section header to grep for:
 
 | Helper | Purpose | Defined in |
 | --- | --- | --- |
+| `api(path, opts)` | Core fetch wrapper — prepends the API base, attaches the auth bearer header, forces the login screen on 401, throws on non-OK. **Never call `fetch()` directly against the API** | API Helpers |
+| `apiGet(path)` / `apiPost(path, body)` / `apiPatch(path, body)` / `apiDelete(path)` | Per-method wrappers around `api()` | API Helpers |
+| `toast(msg, type, durationMs)` | Transient notification (`type` defaults to `success`). Renders as HTML when `msg` contains tags, otherwise as text | Toast |
+| `timeAgo(iso)` | Relative time ("just now", "5m ago") | Time Formatting |
+| `formatTime(iso)` | Absolute localized date + HH:MM | Time Formatting |
+| `renderReactionChips(commentId, reactions, containerClass)` | Render emoji reaction chips for a comment | Emoji Reactions |
+| `bindReactionChips(container)` / `bindReactionTriggers(container)` | Wire up reaction chip clicks / the add-reaction affordance | Emoji Reactions |
 | `esc(s)` | HTML-escape a string | Shared Helpers |
 | `agentStatusHtml(status)` | Render session status emoji badge for cards | Shared Helpers |
 | `renderMarkdown(md)` | Lightweight markdown → HTML renderer | Shared Helpers |
@@ -1039,6 +1046,8 @@ Check these before writing new utility code. Most live in the **"Shared Helpers"
 | `executeSearch(query, container, onSelect)` | Run search and populate results container | Search |
 | `sortItems(items, mode)` | Sort items array by priority or date | Sort |
 | `refreshCurrentView()` | Reload the current view (tracker, attention, or today dashboard) | Card Density |
+
+The space plugins shadow none of these — they call straight into the core IIFE scope, so a rename in `core.html` silently breaks every plugin. `esc`, `toast`, and the `api*` family carry almost all of that cross-file traffic.
 
 Shared constants (in the `// ── Config ──` section near the top of the JS, line ~11401):
 
