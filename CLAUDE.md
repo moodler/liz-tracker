@@ -280,20 +280,25 @@ Prevents prompt injection attacks from causing the orchestrator to auto-execute 
 
 Every state transition and item creation records an `actor_class`:
 
-| Actor pattern | Class | Can approve? |
+| Actor name | Class | Can approve? |
 | --- | --- | --- |
 | `dashboard`, `me` + `HUMAN_ACTORS` env | `human` | ✅ |
 | `coder`, `harmoni` + `AGENT_ACTORS` env | `agent` | ❌ |
-| `orchestrator`, `system` | `system` | ❌ |
+| `orchestrator`, `system`, `health-check`, `scheduler` | `system` | ❌ (except scheduled recycle — see below) |
 | anything else | `api` | ❌ |
+
+**Match semantics:** the actor string is lowercased and tested for **exact membership** in each list (`Array.includes`) — there is no substring or prefix matching. So `dashboard-bot`, `my-coder`, and `systemd` all fall through to `api`, not to the class they resemble. The system list is hardcoded in `classifyActor()`; the human and agent lists come from `config.ts`, where the `HUMAN_ACTORS` / `AGENT_ACTORS` env vars **append** comma-separated names to the built-in defaults rather than replacing them.
 
 Only `human`-class actors can move items to `approved` or `cancelled`. Additionally, `api`-class actors cannot move items to `in_development` — that transition must come from the orchestrator or the dashboard. Attempts that violate these rules throw an error (403 from API, error from MCP).
 
 Beyond these three rules there is no transition graph — any state may move to any other state, so the pipeline diagram above describes the intended flow rather than an enforced one.
 
-**MCP enforcement:** All items created via MCP tools have `created_by` forced to the default agent name. This prevents agents from impersonating human actors (e.g. passing `created_by: "dashboard"`) to bypass actor classification. Similarly, state changes via MCP force `actor_class = "agent"`.
+**MCP enforcement:** All items created via MCP tools have `created_by` forced to the literal `Harmoni`. This prevents agents from impersonating human actors (e.g. passing `created_by: "dashboard"`) to bypass actor classification. Similarly, state changes via MCP force `actor_class = "agent"`.
 
-**Exception:** Comment-only items (`requires_code=0`) can be approved by agents. Since they don't grant code access, they don't present a security risk. This allows multiple agents to discuss and take turns on an issue without requiring human re-approval on every turn.
+Two exceptions relax the human-only approval rule:
+
+- **Comment-only items** (`requires_code=0`) can be approved by agents. Since they don't grant code access, they don't present a security risk. This allows multiple agents to discuss and take turns on an issue without requiring human re-approval on every turn.
+- **Scheduled task recycling** (TRACK-228) lets a `system`-class actor move an item back to `approved`, but only when it is a `scheduled` item that already carries human approval provenance and whose description hash still matches. See "Recurring scheduled task recycling" above.
 
 #### Approval provenance
 
