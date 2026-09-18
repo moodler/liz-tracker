@@ -134,7 +134,9 @@ tail -f logs/tracker.error.log
 
 ## Orchestrator
 
-The orchestrator automatically dispatches approved `requires_code` work items to OpenCode sessions.
+The orchestrator automatically dispatches approved work items that have `bot_dispatch` enabled to OpenCode sessions.
+
+`bot_dispatch` controls **whether** the orchestrator picks an item up; `requires_code` controls whether the agent is told to change code (vs research and comment only). New items default `bot_dispatch` to the value of `requires_code`, but the two are set independently afterwards — so a comment-only bot item (`bot_dispatch=1`, `requires_code=0`) is a normal configuration, and the dashboard badges it distinctly.
 
 ### Config
 
@@ -170,7 +172,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 ### How it works
 
 **Coder dispatch (state=`approved`):**
-1. Every `ORCHESTRATOR_INTERVAL`, the scheduler checks for eligible items (state=`approved`, `requires_code`=true, not locked, not blocked, no active session)
+1. Every `ORCHESTRATOR_INTERVAL`, the scheduler checks for eligible items (state=`approved`, `bot_dispatch`=1, not locked, not blocked, no active session, and the item's project has `orchestration` enabled)
 2. Creates an OpenCode session via the SDK (`@opencode-ai/sdk`) with title `{KEY}: {title}`
 3. Sends a prompt using the `tracker-worker` agent
 4. Monitors session progress via SSE events from `/global/event`
@@ -226,7 +228,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 ### Safety features
 
 - Disabled by default
-- Only dispatches `approved` + `requires_code` items
+- Only dispatches `approved` items with `bot_dispatch` enabled, in projects with `orchestration` enabled
 - Respects locks, dependencies, and existing sessions
 - Concurrency limit (default 1)
 - Safety net: if session exits without unlocking, orchestrator adds a comment and unlocks
@@ -310,11 +312,15 @@ When an item is moved to `approved`, the system records:
 
 #### Description integrity
 
-At dispatch time, `getDispatchableItems()` verifies:
-1. `approved_by_class = 'human'` — item was approved by a human (comment-only items are exempt from this check)
-2. SHA-256 of current description matches `approved_description_hash` — description hasn't been tampered with since approval
+At dispatch time, `getDispatchableItems()` (in `db.ts`) verifies:
+1. `approved_by_class = 'human'` — item was approved by a human (comment-only items, `requires_code=0`, are exempt from this check)
+2. `approved_description_hash` is set, and the SHA-256 of the current description still matches it — the description hasn't been tampered with since approval
 
-If either check fails, the item is silently excluded from dispatch.
+The two checks fail differently, and only the first is silent:
+
+- Check 1 lives in the SQL `WHERE` clause, so a non-human-approved item is dropped with no log line and no comment — it looks identical to an idle item.
+- A **missing** hash logs a warning (`"Skipping dispatch: item has no approved_description_hash"`) and excludes the item, but otherwise leaves it untouched.
+- A **mismatched** hash is loud: it logs a warning, posts an `orchestrator` comment on the item stating that re-approval is required, and moves the item to `clarification` — which in turn clears its approval metadata, so a human must re-approve from the dashboard.
 
 #### Prompt hardening
 
