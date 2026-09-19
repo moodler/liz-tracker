@@ -456,8 +456,8 @@ All model/effort defaults above can be overridden at runtime via the dashboard's
 - **Per-item retry limit** — auto-shelves items that fail repeatedly (errors *or* successful sessions with no forward progress)
 - **Emergency stop** — dashboard button to pause orchestrator and cancel all sessions
 - **Safe restart** — waits for active sessions to complete before restarting
-- **Blocked file patterns** — prevents AI agents from modifying security-critical files
-- **Execution audits** — full audit trail of every dispatch (item, session, prompt hash, status)
+- **Blocked file patterns** — every dispatched prompt lists the security-critical paths agents must not modify
+- **Execution audits** — full audit trail of every dispatch (item, session, timings, exit status, files touched, git diffstat, transcript)
 - **Session timeout** — stale sessions auto-detected and aborted (default 45 minutes)
 - **Agent config validation** — pre-flight check before dispatch to ensure agent config is valid
 - **Session recovery** — on tracker restart, recovers active sessions and polls their status

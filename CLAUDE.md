@@ -230,7 +230,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 - Disabled by default
 - Only dispatches `approved` items with `bot_dispatch` enabled, in projects with `orchestration` enabled
 - Respects locks, dependencies, and existing sessions
-- Concurrency limit (default 1)
+- Concurrency limits: 3 sessions globally, 1 per project (`OPENCODE_MAX_CONCURRENT` / `OPENCODE_MAX_PER_PROJECT`)
 - Safety net: if session exits without unlocking, orchestrator adds a comment and unlocks
 - SSE reconnection with exponential backoff
 
@@ -394,11 +394,15 @@ When working on the tracker itself, agents must use the safe restart mechanism t
 #### Execution audits
 
 Table `tracker_execution_audits` records every dispatch:
-- `item_id`, `session_id`, `started_at`, `completed_at`
-- `description_hash` — hash of description at dispatch time
-- `prompt_hash` — hash of the full prompt sent to the coder bot
-- `status` — `running`, `completed`, `failed`
+- `id`, `work_item_id`, `session_id`, `started_at`, `completed_at`, `created_at`
+- `exit_status` — `pending` on insert, then `success` / `failure` / `timeout` on completion
+- `files_modified`, `files_created`, `files_deleted` — JSON arrays of paths touched by the session
+- `git_branch`, `git_diff_stats` — branch at dispatch time and the diffstat at completion
+- `transcript` — full session transcript, written on completion (powers the dashboard's transcript replay)
+- `session_title` — AI-generated ≤60-char title, cached by `POST /api/v1/items/ai-session-summary`
 - **API:** `GET /api/v1/items/:id/audits` — retrieve audits for an item
+
+The table records *what the session did*, not *what it was asked to do* — there is no stored hash of the description or prompt, so an audit row cannot be used after the fact to prove which description was dispatched. Description-integrity checking happens at dispatch time instead (see above), against `work_items.approved_description_hash`.
 
 #### API authentication
 
@@ -479,7 +483,7 @@ Static file serving (dashboard HTML/CSS/JS) is also unauthenticated so the login
 | `tracker_react_to_comment` | Toggle an emoji reaction on a comment |
 | `tracker_watch_item` | Watch a work item for changes |
 | `tracker_view` | Get a kanban-style tracker view of a project |
-| `tracker_lock_item` | Lock a work item (auto-expire after 2 hours) |
+| `tracker_lock_item` | Lock a work item. Locks do **not** expire on their own — they persist until unlocked, or until `tracker_clear_stale_locks` is invoked |
 | `tracker_unlock_item` | Unlock a work item |
 | `tracker_clear_stale_locks` | Clear locks older than threshold |
 | `tracker_add_dependency` | Add a dependency between items |
