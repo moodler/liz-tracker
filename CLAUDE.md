@@ -192,10 +192,11 @@ All configuration is via `.env` file or environment variables. See `.env.example
 4. Security: Only items where the most recent `in_review` transition was made by the orchestrator with the special marker are dispatched — arbitrary `in_review` items are NOT auto-dispatched
 
 **Comment-based auto-completion:**
-1. The orchestrator watches for owner comments on items in `testing` or `in_review` state
-2. If the comment matches acknowledgment patterns (e.g. "looks good", "LGTM", "done", "approved", "ship it"), the item is auto-moved to `done`. A comment only counts as an acknowledgment when it is under 500 characters **and** contains no negative signal — `problem`, `but the`, `missing`, `still not`, `please`, any `?`, etc. Negative signals veto a positive match, so "looks good, but the spacing is wrong" falls through to step 3 instead
-3. If the comment is non-acknowledgment feedback on a `testing` item, it triggers the review feedback redispatch flow above
-4. Runs both reactively (via event watcher) and periodically (catch-all scan for missed comments)
+1. The orchestrator watches for owner comments on items in `testing` or `in_review` state. "Owner" means the comment author is in `HUMAN_ACTORS` (default `dashboard`, `me`) — **not** `OWNER_NAME`. Unknown authors are ignored, so overriding the author name in the dashboard's comment box silently disables auto-completion until that name is added to `HUMAN_ACTORS`
+2. Only comments created after the item entered its current state count, and only the most recent owner comment is evaluated
+3. If the comment matches acknowledgment patterns (e.g. "looks good", "LGTM", "done", "approved", "ship it"), the item is auto-moved to `done` — or recycled to `approved` if it is a recurring scheduled task. A comment only counts as an acknowledgment when it is 500 characters or fewer (after trimming) **and** contains no negative signal — `problem`, `but the`, `missing`, `still not`, `please`, any `?`, etc. Negative signals veto a positive match, so "looks good, but the spacing is wrong" falls through to step 4 instead
+4. If the comment is non-acknowledgment feedback on a `testing` item, it triggers the review feedback redispatch flow above — skipped when the item is locked or has an active session
+5. Runs both reactively (via event watcher) and periodically (catch-all scan for missed comments)
 
 **Scheduled task time gating (TRACK-228):**
 1. Scheduled tasks are NOT dispatched immediately upon approval — they wait until their configured schedule time arrives
