@@ -160,7 +160,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 | `MODEL_STRENGTH_MEDIUM` | `claude-opus-4-8` | Model for "medium" strength tier (scheduled tasks) |
 | `MODEL_STRENGTH_LOW` | `claude-sonnet-5` | Model for "low" strength tier (scheduled tasks) |
 | `TRACKER_API_TOKEN` | (auto-generated) | Bearer token for API endpoints (reads included — see API authentication) |
-| `CIRCUIT_BREAKER_THRESHOLD` | `2` | Consecutive failures before auto-pause |
+| `CIRCUIT_BREAKER_THRESHOLD` | `2` | Failures within the window before auto-pause (not necessarily consecutive) |
 | `CIRCUIT_BREAKER_WINDOW` | `3600000` | Window (ms) for counting failures (1 hour) |
 | `ITEM_DISPATCH_FAILURE_LIMIT` | `3` | Per-item dispatch *errors* before auto-shelving to needs_input |
 | `ITEM_NO_PROGRESS_LIMIT` | `5` | Per-item *no-progress* completions (session "succeeded" but item never left its dispatchable state) before auto-shelving to needs_input |
@@ -189,7 +189,7 @@ All configuration is via `.env` file or environment variables. See `.env.example
 1. When the owner comments on a `testing` item with feedback (not an acknowledgment), the orchestrator moves it to `in_review` with a special "Testing feedback from owner:" marker
 2. `tryDispatchFromReview()` picks up these specially-marked `in_review` items and dispatches a coder session
 3. The coder session has full context including all comments so it can address the owner's feedback
-4. Security: Only items where the most recent `in_review` transition was made by the orchestrator with the special marker are dispatched — arbitrary `in_review` items are NOT auto-dispatched
+4. Security: `getDispatchableReviewItems()` (in `db.ts`) requires that the item's **most recent** `in_review` transition has `actor = 'orchestrator'` and a comment matching the anchored prefix `'Testing feedback from owner:%'`. Arbitrary `in_review` items are NOT auto-dispatched. Note this path does **not** re-check `approved_by_class` or the description hash — the marker transition is the only gate — and the check is on the transition's actor *name*, which is caller-supplied, not on its `actor_class`
 
 **Comment-based auto-completion:**
 1. The orchestrator watches for owner comments on items in `testing` or `in_review` state. "Owner" means the comment author is in `HUMAN_ACTORS` (default `dashboard`, `me`) — **not** `OWNER_NAME`. Unknown authors are ignored, so overriding the author name in the dashboard's comment box silently disables auto-completion until that name is added to `HUMAN_ACTORS`
@@ -351,9 +351,14 @@ The list is **advisory**. Its only consumer is `buildPrompt()`, which renders it
 
 #### Circuit breaker
 
-If 2 consecutive dispatches fail within 1 hour (configurable via `CIRCUIT_BREAKER_THRESHOLD` and `CIRCUIT_BREAKER_WINDOW`), the orchestrator auto-pauses and logs a warning. Resuming the orchestrator resets the circuit breaker.
+If 2 dispatches fail within a rolling 1-hour window (configurable via `CIRCUIT_BREAKER_THRESHOLD` and `CIRCUIT_BREAKER_WINDOW`), the orchestrator auto-pauses and logs a warning. Resuming the orchestrator resets the circuit breaker.
 
-Note: Image-too-large errors (e.g. oversized attachments) count toward the circuit breaker even though other 413/context-length errors are exempt (since image size never self-heals via compaction).
+The failures do **not** have to be consecutive. `recordFailure()` keeps a rolling list that is pruned only by age; no success path clears it, and `resumeOrchestrator()` is the only thing that empties it. So two unrelated failures an hour apart will trip the breaker even if many dispatches succeeded in between. (The two *per-item* limits below are genuinely consecutive — their counters reset on a successful session.)
+
+Note: Image-too-large errors (e.g. oversized attachments) count toward the circuit breaker even though other 413/context-length errors are exempt (since image size never self-heals via compaction). Two qualifications on that exemption:
+
+- It applies only to errors surfaced by a **running session**. The six dispatch-time `recordFailure()` call sites (agent/runner pre-flight validation, and the `session.create`/`promptAsync` catch blocks) are unguarded, so a 413 thrown while *sending* the prompt counts regardless.
+- It is circuit-breaker-only. An exempt error still runs `recordItemDispatchFailure()`, so it counts toward the per-item limit below and can still shelve the item to `needs_input`. Exempt means the global counter is left untouched — not incremented, and not reset either.
 
 #### Per-item retry limit
 
