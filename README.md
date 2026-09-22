@@ -1,5 +1,7 @@
 # Liz Tracker
 
+> **⚠️ This repository is no longer maintained.** As of June 2026 I have stopped publishing new versions here. The project has since evolved into something else that is too entwined with my personal systems to publish as it stands. The code here works as a snapshot, but there will be no further updates, bug fixes, or releases, and issues and pull requests will not be actioned. I may publish something new in future.
+
 <p align="center">
   <img src="logo.png" alt="Liz Tracker" width="400">
 </p>
@@ -8,7 +10,7 @@
 
 A self-hosted project management tracker with a beautiful kanban UI, purpose-built workspaces, AI agent integration, and an optional orchestrator that automatically dispatches work to AI coding sessions.
 
-Created by [Martin Dougiamas](https://github.com/moodler). I am building this for myself, and development is VERY active. I'm happy to take requests but I'm more focussed on my needs than yours right now! That said, I'm trying to keep it useful for anyone.
+Created by [Martin Dougiamas](https://github.com/moodler). I built this for myself. Development continues privately, but this public repository is frozen at the version you see here.
 
 ## What You Get
 
